@@ -1,0 +1,43 @@
+# Synthetic ticket. All names and addresses are fictional.
+# Stands in for a ServiceNow "Firewall Change Request" requested item.
+
+number: RITM0010042
+item: Firewall Change Request
+state: approved              # all three group approvals are in
+requested_for: Priya Shah (Contoso app owner)
+opened: 2026-10-07T09:12:00
+
+change_type: add_rule
+environments: [lab, dev, stage, prod]
+dr_site_built:
+  lab: true
+  dev: true
+  stage: true
+  prod: true
+
+sources:                     # one range per environment and site
+  - {environment: lab,   site: primary, cidr: 10.106.14.0/24}
+  - {environment: lab,   site: dr,      cidr: 10.107.14.0/24}
+  - {environment: dev,   site: primary, cidr: 10.104.14.0/24}
+  - {environment: dev,   site: dr,      cidr: 10.105.14.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.14.0/24}
+  - {environment: stage, site: dr,      cidr: 10.103.14.0/24}
+  - {environment: prod,  site: primary, cidr: 10.100.14.0/24}
+  - {environment: prod,  site: dr,      cidr: 10.101.14.0/24}
+
+destination: [203.0.113.16/28]   # Northwind file service
+protocol: TCP
+ports: ["443"]
+partner: Northwind
+temporary: false
+expires: null
+
+justification: |
+  Nightly settlement file upload to Northwind's file service.
+
+approvals:
+  - {group: security, approver: Sam Ortiz,   state: approved}
+  - {group: network,  approver: Lee Chen,    state: approved}
+  - {group: project,  approver: Dana Brooks, state: approved}
+
+assigned_to: Jordan Patel    # the firewall engineer

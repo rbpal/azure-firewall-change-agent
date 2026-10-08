@@ -1,3 +1,18 @@
+# Private: local assistant files, never published
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Terraform: state, saved plans and local inputs hold resource IDs and secrets in plain text
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+infra/env.tfvars
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -219,5 +234,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Local docs (not published)
-docs/
+# Private planning docs (not published)
+privatedocs/

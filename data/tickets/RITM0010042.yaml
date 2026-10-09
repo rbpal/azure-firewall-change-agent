@@ -5,9 +5,10 @@ number: RITM0010042
 item: Firewall Change Request
 state: approved              # all three group approvals are in
 requested_for: Priya Shah (Contoso app owner)
-opened: 2026-10-07T09:12:00
+opened: "2026-10-07T09:12:00Z"   # quoted, or YAML turns it into a date object
 
 change_type: add_rule
+direction: egress
 environments: [lab, dev, stage, prod]
 dr_site_built:
   lab: true
@@ -25,12 +26,11 @@ sources:                     # one range per environment and site
   - {environment: prod,  site: primary, cidr: 10.100.14.0/24}
   - {environment: prod,  site: dr,      cidr: 10.101.14.0/24}
 
-destination: [203.0.113.16/28]   # Northwind file service
+destination:
+  - {cidr: 203.0.113.16/28}      # Northwind file service
 protocol: TCP
 ports: ["443"]
-partner: Northwind
-temporary: false
-expires: null
+partner: Northwind Traders
 
 justification: |
   Nightly settlement file upload to Northwind's file service.

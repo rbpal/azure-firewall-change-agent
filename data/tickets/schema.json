@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Firewall Change Request ticket",
+  "description": "Synthetic stand-in for a ServiceNow Firewall Change Request requested item. Checks shape only; code checks meaning (address plan, routing, existing rules).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "number", "item", "state", "requested_for", "opened",
+    "change_type", "direction", "environments", "dr_site_built",
+    "sources", "destination", "protocol", "ports", "partner",
+    "justification", "approvals", "assigned_to"
+  ],
+  "properties": {
+    "number": { "type": "string", "pattern": "^RITM[0-9]{7}$" },
+    "item": { "const": "Firewall Change Request" },
+    "state": { "enum": ["pending", "approved", "rejected"] },
+    "requested_for": { "type": "string", "minLength": 1 },
+    "opened": { "type": "string", "format": "date-time" },
+    "change_type": { "enum": ["add_rule", "remove_rule"] },
+    "direction": { "enum": ["egress", "inbound"] },
+    "environments": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/environment" }
+    },
+    "dr_site_built": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/environment" },
+      "additionalProperties": { "type": "boolean" }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/address" }
+    },
+    "destination": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/address" }
+    },
+    "protocol": { "enum": ["TCP", "UDP", "ICMP", "Any", "HTTP", "HTTPS"] },
+    "ports": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/port" }
+    },
+    "public_port": {
+      "description": "Inbound only: the port the partner connects to on the hub firewall's public IP. The public IP itself comes from the estate data, never from the ticket.",
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,4}$"
+    },
+    "existing_rule": {
+      "description": "Remove only, optional: the rule name if the requester knows it. The workflow still matches the flow itself.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "partner": {
+      "enum": [
+        "Contoso", "Northwind Traders", "Fabrikam", "Woodgrove Bank", "Litware",
+        "Tailspin", "Proseware", "Lamna Healthcare", "Adventure Works", "Wingtip Toys",
+        null
+      ]
+    },
+    "justification": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "approvals": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/approval" },
+      "allOf": [
+        { "contains": { "properties": { "group": { "const": "security" } } } },
+        { "contains": { "properties": { "group": { "const": "network" } } } },
+        { "contains": { "properties": { "group": { "const": "project" } } } }
+      ]
+    },
+    "assigned_to": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "direction": { "const": "inbound" } } },
+      "then": {
+        "required": ["public_port"],
+        "properties": { "protocol": { "enum": ["TCP", "UDP"] } }
+      },
+      "else": { "not": { "required": ["public_port"] } }
+    },
+    {
+      "if": { "properties": { "change_type": { "const": "add_rule" } } },
+      "then": { "not": { "required": ["existing_rule"] } }
+    },
+    {
+      "if": { "properties": { "state": { "const": "approved" } } },
+      "then": {
+        "properties": {
+          "approvals": { "items": { "properties": { "state": { "const": "approved" } } } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "environment": { "enum": ["lab", "dev", "stage", "prod"] },
+    "site": { "enum": ["primary", "dr"] },
+    "address": {
+      "description": "Exactly one of cidr, ip_group or fqdn. environment and site appear together, on the internal side of the flow.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cidr": {
+          "type": "string",
+          "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$"
+        },
+        "ip_group": { "type": "string", "pattern": "^ipg-[a-z]{4}-(lab|dev|stage|prod)(-dr)?$" },
+        "fqdn": {
+          "type": "string",
+          "pattern": "^(\\*|(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63})$"
+        },
+        "environment": { "$ref": "#/$defs/environment" },
+        "site": { "$ref": "#/$defs/site" }
+      },
+      "oneOf": [
+        { "required": ["cidr"] },
+        { "required": ["ip_group"] },
+        { "required": ["fqdn"] }
+      ],
+      "dependentRequired": {
+        "environment": ["site"],
+        "site": ["environment"]
+      }
+    },
+    "port": {
+      "description": "A single port, a range, or * (any). Code checks the 1-65535 bound and that a range runs low to high.",
+      "type": "string",
+      "pattern": "^(\\*|[1-9][0-9]{0,4}(-[1-9][0-9]{0,4})?)$"
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group", "approver", "state"],
+      "properties": {
+        "group": { "enum": ["security", "network", "project"] },
+        "approver": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["pending", "approved", "rejected"] }
+      }
+    }
+  }
+}

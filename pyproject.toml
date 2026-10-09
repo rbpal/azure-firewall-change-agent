@@ -1,0 +1,16 @@
+[project]
+name = "azure-firewall-change-agent"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "jsonschema>=4.23",
+    "rfc3339-validator>=0.1.4",  # lets jsonschema check "date-time"; without it the format is silently skipped
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

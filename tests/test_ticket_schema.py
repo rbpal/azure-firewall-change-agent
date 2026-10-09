@@ -39,11 +39,23 @@ def test_valid_remove_ticket(ticket):
     assert ticket_errors(ticket) == []
 
 
+def test_partner_ip_group_is_valid(ticket):
+    ticket["destination"] = [{"ip_group": "ipg-partner-northwind"}]
+    assert ticket_errors(ticket) == []
+
+
 def test_wide_but_well_formed_requests_pass_the_schema(ticket):
     # The schema checks shape. Catching any/any is Tier 1's job, so the eval
     # set must be able to hold tickets like this one.
     ticket["destination"] = [{"cidr": "0.0.0.0/0"}]
     ticket["ports"] = ["*"]
+    assert ticket_errors(ticket) == []
+
+
+@pytest.mark.parametrize("fqdn", ["*", "*.com", "*.northwind.example"])
+def test_wildcard_fqdns_pass_the_schema(ticket, fqdn):
+    # STD-COLL-02 flags these as cautions; the schema must let them through.
+    ticket["destination"] = [{"fqdn": fqdn}]
     assert ticket_errors(ticket) == []
 
 
@@ -57,6 +69,7 @@ BAD = {
     "IP group with unknown environment": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-sett-uat"}
     ),
+    "partner IP group in capitals": lambda t: t["destination"].__setitem__(0, {"ip_group": "ipg-partner-Northwind"}),
     "port above 65535": lambda t: t.update(ports=["70000"]),
     "port range high to low": lambda t: t.update(ports=["9000-8000"]),
     "port zero": lambda t: t.update(ports=["0"]),

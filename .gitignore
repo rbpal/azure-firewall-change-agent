@@ -236,3 +236,7 @@ __marimo__/
 
 # Private planning docs (not published)
 privatedocs/
+
+# Local-only tooling: the estate generator and its tests
+data/generate_estate.py
+tests/test_estate.py

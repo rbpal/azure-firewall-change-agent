@@ -96,7 +96,7 @@ def test_inbound_icmp_is_refused(ticket):
 def test_unquoted_yaml_timestamp_is_refused(tmp_path):
     # PyYAML turns an unquoted timestamp into a datetime object, not a string.
     text = (TICKETS / "RITM0010042.yaml").read_text().replace(
-        'opened: "2026-10-07T09:12:00Z"', "opened: 2026-10-07T09:12:00Z"
+        'opened: "2026-10-07T09:12:00-04:00"', "opened: 2026-10-07T09:12:00-04:00"
     )
     path = tmp_path / "t.yaml"
     path.write_text(text)

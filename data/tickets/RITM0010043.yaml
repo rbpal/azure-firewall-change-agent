@@ -1,0 +1,35 @@
+# Synthetic ticket. All names and addresses are fictional.
+# Inbound: publish the prod SFTP server to Northwind through the hub firewall.
+# The firewall's public IP comes from the estate data, never from the ticket.
+
+number: RITM0010043
+item: Firewall Change Request
+state: approved              # all three group approvals are in
+requested_for: Alex Kim (Contoso transfer team)
+opened: "2026-10-08T08:40:00-04:00"   # US Eastern (EDT in October); quoted, or YAML turns it into a date object
+
+change_type: add_rule
+direction: inbound
+environments: [prod]
+dr_site_built:
+  prod: false                # prod primary only; no DR listener yet
+
+sources:
+  - {cidr: 203.0.113.16/28}  # Northwind; never 0.0.0.0/0
+
+destination:                 # the internal listener, one per environment and site
+  - {environment: prod, site: primary, cidr: 10.100.20.14/32}
+protocol: TCP
+ports: ["22"]                # the internal SFTP port
+public_port: "2222"          # the port Northwind connects to
+partner: Northwind Traders
+
+justification: |
+  Northwind pushes daily remittance files to our prod SFTP server.
+
+approvals:
+  - {group: security, approver: Sam Ortiz,   state: approved}
+  - {group: network,  approver: Lee Chen,    state: approved}
+  - {group: project,  approver: Dana Brooks, state: approved}
+
+assigned_to: Jordan Patel    # the firewall engineer

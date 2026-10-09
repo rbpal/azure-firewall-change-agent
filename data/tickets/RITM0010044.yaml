@@ -1,0 +1,37 @@
+# Synthetic ticket. All names and addresses are fictional.
+# Remove: the dev settlement servers no longer call Northwind's API.
+# The ticket describes the flow; the workflow finds the rules that match it
+# exactly. A rule that allows more than this flow is escalated, not trimmed.
+
+number: RITM0010044
+item: Firewall Change Request
+state: approved              # all three group approvals are in
+requested_for: Priya Shah (Contoso app owner)
+opened: "2026-10-08T10:05:00-04:00"   # US Eastern (EDT in October); quoted, or YAML turns it into a date object
+
+change_type: remove_rule
+direction: egress
+environments: [dev]
+dr_site_built:
+  dev: true
+
+sources:                     # the IP groups the existing rules use
+  - {environment: dev, site: primary, ip_group: ipg-sett-dev}
+  - {environment: dev, site: dr,      ip_group: ipg-sett-dev-dr}
+
+destination:
+  - {fqdn: api.northwind.example}
+protocol: HTTPS
+ports: ["443"]
+partner: Northwind Traders
+existing_rule: https-sett-to-northwindApi   # optional; the requester knew it
+
+justification: |
+  Settlement moved to the batch upload in RITM0010042. The API call is retired.
+
+approvals:
+  - {group: security, approver: Sam Ortiz,   state: approved}
+  - {group: network,  approver: Lee Chen,    state: approved}
+  - {group: project,  approver: Dana Brooks, state: approved}
+
+assigned_to: Jordan Patel    # the firewall engineer

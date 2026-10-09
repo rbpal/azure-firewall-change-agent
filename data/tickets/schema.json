@@ -60,7 +60,7 @@
     },
     "partner": {
       "enum": [
-        "Contoso", "Northwind Traders", "Fabrikam", "Woodgrove Bank", "Litware",
+        "Northwind Traders", "Fabrikam", "Woodgrove Bank", "Litware", "Fourth Coffee",
         "Tailspin", "Proseware", "Lamna Healthcare", "Adventure Works", "Wingtip Toys",
         null
       ]

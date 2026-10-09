@@ -1,0 +1,3 @@
+#!/bin/sh
+# Leak gate on every push, so a commit made with --no-verify is still caught.
+exec python3 "$(git rev-parse --show-toplevel)/.githooks/leak_gate.py" --push

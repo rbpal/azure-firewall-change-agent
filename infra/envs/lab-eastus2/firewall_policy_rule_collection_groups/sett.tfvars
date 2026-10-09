@@ -16,7 +16,6 @@ sett = {
           source_ip_groups      = ["ipg-sett-lab"]
           destination_addresses = ["198.51.100.32/28"]
           destination_ports     = ["587"]
-          ticket                = "RITM0009001"
         }
         "002-sftp-sett-to-xferSftp" = {
           name                  = "sftp-sett-to-xferSftp"
@@ -24,7 +23,6 @@ sett = {
           source_ip_groups      = ["ipg-sett-lab"]
           destination_addresses = ["10.106.20.0/24"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009002"
         }
         "003-amqps-sett-to-northwindMq" = {
           name                  = "amqps-sett-to-northwindMq"
@@ -32,7 +30,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["203.0.113.16/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009003"
         }
         "004-smtp-sett-to-fabrikamSmtp" = {
           name                  = "smtp-sett-to-fabrikamSmtp"
@@ -40,7 +37,6 @@ sett = {
           source_ip_groups      = ["ipg-sett-lab"]
           destination_addresses = ["203.0.113.32/28"]
           destination_ports     = ["587"]
-          ticket                = "RITM0009004"
         }
         "005-sftp-sett-to-lamnaSftp" = {
           name                  = "sftp-sett-to-lamnaSftp"
@@ -48,7 +44,6 @@ sett = {
           source_ip_groups      = ["ipg-sett-lab"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009005"
         }
         "006-amqps-sett-to-lamnaMq" = {
           name                  = "amqps-sett-to-lamnaMq"
@@ -56,7 +51,6 @@ sett = {
           source_ip_groups      = ["ipg-sett-lab"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009006"
         }
         "007-https-sett-to-wingtipFs" = {
           name                  = "https-sett-to-wingtipFs"
@@ -64,7 +58,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.80/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009007"
         }
         "008-smtp-sett-to-wingtipSmtp" = {
           name                  = "smtp-sett-to-wingtipSmtp"
@@ -72,7 +65,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.80/28"]
           destination_ports     = ["587"]
-          ticket                = "RITM0009008"
         }
         "009-https-sett-to-fabrikamFs" = {
           name                  = "https-sett-to-fabrikamFs"
@@ -80,7 +72,6 @@ sett = {
           source_ip_groups      = ["ipg-sett-lab"]
           destination_addresses = ["203.0.113.32/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009009"
         }
         "010-sftp-sett-to-prosewareSftp" = {
           name                  = "sftp-sett-to-prosewareSftp"
@@ -88,7 +79,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.32/28"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009010"
         }
         "011-smtp-sett-to-lamnaSmtp" = {
           name                  = "smtp-sett-to-lamnaSmtp"
@@ -96,7 +86,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["587"]
-          ticket                = "RITM0009011"
         }
         "012-amqps-sett-to-prosewareMq" = {
           name                  = "amqps-sett-to-prosewareMq"
@@ -104,7 +93,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.32/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009012"
         }
         "013-https-sett-to-lamnaFs" = {
           name                  = "https-sett-to-lamnaFs"
@@ -112,7 +100,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009013"
         }
         "014-sftp-sett-to-fabrikamSftp" = {
           name                  = "sftp-sett-to-fabrikamSftp"
@@ -120,7 +107,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["203.0.113.32/28"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009014"
         }
         "015-amqps-sett-to-woodgroveMq" = {
           name                  = "amqps-sett-to-woodgroveMq"
@@ -128,7 +114,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["203.0.113.48/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009015"
         }
         "016-smtp-sett-to-tailspinSmtp" = {
           name                  = "smtp-sett-to-tailspinSmtp"
@@ -136,7 +121,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.16/28"]
           destination_ports     = ["587"]
-          ticket                = "RITM0009016"
         }
         "017-amqps-sett-to-tailspinMq" = {
           name                  = "amqps-sett-to-tailspinMq"
@@ -144,7 +128,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["198.51.100.16/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009017"
         }
         "018-https-sett-to-litwareFs" = {
           name                  = "https-sett-to-litwareFs"
@@ -152,7 +135,6 @@ sett = {
           source_addresses      = ["10.106.14.0/24"]
           destination_addresses = ["203.0.113.64/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009018"
         }
       }
     }
@@ -169,14 +151,12 @@ sett = {
           protocols         = ["Https:443"]
           source_ip_groups  = ["ipg-sett-lab"]
           destination_fqdns = ["api.northwind.example"]
-          ticket            = "RITM0009024"
         }
         "002-https-sett-to-woodgroveApi" = {
           name              = "https-sett-to-woodgroveApi"
           protocols         = ["Https:443"]
           source_ip_groups  = ["ipg-sett-lab"]
           destination_fqdns = ["api.woodgrove.example"]
-          ticket            = "RITM0009025"
         }
       }
     }

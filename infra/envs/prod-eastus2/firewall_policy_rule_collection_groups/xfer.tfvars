@@ -18,7 +18,6 @@ xfer = {
           destination_ports   = ["2221"]
           translated_address  = "10.100.20.14"
           translated_port     = "22"
-          ticket              = "RITM0009055"
         }
         "002-sftp-litware-to-xferSftp" = {
           name                = "sftp-litware-to-xferSftp"
@@ -28,7 +27,6 @@ xfer = {
           destination_ports   = ["2223"]
           translated_address  = "10.100.20.14"
           translated_port     = "22"
-          ticket              = "RITM0009056"
         }
       }
     }
@@ -46,7 +44,6 @@ xfer = {
           source_addresses      = ["10.100.20.0/24"]
           destination_addresses = ["203.0.113.80/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009049"
         }
         "002-https-xfer-to-wingtipFs" = {
           name                  = "https-xfer-to-wingtipFs"
@@ -54,7 +51,6 @@ xfer = {
           source_addresses      = ["10.100.20.0/24"]
           destination_addresses = ["198.51.100.80/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009050"
         }
         "003-https-xfer-to-settApi" = {
           name                  = "https-xfer-to-settApi"
@@ -62,7 +58,6 @@ xfer = {
           source_ip_groups      = ["ipg-xfer-prod"]
           destination_addresses = ["10.100.14.0/24"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009051"
         }
         "004-https-xfer-to-lamnaFs" = {
           name                  = "https-xfer-to-lamnaFs"
@@ -70,7 +65,6 @@ xfer = {
           source_addresses      = ["10.100.20.0/24"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009052"
         }
         "005-sftp-xfer-to-woodgroveSftp" = {
           name                  = "sftp-xfer-to-woodgroveSftp"
@@ -78,7 +72,6 @@ xfer = {
           source_ip_groups      = ["ipg-xfer-prod"]
           destination_addresses = ["203.0.113.48/28"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009053"
         }
         "006-amqps-xfer-to-litwareMq" = {
           name                  = "amqps-xfer-to-litwareMq"
@@ -86,7 +79,6 @@ xfer = {
           source_addresses      = ["10.100.20.0/24"]
           destination_addresses = ["203.0.113.64/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009054"
         }
       }
     }

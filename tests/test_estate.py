@@ -123,6 +123,13 @@ def test_rule_keys_follow_the_naming_standard(out):
                     assert ge.SERVICES.get(KEY.match(key).group(2)), key
 
 
+def test_no_ticket_numbers_in_rules(out):
+    # Ticket numbers live in the branch, commit and PR, never in the firewall files.
+    for path in (out / "infra").rglob("*.tfvars"):
+        text = path.read_text()
+        assert "ticket" not in text and "RITM" not in text, path
+
+
 def test_no_deny_rules(out):
     for path in (out / "infra").rglob("*.tfvars"):
         assert '"Deny"' not in path.read_text(), path

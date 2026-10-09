@@ -16,7 +16,6 @@ port = {
           source_addresses      = ["10.103.17.0/24"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009042"
         }
         "002-https-port-to-settApi" = {
           name                  = "https-port-to-settApi"
@@ -24,7 +23,6 @@ port = {
           source_addresses      = ["10.103.17.0/24"]
           destination_addresses = ["10.103.14.0/24"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009043"
         }
         "003-https-port-to-fourthcoffeeFs" = {
           name                  = "https-port-to-fourthcoffeeFs"
@@ -32,7 +30,6 @@ port = {
           source_addresses      = ["10.103.17.0/24"]
           destination_addresses = ["203.0.113.80/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009044"
         }
         "004-https-port-to-tailspinFs" = {
           name                  = "https-port-to-tailspinFs"
@@ -40,7 +37,6 @@ port = {
           source_addresses      = ["10.103.17.0/24"]
           destination_addresses = ["198.51.100.16/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009045"
         }
         "005-sftp-port-to-fourthcoffeeSftp" = {
           name                  = "sftp-port-to-fourthcoffeeSftp"
@@ -48,7 +44,6 @@ port = {
           source_addresses      = ["10.103.17.0/24"]
           destination_addresses = ["203.0.113.80/28"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009046"
         }
       }
     }
@@ -65,14 +60,12 @@ port = {
           protocols         = ["Https:443"]
           source_ip_groups  = ["ipg-port-stage-dr"]
           destination_fqdns = ["api.fabrikam.example"]
-          ticket            = "RITM0009047"
         }
         "002-https-port-to-tailspinApi" = {
           name              = "https-port-to-tailspinApi"
           protocols         = ["Https:443"]
           source_ip_groups  = ["ipg-port-stage-dr"]
           destination_fqdns = ["api.tailspin.example"]
-          ticket            = "RITM0009048"
         }
       }
     }

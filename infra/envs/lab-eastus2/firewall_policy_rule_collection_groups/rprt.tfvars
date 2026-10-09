@@ -16,7 +16,6 @@ rprt = {
           source_addresses      = ["10.106.15.0/24"]
           destination_addresses = ["203.0.113.32/28"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009026"
         }
         "002-https-rprt-to-fabrikamFs" = {
           name                  = "https-rprt-to-fabrikamFs"
@@ -24,7 +23,6 @@ rprt = {
           source_addresses      = ["10.106.15.0/24"]
           destination_addresses = ["203.0.113.32/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009027"
         }
         "003-smtp-rprt-to-woodgroveSmtp" = {
           name                  = "smtp-rprt-to-woodgroveSmtp"
@@ -32,7 +30,6 @@ rprt = {
           source_addresses      = ["10.106.15.0/24"]
           destination_addresses = ["203.0.113.48/28"]
           destination_ports     = ["587"]
-          ticket                = "RITM0009028"
         }
         "004-amqps-rprt-to-lamnaMq" = {
           name                  = "amqps-rprt-to-lamnaMq"
@@ -40,7 +37,6 @@ rprt = {
           source_addresses      = ["10.106.15.0/24"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009029"
         }
         "005-sql-rprt-to-ledgSql" = {
           name                  = "sql-rprt-to-ledgSql"
@@ -48,7 +44,6 @@ rprt = {
           source_ip_groups      = ["ipg-rprt-lab"]
           destination_addresses = ["10.106.16.0/24"]
           destination_ports     = ["1433"]
-          ticket                = "RITM0009030"
         }
       }
     }
@@ -65,7 +60,6 @@ rprt = {
           protocols         = ["Https:443"]
           source_ip_groups  = ["ipg-rprt-lab"]
           destination_fqdns = ["api.litware.example"]
-          ticket            = "RITM0009032"
         }
       }
     }

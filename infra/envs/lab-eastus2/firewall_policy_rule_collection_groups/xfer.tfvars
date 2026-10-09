@@ -16,7 +16,6 @@ xfer = {
           source_addresses      = ["10.106.20.0/24"]
           destination_addresses = ["203.0.113.80/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009049"
         }
         "002-https-xfer-to-wingtipFs" = {
           name                  = "https-xfer-to-wingtipFs"
@@ -24,7 +23,6 @@ xfer = {
           source_addresses      = ["10.106.20.0/24"]
           destination_addresses = ["198.51.100.80/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009050"
         }
         "003-https-xfer-to-settApi" = {
           name                  = "https-xfer-to-settApi"
@@ -32,7 +30,6 @@ xfer = {
           source_ip_groups      = ["ipg-xfer-lab"]
           destination_addresses = ["10.106.14.0/24"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009051"
         }
         "004-https-xfer-to-lamnaFs" = {
           name                  = "https-xfer-to-lamnaFs"
@@ -40,7 +37,6 @@ xfer = {
           source_addresses      = ["10.106.20.0/24"]
           destination_addresses = ["198.51.100.48/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009052"
         }
         "005-sftp-xfer-to-woodgroveSftp" = {
           name                  = "sftp-xfer-to-woodgroveSftp"
@@ -48,7 +44,6 @@ xfer = {
           source_ip_groups      = ["ipg-xfer-lab"]
           destination_addresses = ["203.0.113.48/28"]
           destination_ports     = ["22"]
-          ticket                = "RITM0009053"
         }
         "006-amqps-xfer-to-litwareMq" = {
           name                  = "amqps-xfer-to-litwareMq"
@@ -56,7 +51,6 @@ xfer = {
           source_addresses      = ["10.106.20.0/24"]
           destination_addresses = ["203.0.113.64/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009054"
         }
         "007-https-xfer-to-northwindFs" = {
           name                  = "https-xfer-to-northwindFs"
@@ -64,7 +58,6 @@ xfer = {
           source_ip_groups      = ["ipg-xfer-lab"]
           destination_addresses = ["203.0.113.16/28"]
           destination_ports     = ["443"]
-          ticket                = "RITM0009061"
         }
         "008-amqps-xfer-to-prosewareMq" = {
           name                  = "amqps-xfer-to-prosewareMq"
@@ -72,7 +65,6 @@ xfer = {
           source_addresses      = ["10.106.20.0/24"]
           destination_addresses = ["198.51.100.32/28"]
           destination_ports     = ["5671"]
-          ticket                = "RITM0009062"
         }
       }
     }

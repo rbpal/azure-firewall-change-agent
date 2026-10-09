@@ -147,10 +147,6 @@ def build_estate():
     """The whole estate as plain data. Rendering to files comes after."""
     catalog = flow_catalog()
     partners = {code: cidr_ for _, code, cidr_ in PARTNERS}
-    ticket_ids = {}
-
-    def ticket(key):  # one ticket covers a rule in every env-site, like RITM0010042
-        return ticket_ids.setdefault(key, f"RITM{9001 + len(ticket_ids):07d}")
 
     policies = {}
     for es in env_sites():
@@ -170,7 +166,6 @@ def build_estate():
                     rule["source_addresses"] = [cidr(es, third)]
                 rule["destination_addresses"] = [partners.get(dst) or cidr(es, SPOKES[dst][0])]
                 rule["destination_ports"] = ports
-                rule["ticket"] = ticket((spoke, rule["name"]))
                 network.append(rule)
 
             app = []
@@ -181,7 +176,6 @@ def build_estate():
                     "protocols": ["Https:443"],
                     "source_ip_groups": [ip_group(spoke, es)],
                     "destination_fqdns": [f"api.{code}.example"],
-                    "ticket": ticket((spoke, name)),
                 })
 
             dnat = []
@@ -196,11 +190,10 @@ def build_estate():
                         "destination_ports": [public_port],
                         "translated_address": f"10.{es['octet']}.{third}.{SFTP_HOST}",
                         "translated_port": "22",
-                        "ticket": ticket((spoke, name)),
                     })
             groups[spoke] = {"dnat": dnat, "network": network, "app": app}
 
-        hub_sources = [cidr(es, SPOKES[s][0]) for s in sorted(spokes_here)]
+        hub_sources = [cidr(es, SPOKES[s][0]) for s in sorted(spokes_here, key=lambda s: SPOKES[s][0])]
         hub = []
         for svc, token in [("dns", "hubDns"), ("ntp", "hubNtp"), ("ldaps", "hubDc"), ("syslog", "hubSyslog")]:
             protocols, ports = SERVICES[svc]
@@ -211,7 +204,6 @@ def build_estate():
                 "source_addresses": hub_sources,
                 "destination_addresses": [cidr(es, SHARED_OCTET, h) for h in SHARED_HOSTS[token]],
                 "destination_ports": ports,
-                "ticket": ticket(("hub", name)),
             })
         groups["hub"] = {"dnat": [], "network": hub, "app": []}
         policies[es["name"]] = {"env_site": es, "groups": groups}

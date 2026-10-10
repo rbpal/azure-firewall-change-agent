@@ -13,6 +13,9 @@ crash.log
 crash.*.log
 infra/env.tfvars
 
+# One-time bootstrap script: holds the subscription and tenant IDs
+infra/01-bootstrap/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

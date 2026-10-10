@@ -66,5 +66,7 @@ Enforced: Tier 1
 
 ## STD-COLL-08 — A removal deletes only the matched rules
 
-On a remove ticket, the change deletes the rules that match the ticket's flow, at the env-sites in scope, and nothing else. It does not edit any other rule, and it does not renumber the rules that remain.
+On a remove ticket, the change deletes the rules that match the ticket's flow, at the env-sites in scope. The rules after each deleted rule in the same collection move down to close the gap, in the same order (STD-NAME-03).
+
+Nothing else changes. Every remaining rule keeps its name and fields, only its index may change, and other collections keep their numbers.
 Enforced: Tier 1

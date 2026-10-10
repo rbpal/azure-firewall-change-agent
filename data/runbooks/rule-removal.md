@@ -21,9 +21,9 @@ If no rule in `main` matches, there is nothing to remove. Tell the requester and
 
 If the traffic is allowed only by a rule that exists in the live policy but not in `main`, say so on the ticket. The next release to that group deletes it anyway.
 
-## RB-03-4 — Leave the numbers alone
+## RB-03-4 — Close the gap
 
-Delete the rule's entry and nothing else (STD-COLL-08). The other rules keep their numbers, and the removed number is never reused (STD-NAME-03).
+Delete the rule's entry. The workflow code then renumbers the rules after it in the same collection, so the numbers run from `001` with no gaps (STD-NAME-03). Only the index moves. Every rule keeps its name, fields and order, and other collections keep their numbers (STD-COLL-08).
 
 ## RB-03-5 — Escalate instead of drafting when
 

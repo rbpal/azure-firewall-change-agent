@@ -6,3 +6,7 @@ provider "azurerm" {
   storage_use_azuread             = true
   resource_provider_registrations = "none"
 }
+
+# Entra ID objects: the tool server's app registration and its role
+# assignments. The tenant comes from the az login session.
+provider "azuread" {}

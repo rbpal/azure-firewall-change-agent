@@ -63,3 +63,14 @@ variable "tags" {
   description = "Tags applied to the function app."
   type        = map(string)
 }
+
+variable "auth" {
+  description = "Built-in Entra auth. client_id: the API's app registration. tenant_auth_endpoint: https://login.microsoftonline.com/<tenant>/v2.0. allowed_audiences: token audiences accepted. allowed_applications: caller client IDs accepted. Null turns built-in auth off."
+  type = object({
+    client_id            = string
+    tenant_auth_endpoint = string
+    allowed_audiences    = list(string)
+    allowed_applications = list(string)
+  })
+  default = null
+}

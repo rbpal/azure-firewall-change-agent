@@ -95,3 +95,37 @@ variable "plan_sku_name" {
   description = "SKU of the hosting plan."
   type        = string
 }
+
+# ---- Tool server app registration: values in entra.tfvars
+
+variable "mcp_app_name" {
+  description = "Display name of the app registration that callers request tokens for."
+  type        = string
+}
+
+variable "mcp_app_role_value" {
+  description = "App role a caller must hold to call the tools. Appears in the token's roles claim."
+  type        = string
+}
+
+variable "mcp_app_role_description" {
+  description = "What the app role allows."
+  type        = string
+}
+
+variable "mcp_test_clients" {
+  description = "Names from Microsoft's published app list, such as MicrosoftAzureCli, allowed to get a token as a signed-in person and call the tools."
+  type        = list(string)
+}
+
+variable "mcp_role_for_terraform_user" {
+  description = "Whether the person running Terraform gets the app role, so they can test the tools from a laptop."
+  type        = bool
+}
+
+# ---- Caller identity: values in uami.tfvars
+
+variable "uami_name" {
+  description = "User-assigned managed identity that Foundry Agent Service signs in as to call the tools."
+  type        = string
+}

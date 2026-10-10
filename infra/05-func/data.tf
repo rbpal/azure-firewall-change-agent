@@ -17,3 +17,15 @@ data "azurerm_application_insights" "this" {
   name                = var.appi_name
   resource_group_name = var.resource_group_name
 }
+
+# Who is running Terraform: gives the tenant ID for the token issuer and the
+# object ID that owns the app registration. Nothing is written to a file.
+data "azuread_client_config" "current" {}
+
+# Client IDs of Microsoft's own apps, such as Azure CLI, looked up by name so
+# no GUID sits in a committed file.
+data "azuread_application_published_app_ids" "well_known" {}
+
+locals {
+  mcp_test_client_ids = [for name in var.mcp_test_clients : data.azuread_application_published_app_ids.well_known.result[name]]
+}

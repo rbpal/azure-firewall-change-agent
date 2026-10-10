@@ -36,6 +36,32 @@ resource "azurerm_function_app_flex_consumption" "this" {
     minimum_tls_version                    = "1.2"
   }
 
+  # Built-in auth checks every request before our code runs: a valid Entra
+  # token for our API, from an allowed caller. Anything else gets a 401.
+  # Only incoming tokens are validated, so no client secret is needed.
+  dynamic "auth_settings_v2" {
+    for_each = var.auth == null ? [] : [var.auth]
+
+    content {
+      auth_enabled           = true
+      require_authentication = true
+      unauthenticated_action = "Return401"
+      default_provider       = "azureactivedirectory"
+      require_https          = true
+
+      active_directory_v2 {
+        client_id            = auth_settings_v2.value.client_id
+        tenant_auth_endpoint = auth_settings_v2.value.tenant_auth_endpoint
+        allowed_audiences    = auth_settings_v2.value.allowed_audiences
+        allowed_applications = auth_settings_v2.value.allowed_applications
+      }
+
+      login {
+        token_store_enabled = false
+      }
+    }
+  }
+
   tags = var.tags
 
   # Azure adds this tag to link the app to Application Insights in the portal.

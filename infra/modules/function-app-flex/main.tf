@@ -27,6 +27,12 @@ resource "azurerm_function_app_flex_consumption" "this" {
   app_settings = {
     # The Functions host reaches its storage with the managed identity.
     "AzureWebJobsStorage__accountName" = var.storage_account_name
+    # azurerm 4.81.0 always adds AzureWebJobsStorage as a connection string
+    # with an empty key, and the host reads it before the identity setting,
+    # so it cannot start (storage 403). An empty value here overrides it.
+    # The provider hides this key when reading, so every plan shows it as an
+    # addition. Remove both once the provider fix ships (issue 33211, PR 29099).
+    "AzureWebJobsStorage" = ""
     # Application Insights refuses the key, so the app signs in with Entra.
     "APPLICATIONINSIGHTS_AUTHENTICATION_STRING" = "Authorization=AAD"
   }

@@ -86,5 +86,5 @@ An identity is the account a person or program signs in with.
 
 1. **Typing mistakes by the requester.** Say the requester types `10.100.14.0/24` but meant `10.100.15.0/24`. Every check passes, because the rule matches the ticket. Only the engineer can catch this. The eval includes cases like this on purpose.
 2. **In the demo, one person does everything.** You hold every human role. The workflow runs on your laptop, signed in as you, not as its own limited identity. The two-approver rule is tested in code, but no second person takes part.
-3. **Private network vs your laptop.** Once Foundry sits on a private network address, your laptop cannot reach it. The demo workflow would then have to run on the jumpbox inside the network. Not decided yet.
+3. **Public endpoints in the demo.** The demo runs from a laptop, so no service uses a private endpoint. Foundry, AI Search, Storage and Key Vault all accept connections from the internet. Only an Entra token with the right role gets in: local keys are disabled, and every role is scoped to one resource. The enterprise design puts each service behind a private endpoint, reached from a jumpbox inside the network.
 4. **Portal-only rules get deleted.** By policy, a rule added outside the pipeline is removed by the next release to its group. The draft note and the PR name it, but someone could miss it.

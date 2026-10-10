@@ -1,2 +1,4 @@
 # The mcp_tool_trigger decorator needs azure-functions 1.24.0 or later.
 azure-functions>=1.24.0,<2
+# Reads the estate YAML files.
+pyyaml>=6.0,<7

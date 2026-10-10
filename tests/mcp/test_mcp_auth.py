@@ -126,26 +126,26 @@ def test_role_in_tool_arguments_is_ignored():
 # ---- the gateway
 
 def test_gateway_runs_tool_for_allowed_caller():
-    out = gateway.run(json.dumps(context(encode(principal()))), lambda caller: {"ok": caller.object_id})
+    out = gateway.run(json.dumps(context(encode(principal()))), lambda caller, args: {"ok": caller.object_id})
     assert json.loads(out) == {"ok": "obj-1"}
 
 
 def test_gateway_does_not_run_tool_for_refused_caller():
     called = []
-    out = gateway.run(json.dumps(context(None)), lambda caller: called.append(caller))
+    out = gateway.run(json.dumps(context(None)), lambda caller, args: called.append(caller))
     assert called == []
     assert json.loads(out)["error"] == "forbidden"
 
 
 def test_gateway_refuses_unreadable_context():
     called = []
-    out = gateway.run("{not json", lambda caller: called.append(caller))
+    out = gateway.run("{not json", lambda caller, args: called.append(caller))
     assert called == [] and json.loads(out)["error"] == "forbidden"
 
 
 def test_refusal_never_echoes_the_header():
     header_value = encode(principal(roles=("Other",)))
-    out = gateway.run(json.dumps(context(header_value)), lambda caller: {})
+    out = gateway.run(json.dumps(context(header_value)), lambda caller, args: {})
     assert header_value not in out
 
 

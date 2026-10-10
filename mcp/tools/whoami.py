@@ -7,7 +7,7 @@ Entra token, built-in auth, the claims header, the role check.
 from auth import Caller
 
 
-def whoami(caller: Caller) -> dict:
+def whoami(caller: Caller, arguments: dict | None = None) -> dict:
     return {
         "object_id": caller.object_id,
         "client_app_id": caller.client_app_id,

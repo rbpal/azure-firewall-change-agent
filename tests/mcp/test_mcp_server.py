@@ -38,7 +38,7 @@ def test_tool_names_are_unique():
     assert len(names) == len(set(names))
 
 
-@pytest.mark.parametrize("path", ["auth.py", "gateway.py", *[str(p.relative_to(MCP)) for p in (MCP / "tools").glob("*.py")]])
+@pytest.mark.parametrize("path", ["auth.py", "gateway.py", "errors.py", "estate.py", *[str(p.relative_to(MCP)) for p in (MCP / "tools").glob("*.py")]])
 def test_logic_does_not_import_azure_functions(path):
     tree = ast.parse((MCP / path).read_text())
     for node in ast.walk(tree):

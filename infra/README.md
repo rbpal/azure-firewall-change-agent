@@ -20,6 +20,7 @@ Inside a numbered folder, names and values are kept apart:
 | `<resource>.tfvars` | Values only, one file per resource, such as `rg.tfvars` and `budget.tfvars`. |
 | `backend.tf` | Where this step's state file lives. |
 | `providers.tf` | The `azurerm` provider settings. |
+| `data.tf` | Existing resources the step reads but does not create, such as the resource group from an earlier step. |
 | `main.tf` | The module calls. |
 | `outputs.tf` | What later steps can read. |
 

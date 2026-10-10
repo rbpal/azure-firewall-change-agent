@@ -1,7 +1,7 @@
 # Values for the resource group. Each name is declared in variables.tf.
 
 location            = "eastus2"
-resource_group_name = "rg-fwagentic-dev-01"
+resource_group_name = "rg-fwagentic-dev"
 
 tags = {
   project    = "azure-firewall-change-agent"

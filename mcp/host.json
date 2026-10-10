@@ -1,0 +1,17 @@
+{
+  "version": "2.0",
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle",
+    "version": "[4.0.0, 5.0.0)"
+  },
+  "extensions": {
+    "mcp": {
+      "serverName": "fwagentic-mcp",
+      "serverVersion": "0.1.0",
+      "instructions": "Read-only tools for the firewall change agent. Every call needs an Entra token holding the Tools.Read role.",
+      "system": {
+        "webhookAuthorizationLevel": "Anonymous"
+      }
+    }
+  }
+}

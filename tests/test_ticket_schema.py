@@ -52,6 +52,13 @@ def test_wide_but_well_formed_requests_pass_the_schema(ticket):
     assert ticket_errors(ticket) == []
 
 
+@pytest.mark.parametrize("url", ["https://www.google.com/search?q=x", "http://www.cnn.com",
+                                 "https://Files.Northwind.example:8443/upload/v1", "https://api.northwind.example/"])
+def test_destination_url_passes_the_schema(ticket, url):
+    ticket["destination"] = [{"url": url}]
+    assert ticket_errors(ticket) == []
+
+
 @pytest.mark.parametrize("fqdn", ["*", "*.com", "*.northwind.example"])
 def test_wildcard_fqdns_pass_the_schema(ticket, fqdn):
     # STD-COLL-02 flags these as cautions; the schema must let them through.
@@ -85,6 +92,16 @@ BAD = {
     "existing rule on add": lambda t: t.update(existing_rule="https-sett-to-northwindFs"),
     "bad ticket number": lambda t: t.update(number="REQ-0042"),
     "empty justification": lambda t: t.update(justification=""),
+    "url as a source": lambda t: t["sources"].__setitem__(0, {"url": "https://www.cnn.com/"}),
+    "url and fqdn together": lambda t: t["destination"].__setitem__(
+        0, {"url": "https://www.cnn.com/", "fqdn": "www.cnn.com"}),
+    "url with ftp scheme": lambda t: t["destination"].__setitem__(0, {"url": "ftp://www.cnn.com/"}),
+    "url with no scheme": lambda t: t["destination"].__setitem__(0, {"url": "www.cnn.com/world"}),
+    "url with wildcard host": lambda t: t["destination"].__setitem__(0, {"url": "https://*.cnn.com/"}),
+    "url with IP host": lambda t: t["destination"].__setitem__(0, {"url": "https://10.1.2.3/"}),
+    "url with user and password": lambda t: t["destination"].__setitem__(0, {"url": "https://user:pw@localhost/"}),
+    "url with port above 65535": lambda t: t["destination"].__setitem__(0, {"url": "https://www.cnn.com:70000/"}),
+    "url with a space": lambda t: t["destination"].__setitem__(0, {"url": "https://www.cnn.com/a b"}),
 }
 
 

@@ -48,7 +48,7 @@
       "items": { "$ref": "#/$defs/port" }
     },
     "public_port": {
-      "description": "Inbound only: the port the partner connects to on the hub firewall's public IP. The public IP itself comes from the estate data, never from the ticket.",
+      "description": "Inbound only: the port the partner connects to on the hub firewall's public IP. The public IP itself comes from the network data, never from the ticket.",
       "type": "string",
       "pattern": "^[1-9][0-9]{0,4}$"
     },

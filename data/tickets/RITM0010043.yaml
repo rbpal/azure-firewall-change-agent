@@ -1,6 +1,6 @@
 # Synthetic ticket. All names and addresses are fictional.
 # Inbound: publish the prod SFTP server to Northwind through the hub firewall.
-# The firewall's public IP comes from the estate data, never from the ticket.
+# The firewall's public IP comes from the network data, never from the ticket.
 
 number: RITM0010043
 item: Firewall Change Request

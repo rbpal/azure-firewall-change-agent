@@ -1,4 +1,4 @@
-# Synthetic estate. All names and addresses are fictional.
+# Synthetic network data. All names and addresses are fictional.
 env_sites:
   prod-eastus2:
     environment: prod

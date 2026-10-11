@@ -4,17 +4,25 @@ Longest-prefix match on the address plan, the way a router picks a route:
 of all ranges that contain the input, the most specific one wins. The model
 never states where an address lives; this tool does, from the plan in the
 repo.
+
+Each answer also names the hub firewall and policy of the address's env-site,
+from routing.yaml. Code takes the firewalls for a request from the env-sites
+of its source and destination; an address outside the plan has none, and the
+engineer says where it goes.
 """
 
 import ipaddress
 
 from errors import BadArguments
-from estate import Range, Source, load_ranges
+from tools.network import ADDRESS_PLAN, ROUTING, NetworkDataError, Hub, Range, Source, load_hubs, load_ranges
 
 
-def _describe(r: Range) -> dict:
+def _describe(r: Range, hubs: dict[str, Hub]) -> dict:
+    hub = hubs.get(r.env_site)
+    if hub is None:
+        raise NetworkDataError(f"env-site {r.env_site} is in the address plan but has no hub in routing")
     out = {"cidr": str(r.network), "kind": r.kind, "environment": r.environment, "site": r.site,
-           "region": r.region, "env_site": r.env_site}
+           "env_site": r.env_site, "firewall": hub.firewall, "firewall_policy": hub.firewall_policy}
     for key in ("spoke", "vnet", "ip_group", "holds"):
         value = getattr(r, key)
         if value is not None:
@@ -38,15 +46,13 @@ def parse_address(text) -> ipaddress.IPv4Network:
         raise BadArguments(f"{text!r} is not an IPv4 address or CIDR") from exc
 
 
-def locate(net: ipaddress.IPv4Network, ranges: list[Range]) -> dict:
+def locate(net: ipaddress.IPv4Network, ranges: list[Range], hubs: dict[str, Hub]) -> dict:
     containing = sorted((r for r in ranges if net.subnet_of(r.network)), key=lambda r: r.network.prefixlen, reverse=True)
     covered = sorted((r for r in ranges if r.network.subnet_of(net) and r.network != net), key=lambda r: r.network)
     result = {
         "input": str(net) if net.prefixlen < 32 else str(net.network_address),
-        "found": bool(containing),
-        "match": _describe(containing[0]) if containing else None,
-        "within": [_describe(r) for r in containing[1:]],
-        "covers": [_describe(r) for r in covered],
+        "match": _describe(containing[0], hubs) if containing else None,
+        "covers": [_describe(r, hubs) for r in covered],
     }
     if containing and net.prefixlen == 32:
         addr = str(net.network_address)
@@ -55,7 +61,7 @@ def locate(net: ipaddress.IPv4Network, ranges: list[Range]) -> dict:
                 result["host"] = name
     if not containing:
         result["reason"] = ("wider than every range in the address plan" if covered
-                            else "not in the address plan: not an internal address of this estate")
+                            else "not in the address plan: not an internal address of this network")
     return result
 
 
@@ -63,6 +69,6 @@ def locate_address(caller, arguments: dict, source: Source) -> dict:
     if not isinstance(arguments, dict) or set(arguments) - {"address"}:
         raise BadArguments("only one argument is accepted: address")
     net = parse_address(arguments.get("address"))
-    result = locate(net, load_ranges(source))
-    result["source"] = {"file": "data/estate/address-plan.yaml", "commit": source.commit}
+    result = locate(net, load_ranges(source), load_hubs(source))
+    result["source"] = {"files": [ADDRESS_PLAN, ROUTING], "commit": source.commit}
     return result

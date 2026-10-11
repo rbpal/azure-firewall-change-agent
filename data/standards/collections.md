@@ -52,7 +52,7 @@ Enforced: Tier 1
 
 ## STD-COLL-06 — DNAT targets and public ports
 
-A DNAT rule translates to one internal host, inside the environment and site of the policy it is in. Its destination is that site's hub firewall public IP, taken from the estate data, never from the ticket.
+A DNAT rule translates to one internal host, inside the environment and site of the policy it is in. Its destination is that site's hub firewall public IP, taken from the network data, never from the ticket.
 
 Each public port is used once per firewall. A DNAT rule that reuses a port already published on that firewall fails this check.
 Enforced: Tier 1

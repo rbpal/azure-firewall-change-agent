@@ -18,7 +18,7 @@ A YAML file stands in for the ServiceNow ticket.
 You start the workflow from your laptop with `fwagent submit`.
 GitHub Actions stands in for Azure DevOps, and you hold every human role.
 
-Status: the repo, the synthetic estate and the standards are built. The workflow, the agent and the pipelines are next.
+Status: the repo, the synthetic network and the standards are built. The workflow, the agent and the pipelines are next.
 
 ### Trade-offs
 

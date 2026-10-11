@@ -1,9 +1,9 @@
-"""Reads the synthetic estate (address plan, routing) that the tools answer from.
+"""Reads the synthetic network (address plan, routing) that the tools answer from.
 
 Where the files come from is a Source. Tests use LocalSource on the repo
 checkout. The deployed app will read main on GitHub; that source is added
 when its access method is decided. Every answer carries the source's commit,
-so a reader can tell which version of the estate it came from.
+so a reader can tell which version of the network it came from.
 """
 
 import ipaddress
@@ -13,7 +13,8 @@ from typing import Protocol
 
 import yaml
 
-ADDRESS_PLAN = "data/estate/address-plan.yaml"
+ADDRESS_PLAN = "data/network/address-plan.yaml"
+ROUTING = "data/network/routing.yaml"
 KINDS = {"env-site", "shared", "spoke"}
 
 
@@ -38,8 +39,8 @@ class LocalSource:
         return None
 
 
-class EstateError(Exception):
-    """The estate data itself is malformed. Never caused by the caller."""
+class NetworkDataError(Exception):
+    """The network data itself is malformed. Never caused by the caller."""
 
 
 @dataclass(frozen=True)
@@ -64,22 +65,45 @@ def load_ranges(source: Source) -> list[Range]:
     data = yaml.safe_load(source.read(ADDRESS_PLAN))
     rows = data.get("ranges") if isinstance(data, dict) else None
     if not isinstance(rows, list) or not rows:
-        raise EstateError("address plan has no ranges")
+        raise NetworkDataError("address plan has no ranges")
     ranges, seen = [], set()
     for row in rows:
         try:
             net = ipaddress.IPv4Network(row["cidr"])
             kind = row["kind"]
             if kind not in KINDS:
-                raise EstateError(f"unknown kind {kind!r} for {net}")
+                raise NetworkDataError(f"unknown kind {kind!r} for {net}")
             hosts = tuple(sorted((name, tuple(addrs)) for name, addrs in (row.get("hosts") or {}).items()))
             r = Range(network=net, kind=kind, environment=row["environment"], site=row["site"],
                       region=row["region"], spoke=row.get("spoke"), vnet=row.get("vnet"),
                       ip_group=row.get("ip_group"), holds=row.get("holds"), hosts=hosts)
         except (KeyError, ValueError, TypeError) as exc:
-            raise EstateError(f"bad address plan row {row!r}: {exc}") from exc
+            raise NetworkDataError(f"bad address plan row {row!r}: {exc}") from exc
         if net in seen:
-            raise EstateError(f"duplicate range {net}")
+            raise NetworkDataError(f"duplicate range {net}")
         seen.add(net)
         ranges.append(r)
     return ranges
+
+
+@dataclass(frozen=True)
+class Hub:
+    """One env-site's secured hub: the firewall and the policy that holds its rules."""
+
+    firewall: str
+    firewall_policy: str
+
+
+def load_hubs(source: Source) -> dict[str, Hub]:
+    """Read routing.yaml: each env-site has exactly one hub firewall and policy."""
+    data = yaml.safe_load(source.read(ROUTING))
+    sites = data.get("env_sites") if isinstance(data, dict) else None
+    if not isinstance(sites, dict) or not sites:
+        raise NetworkDataError("routing has no env_sites")
+    hubs = {}
+    for env_site, site in sites.items():
+        try:
+            hubs[env_site] = Hub(firewall=site["firewall"], firewall_policy=site["firewall_policy"])
+        except (KeyError, TypeError) as exc:
+            raise NetworkDataError(f"routing entry {env_site!r} has no firewall or policy: {exc}") from exc
+    return hubs

@@ -1,4 +1,4 @@
-# Synthetic estate. All names and addresses are fictional.
+# Synthetic network data. All names and addresses are fictional.
 sett = {
   name                = "sett"
   firewall_policy_key = "firewall_policy"

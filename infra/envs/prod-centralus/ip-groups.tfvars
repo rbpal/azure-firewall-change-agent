@@ -1,4 +1,4 @@
-# Synthetic estate. All names and addresses are fictional.
+# Synthetic network data. All names and addresses are fictional.
 ip_groups = {
   ipg-sett-prod-dr = {
     name  = "ipg-sett-prod-dr"

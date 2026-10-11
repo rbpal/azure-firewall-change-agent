@@ -34,6 +34,8 @@ class Unauthorized(Exception):
 
 @dataclass(frozen=True)
 class Caller:
+    """Who called: Entra object ID, client app ID, app roles and auth type."""
+
     object_id: str | None
     client_app_id: str | None
     roles: tuple[str, ...]
@@ -51,6 +53,7 @@ def _get(mapping, key):
 
 
 def principal_header(context: dict) -> str:
+    """Return the X-MS-CLIENT-PRINCIPAL value from the tool context; refuse if absent."""
     transport = _get(context, "transport")
     headers = _get(_get(transport, "properties"), "headers")
     if not isinstance(headers, dict):
@@ -62,6 +65,7 @@ def principal_header(context: dict) -> str:
 
 
 def decode_principal(value: str) -> dict:
+    """Base64-decode the header into JSON; refuse if unreadable or it has no claims list."""
     try:
         principal = json.loads(base64.b64decode(value, validate=True))
     except (binascii.Error, ValueError) as exc:
@@ -72,6 +76,7 @@ def decode_principal(value: str) -> dict:
 
 
 def caller_from_principal(principal: dict) -> Caller:
+    """Pull the roles and caller IDs out of the claims; skip malformed claims."""
     role_types = {principal.get("role_typ"), *ROLE_CLAIM_TYPES} - {None}
     roles, claims = [], {}
     for claim in principal["claims"]:
@@ -91,7 +96,7 @@ def caller_from_principal(principal: dict) -> Caller:
 
 
 def require_role(context: dict, role: str = REQUIRED_ROLE) -> Caller:
-    """Return the caller if it holds the role; raise Unauthorized otherwise."""
+    """Gate 2 entry point: check built-in auth is on, read the caller, require the role."""
     if os.environ.get(AUTH_ENABLED_ENV, "").lower() != "true":
         raise Unauthorized("built-in auth is not enabled on this app, so the caller cannot be trusted")
     caller = caller_from_principal(decode_principal(principal_header(context)))

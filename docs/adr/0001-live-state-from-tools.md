@@ -20,8 +20,8 @@ Facts come only from tools. Search is used only for written guidance: the standa
 | --- | --- |
 | Does a rule already allow this traffic? | A tool that reads the rule files in `main`. Those files are the source of truth. |
 | Is there a rule in Azure that is not in the files? | A tool that reads the live firewall policy. This only finds drift. |
-| Which environment, site and spoke is this address in? | A tool that looks the address up in `data/estate/address-plan.yaml` |
-| Which firewalls does this traffic pass through? | A tool that reads `data/estate/routing.yaml` |
+| Which environment, site and spoke is this address in? | A tool that looks the address up in `data/network/address-plan.yaml` |
+| Which firewalls does this traffic pass through? | The same tool. Each env-site has one hub firewall, which it reads from `data/network/routing.yaml` |
 | Is the DR site built? | Azure Resource Graph |
 | How should this kind of rule be written? | Search over `data/standards/` and `data/runbooks/` |
 
@@ -38,8 +38,8 @@ The agent is told never to state a fact that no tool gave it. After it drafts, t
 ## What we did not choose
 
 1. **Put the rules in a search index.** No, for the reasons above.
-2. **Paste all the rule files into the agent's prompt.** One real file can run to hundreds of lines, and there are eight firewalls. The cost grows as the estate grows. The agent would still have to do the maths in its head.
-3. **A knowledge graph** (a database of how networks and rules connect). The estate is already structured data, so code can read it directly. A later ADR explains this one.
+2. **Paste all the rule files into the agent's prompt.** One real file can run to hundreds of lines, and there are eight firewalls. The cost grows as the network grows. The agent would still have to do the maths in its head.
+3. **A knowledge graph** (a database of how networks and rules connect). The network data is already structured, so code can read it directly. A later ADR explains this one.
 
 ## What this costs us
 

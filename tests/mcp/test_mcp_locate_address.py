@@ -9,7 +9,7 @@ import pytest
 
 import gateway
 from errors import BadArguments
-from estate import EstateError, LocalSource
+from tools.network import ADDRESS_PLAN, ROUTING, NetworkDataError, LocalSource
 from tools.locate_address import locate_address
 
 REPO = Path(__file__).resolve().parents[2]
@@ -17,12 +17,14 @@ REAL = LocalSource(REPO)
 
 
 class TextSource:
-    """An in-memory address plan for edge cases."""
+    """An in-memory address plan for edge cases; routing is the real one unless given."""
 
-    def __init__(self, text: str):
-        self.text = text
+    def __init__(self, text: str, routing: str | None = None):
+        self.text, self.routing = text, routing
 
     def read(self, path):
+        if path == ROUTING:
+            return self.routing if self.routing is not None else REAL.read(path)
         return self.text
 
     @property
@@ -37,22 +39,19 @@ def call(address, source=REAL):
 # ---- known facts from the real plan
 
 def test_spoke_address_maps_to_its_spoke():
-    out = call("10.100.14.20")
-    assert out["found"] is True
-    m = out["match"]
+    m = call("10.100.14.20")["match"]
     assert (m["cidr"], m["kind"], m["spoke"], m["env_site"]) == ("10.100.14.0/24", "spoke", "sett", "prod-eastus2")
     assert (m["vnet"], m["ip_group"], m["environment"], m["site"]) == ("vnet-sett-prod", "ipg-sett-prod", "prod", "primary")
 
 
-def test_longest_prefix_wins_and_wider_range_is_listed_as_within():
-    out = call("10.100.14.20")
-    assert [w["cidr"] for w in out["within"]] == ["10.100.0.0/16"]
-    assert out["within"][0]["kind"] == "env-site"
+def test_longest_prefix_wins_over_the_env_site_range():
+    # 10.100.14.20 is in both 10.100.0.0/16 (env-site) and 10.100.14.0/24 (spoke)
+    assert call("10.100.14.20")["match"]["kind"] == "spoke"
 
 
 def test_dr_site_is_a_different_env_site():
     m = call("10.101.14.20")["match"]
-    assert (m["spoke"], m["site"], m["region"], m["env_site"]) == ("sett", "dr", "centralus", "prod-centralus")
+    assert (m["spoke"], m["site"], m["env_site"]) == ("sett", "dr", "prod-centralus")
 
 
 def test_known_hub_host_is_named():
@@ -63,7 +62,7 @@ def test_known_hub_host_is_named():
 
 def test_address_in_env_site_but_no_spoke_matches_the_env_site():
     out = call("10.100.200.9")
-    assert out["match"]["kind"] == "env-site" and out["within"] == []
+    assert out["match"]["kind"] == "env-site"
 
 
 def test_cidr_equal_to_a_spoke():
@@ -80,19 +79,19 @@ def test_wide_cidr_lists_everything_it_covers():
 
 def test_wider_than_any_range_is_not_found_but_lists_coverage():
     out = call("10.0.0.0/8")
-    assert out["found"] is False and out["match"] is None
+    assert out["match"] is None
     assert len(out["covers"]) == 53
     assert "wider than every range" in out["reason"]
 
 
 def test_partner_address_is_not_found():
     out = call("203.0.113.20")
-    assert out["found"] is False and out["covers"] == []
+    assert out["match"] is None and out["covers"] == []
     assert "not in the address plan" in out["reason"]
 
 
 def test_answer_names_its_source():
-    assert call("10.100.14.20")["source"] == {"file": "data/estate/address-plan.yaml", "commit": None}
+    assert call("10.100.14.20")["source"] == {"files": [ADDRESS_PLAN, ROUTING], "commit": None}
     plan = "ranges:\n- {cidr: 10.0.0.0/16, kind: env-site, environment: lab, site: primary, region: eastus2}\n"
     assert call("10.0.0.1", TextSource(plan))["source"]["commit"] == "abc123"
 
@@ -120,35 +119,55 @@ def test_missing_argument_is_refused():
         locate_address(None, {}, REAL)
 
 
-# ---- the estate data itself
+# ---- the network data itself
 
-def test_duplicate_range_in_plan_is_an_estate_error():
+def test_duplicate_range_in_plan_is_a_network_data_error():
     plan = ("ranges:\n- {cidr: 10.0.0.0/16, kind: env-site, environment: lab, site: primary, region: eastus2}\n"
             "- {cidr: 10.0.0.0/16, kind: env-site, environment: dev, site: primary, region: eastus2}\n")
-    with pytest.raises(EstateError, match="duplicate"):
+    with pytest.raises(NetworkDataError, match="duplicate"):
         call("10.0.0.1", TextSource(plan))
 
 
-def test_unknown_kind_in_plan_is_an_estate_error():
+def test_unknown_kind_in_plan_is_a_network_data_error():
     plan = "ranges:\n- {cidr: 10.0.0.0/16, kind: mystery, environment: lab, site: primary, region: eastus2}\n"
-    with pytest.raises(EstateError, match="unknown kind"):
+    with pytest.raises(NetworkDataError, match="unknown kind"):
         call("10.0.0.1", TextSource(plan))
 
+
+# ---- the hub firewall for each address
+
+def test_spoke_address_names_its_hub_firewall_and_policy():
+    m = call("10.100.14.20")["match"]
+    assert (m["firewall"], m["firewall_policy"]) == ("afw-hub-prod-eastus2", "afwp-hub-prod-eastus2")
+
+
+def test_dr_address_names_the_dr_hub_firewall():
+    assert call("10.101.16.5")["match"]["firewall"] == "afw-hub-prod-centralus"
+
+
+def test_each_env_site_names_a_different_firewall():
+    addresses = [f"10.10{i}.14.20" for i in range(8)]
+    firewalls = {call(a)["match"]["firewall"] for a in addresses}
+    assert len(firewalls) == 8
+
+
+def test_partner_address_names_no_firewall():
+    out = call("203.0.113.20")
+    assert out["match"] is None and "firewall" not in out
+
+
+def test_env_site_missing_from_routing_is_a_network_data_error():
+    plan = "ranges:\n- {cidr: 10.0.0.0/16, kind: env-site, environment: qa, site: primary, region: eastus2}\n"
+    with pytest.raises(NetworkDataError, match="no hub in routing"):
+        call("10.0.0.1", TextSource(plan))
+
+
+def test_routing_entry_without_a_policy_is_a_network_data_error():
+    routing = "env_sites:\n  prod-eastus2:\n    firewall: afw-hub-prod-eastus2\n"
+    with pytest.raises(NetworkDataError, match="no firewall or policy"):
+        call("10.100.14.20", TextSource(REAL.read(ADDRESS_PLAN), routing))
 
 # ---- through the gateway
-
-@pytest.fixture
-def allowed_context(monkeypatch):
-    import base64
-    monkeypatch.setenv("WEBSITE_AUTH_ENABLED", "True")
-    principal = {"auth_typ": "aad", "role_typ": "roles", "claims": [{"typ": "roles", "val": "Tools.Read"}]}
-    header = base64.b64encode(json.dumps(principal).encode()).decode()
-
-    def make(arguments):
-        return json.dumps({"name": "locate_address", "arguments": arguments,
-                           "transport": {"properties": {"headers": {"X-MS-CLIENT-PRINCIPAL": header}}}})
-    return make
-
 
 def test_gateway_passes_arguments_to_the_tool(allowed_context):
     out = json.loads(gateway.run(allowed_context({"address": "10.100.14.20"}), locate_address, source=REAL))

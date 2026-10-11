@@ -19,9 +19,9 @@ From the ticket, take exactly:
 
 Never widen the source. A source of `0.0.0.0/0` or `*` is never drafted (STD-COLL-04).
 
-## RB-02-3 — Use the firewall's public IP from the estate data
+## RB-02-3 — Use the firewall's public IP from the network data
 
-The rule's destination address is the public IP of the hub firewall at that environment and site. Take it from the estate's routing data, never from the ticket (STD-COLL-06).
+The rule's destination address is the public IP of the hub firewall at that environment and site. Take it from the routing data, never from the ticket (STD-COLL-06).
 
 Check that the public port is not already published on that firewall. If it is, escalate. Two DNAT rules cannot share one public IP and port.
 

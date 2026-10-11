@@ -5,7 +5,7 @@ Do not use for: removing one rule while the partner stays (use RB-03).
 
 ## RB-04-1 — Confirm the partner and the scope
 
-The ticket names the partner. It must be a partner in the estate's partner data. The scope is the environments on the ticket, usually all of them, with DR where built (STD-COLL-05).
+The ticket names the partner. It must be a partner in the partner list. The scope is the environments on the ticket, usually all of them, with DR where built (STD-COLL-05).
 
 ## RB-04-2 — Find every rule for the partner
 
@@ -27,6 +27,6 @@ The agent never creates, changes or deletes an IP group. Once the rules are gone
 
 ## RB-04-5 — Escalate instead of drafting when
 
-- the partner is not in the estate's partner data
+- the partner is not in the partner list
 - a rule names this partner together with another partner, so deleting it would cut off the other one too
 - a rule for the partner is in the `hub` group

@@ -1,4 +1,4 @@
-"""locate_address. Uses the real address plan for known facts and small
+"""locate_address_for_env_site. Uses the real address plan for known facts and small
 in-memory plans for edge cases. Each test fails if the matching rule, the
 input checks or the answer's shape change."""
 
@@ -9,8 +9,8 @@ import pytest
 
 import gateway
 from errors import BadArguments
-from tools.network import ADDRESS_PLAN, ROUTING, NetworkDataError, LocalSource
-from tools.locate_address import locate_address
+from tools.read_addressplan_routing import ADDRESS_PLAN, ROUTING, NetworkDataError, LocalSource
+from tools.locate_address_for_env_site import locate_address_for_env_site
 
 REPO = Path(__file__).resolve().parents[2]
 REAL = LocalSource(REPO)
@@ -33,7 +33,7 @@ class TextSource:
 
 
 def call(address, source=REAL):
-    return locate_address(None, {"address": address}, source)
+    return locate_address_for_env_site(None, {"address": address}, source)
 
 
 # ---- known facts from the real plan
@@ -111,12 +111,12 @@ def test_host_bits_set_is_refused_with_a_hint():
 
 def test_unknown_argument_is_refused():
     with pytest.raises(BadArguments, match="only one argument"):
-        locate_address(None, {"address": "10.100.14.20", "spoke": "sett"}, REAL)
+        locate_address_for_env_site(None, {"address": "10.100.14.20", "spoke": "sett"}, REAL)
 
 
 def test_missing_argument_is_refused():
     with pytest.raises(BadArguments):
-        locate_address(None, {}, REAL)
+        locate_address_for_env_site(None, {}, REAL)
 
 
 # ---- the network data itself
@@ -170,15 +170,15 @@ def test_routing_entry_without_a_policy_is_a_network_data_error():
 # ---- through the gateway
 
 def test_gateway_passes_arguments_to_the_tool(allowed_context):
-    out = json.loads(gateway.run(allowed_context({"address": "10.100.14.20"}), locate_address, source=REAL))
+    out = json.loads(gateway.run(allowed_context({"address": "10.100.14.20"}), locate_address_for_env_site, source=REAL))
     assert out["match"]["spoke"] == "sett"
 
 
 def test_gateway_turns_bad_arguments_into_an_answer(allowed_context):
-    out = json.loads(gateway.run(allowed_context({"address": "nope"}), locate_address, source=REAL))
+    out = json.loads(gateway.run(allowed_context({"address": "nope"}), locate_address_for_env_site, source=REAL))
     assert out["error"] == "bad_arguments" and "not an IPv4" in out["reason"]
 
 
 def test_gateway_hides_detail_of_unexpected_failures(allowed_context):
-    out = json.loads(gateway.run(allowed_context({"address": "10.0.0.1"}), locate_address, source=TextSource("not: [valid")))
+    out = json.loads(gateway.run(allowed_context({"address": "10.0.0.1"}), locate_address_for_env_site, source=TextSource("not: [valid")))
     assert out == {"error": "tool_failed"}

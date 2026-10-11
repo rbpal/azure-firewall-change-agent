@@ -18,7 +18,7 @@ Facts come only from tools. Search is used only for written guidance: the standa
 
 | The agent asks | Who answers |
 | --- | --- |
-| Does a rule already allow this traffic? | A tool that reads the rule files in `main`. Those files are the source of truth. |
+| Does a rule already allow this traffic? | The `duplicate_rule_check` tool. It reads the rule files in `main`, the source of truth, and does the address and port maths in code (point 4). |
 | Is there a rule in Azure that is not in the files? | A tool that reads the live firewall policy. This only finds drift. |
 | Which environment, site and spoke is this address in? | A tool that looks the address up in `data/network/address-plan.yaml` |
 | Which firewalls does this traffic pass through? | The same tool. Each env-site has one hub firewall, which it reads from `data/network/routing.yaml` |

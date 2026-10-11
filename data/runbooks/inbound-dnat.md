@@ -5,7 +5,7 @@ Do not use for: outbound access (use RB-01) or removing a rule (use RB-03).
 
 ## RB-02-1 — Check what already exists
 
-Read the rule files in `main`, as in RB-01-1. If a DNAT rule already publishes the same internal host and port to the same partner range, no change is needed: tell the requester the rule name and stop.
+Call `duplicate_rule_check`, as in RB-01-1. If it lists a DNAT rule that already publishes the same internal host and port to the same partner range, no change is needed: tell the requester the rule name and stop.
 
 ## RB-02-2 — Take the details from the approved ticket
 

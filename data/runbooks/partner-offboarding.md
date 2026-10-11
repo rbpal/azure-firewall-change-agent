@@ -9,7 +9,7 @@ The ticket names the partner. It must be a partner in the partner list. The scop
 
 ## RB-04-2 — Find every rule for the partner
 
-Using the tools, find every rule in `main` that names the partner in any form:
+Using the tools, find every rule in `main` that names the partner in any form. `duplicate_rule_check` finds rules that allow a given flow; check each of these:
 
 - its address range
 - its partner IP group, `ipg-partner-<partner>`

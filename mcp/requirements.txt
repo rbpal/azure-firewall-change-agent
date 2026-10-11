@@ -2,3 +2,5 @@
 azure-functions>=1.24.0,<2
 # Reads the network data YAML files.
 pyyaml>=6.0,<7
+# Parses the rules tfvars files for duplicate_rule_check.
+python-hcl2>=8.1.4,<9

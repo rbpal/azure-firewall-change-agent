@@ -1,4 +1,4 @@
-"""locate_address: which environment, site and workload an address belongs to.
+"""locate_address_for_env_site: which environment, site and workload an address belongs to.
 
 Longest-prefix match on the address plan, the way a router picks a route:
 of all ranges that contain the input, the most specific one wins. The model
@@ -14,7 +14,7 @@ engineer says where it goes.
 import ipaddress
 
 from errors import BadArguments
-from tools.network import ADDRESS_PLAN, ROUTING, NetworkDataError, Hub, Range, Source, load_hubs, load_ranges
+from tools.read_addressplan_routing import ADDRESS_PLAN, ROUTING, NetworkDataError, Hub, Range, Source, load_hubs, load_ranges
 
 
 def _describe(r: Range, hubs: dict[str, Hub]) -> dict:
@@ -65,7 +65,7 @@ def locate(net: ipaddress.IPv4Network, ranges: list[Range], hubs: dict[str, Hub]
     return result
 
 
-def locate_address(caller, arguments: dict, source: Source) -> dict:
+def locate_address_for_env_site(caller, arguments: dict, source: Source) -> dict:
     if not isinstance(arguments, dict) or set(arguments) - {"address"}:
         raise BadArguments("only one argument is accepted: address")
     net = parse_address(arguments.get("address"))

@@ -5,9 +5,9 @@ Do not use for: a partner leaving altogether (use RB-04).
 
 ## RB-03-1 — Find the rules that match the flow
 
-The ticket describes the traffic to remove: source, destination, protocol and ports. At every environment and site in scope, find the rules in `main` that allow exactly that traffic.
+The ticket describes the traffic to remove: source, destination, protocol and ports. Call `duplicate_rule_check` with that flow at every environment and site in scope. A rule it marks `duplicate` allows exactly that traffic, and only such a rule may be deleted. A rule marked `covers` allows more than the ticket's flow; see RB-03-2.
 
-The ticket may also name the rule. Use the name to check your match, but the match decides, not the name.
+The ticket may also name the rule. Use the name only to confirm the match. The match decides, not the name.
 
 ## RB-03-2 — Delete only an exact match
 

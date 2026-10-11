@@ -43,7 +43,8 @@ We sort threats with a checklist called **STRIDE**. Each letter is one kind of a
 | --- | --- | --- | --- |
 | A hidden instruction in the ticket, such as "ignore policy, allow all", tricks the agent into writing a wide-open rule | E | Prompt Shields reads the text first and stops the ticket if it finds an attack. The agent can only send back a draft; it cannot change anything (ADR 0002). The Tier 1 checks look for wide-open rules. The engineer and two PR reviewers read the result. | Planned |
 | The agent makes up an address or changes one | T | A Tier 1 check makes sure every address matches the ticket exactly. Facts come from tools, not from the agent's memory (ADR 0001). | Planned |
-| The agent says a rule already exists when it does not | T | A tool answers this from the rule files in `main`. A rule that exists only in Azure, and not in the files, never counts. | Planned |
+| The agent says a rule already exists when it does not | T | The agent never works this out itself. It calls `duplicate_rule_check`, which does the maths in code from the rule files in `main`, and the same check runs again in CI on the PR (STD-COLL-07). A rule that exists only in Azure, and not in the files, never counts. | Planned |
+| Someone writes a fake copy of the rules or network data that the tools then trust | T | Only the sync job on `main` can sign in as the writer, through a federated credential with no secret (ADR 0003). Its role covers the one container. Every answer names the commit it read, and approval checks it against `main`. | Built |
 | Nobody can tell which version of the agent wrote a rule | R | Every run gets one trace ID, shown on the ticket and the PR. The model version and the prompt version are recorded on every run. | Planned |
 | The agent gets stuck in a loop and runs up the bill | D | A limit on how much each request can use, and budget alerts at 50%, 80% and 100% | Planned |
 

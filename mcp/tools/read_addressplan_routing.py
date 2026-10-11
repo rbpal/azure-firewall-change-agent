@@ -1,9 +1,9 @@
 """Reads the synthetic network (address plan, routing) that the tools answer from.
 
 Where the files come from is a Source. Tests use LocalSource on the repo
-checkout. The deployed app will read main on GitHub; that source is added
-when its access method is decided. Every answer carries the source's commit,
-so a reader can tell which version of the network it came from.
+checkout. The deployed app will read the copy of main in Blob storage that a
+GitHub Actions job writes on every push (ADR 0003). Every answer carries the
+source's commit, so a reader can tell which version of the network it came from.
 """
 
 import ipaddress
@@ -88,10 +88,11 @@ def load_ranges(source: Source) -> list[Range]:
 
 @dataclass(frozen=True)
 class Hub:
-    """One env-site's secured hub: the firewall and the policy that holds its rules."""
+    """One env-site's secured hub: its firewall, its policy and the spokes routed through it."""
 
     firewall: str
     firewall_policy: str
+    spokes: frozenset[str] = frozenset()
 
 
 def load_hubs(source: Source) -> dict[str, Hub]:
@@ -103,7 +104,8 @@ def load_hubs(source: Source) -> dict[str, Hub]:
     hubs = {}
     for env_site, site in sites.items():
         try:
-            hubs[env_site] = Hub(firewall=site["firewall"], firewall_policy=site["firewall_policy"])
+            hubs[env_site] = Hub(firewall=site["firewall"], firewall_policy=site["firewall_policy"],
+                                 spokes=frozenset(site.get("spokes") or {}))
         except (KeyError, TypeError) as exc:
             raise NetworkDataError(f"routing entry {env_site!r} has no firewall or policy: {exc}") from exc
     return hubs

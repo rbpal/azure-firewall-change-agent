@@ -5,7 +5,7 @@ Do not use for: inbound access from a partner (use RB-02) or removing a rule (us
 
 ## RB-01-1 — Check what already exists
 
-Read the rule files in `main`. They are the source of truth. If a rule there already allows the flow, no change is needed: tell the requester the rule name and stop.
+Call the `duplicate_rule_check` tool for each environment and site on the ticket. It reads the rule files in `main`, which are the source of truth. If it lists a rule, that rule already allows the flow: no change is needed there. Tell the requester the rule name and stop. Never decide this by reading rules yourself; the tool does the address and port maths (STD-COLL-07).
 
 A rule that exists only in the live policy does not count. It was added outside the pipeline, and the next release to its group deletes it. Draft the rule anyway, and list the live-only rule on the draft note.
 

@@ -14,7 +14,7 @@ variable "issuer" {
 }
 
 variable "subject" {
-  description = "The exact subject the token must carry, such as repo:<owner>/<repo>:ref:refs/heads/main."
+  description = "The exact subject the token must carry, such as repo:<owner>@<owner-id>/<repo>@<repo-id>:ref:refs/heads/main as GitHub now issues it."
   type        = string
 }
 

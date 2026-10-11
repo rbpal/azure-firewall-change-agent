@@ -1,10 +1,11 @@
 # Copies the files the agent's tools read into Blob storage on every push to
 # main (ADR 0003). The tools read the copy, never GitHub.
 #
-# Sign-in has no secret. GitHub signs a token naming this repo and branch, and
+# Sign-in uses no password or key. GitHub signs a token naming this repo and branch, and
 # Azure accepts it only for main (federated credential fic-fwagentic-sync-main,
-# built by infra/06-sync). The three IDs are repo variables, not secrets: they
-# name the identity, and knowing them does not let anyone sign in.
+# built by infra/06-sync). The three IDs are stored as repo secrets. They do
+# not let anyone sign in, but as secrets GitHub hides them in every log, and
+# this repo's logs are public.
 name: sync-network
 
 on:
@@ -36,9 +37,9 @@ jobs:
 
       - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # Files go into a folder named after the commit. Nothing reads it yet.
       - name: Upload this commit's files

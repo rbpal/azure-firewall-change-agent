@@ -13,7 +13,7 @@ So the tools need a way to read `main`. The project rule is no secrets: managed 
 
 A GitHub Actions job copies those files into a private blob container on every push to `main`. The tools read the container.
 
-1. **The job signs in with no secret.** It asks GitHub for a signed token that names the repo and branch. Azure accepts it only for `repo:rbpal/azure-firewall-change-agent:ref:refs/heads/main`, through a federated credential on the identity `uami-fwagentic-sync-dev`.
+1. **The job signs in with no secret.** It asks GitHub for a signed token that names the repo and branch. Azure accepts it only for `repo:rbpal@12468232/azure-firewall-change-agent@1409038920:ref:refs/heads/main`, through a federated credential on the identity `uami-fwagentic-sync-dev`. GitHub writes the owner and repo with their fixed numeric IDs, so a recreated repo with the same name does not match. The job's subscription, tenant and client IDs are stored as GitHub secrets. They grant nothing, but as secrets GitHub hides them in the public run logs.
 2. **The job can write to one container only.** Its role, Storage Blob Data Contributor, is scoped to `network-snapshot`.
 3. **A copy is never read half-written.** The job uploads files under `snapshots/<commit>/`, then points `current.json` at that commit. A tool reads `current.json` once per call and reads every file from that commit.
 4. **Every answer names its commit.** The approval step compares it with the latest `main` and re-checks if `main` has moved.

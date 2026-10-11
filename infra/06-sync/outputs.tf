@@ -4,6 +4,6 @@ output "container_name" {
 }
 
 output "sync_identity_client_id" {
-  description = "Client ID the sync job signs in with. Set it as the AZURE_CLIENT_ID repo variable in GitHub."
+  description = "Client ID the sync job signs in with. Store it as the AZURE_CLIENT_ID repo secret in GitHub."
   value       = module.sync_identity.client_id
 }

@@ -225,3 +225,174 @@ def test_blocks_come_first(plan):
     dnat(plan)["source_addresses"] = ["*"]
     group(plan, "hub")["priority"] = 300
     assert tier1.run(plan)[0].level == "block"
+
+
+# ------------------------------------------------------------ plans that change rules
+
+LEDG = "allow-ledg-network-rules"
+
+
+def changing(plan, name):
+    """Add a resource_changes entry for one group: before is today's rules, after is the planned values."""
+    after = group(plan, name)
+    plan.setdefault("resource_changes", []).append({
+        "type": "azurerm_firewall_policy_rule_collection_group",
+        "change": {"before": copy.deepcopy(after), "after": after}})
+    return plan["resource_changes"][-1]["change"]
+
+
+def ledg_rules(plan):
+    """The planned rules and the tfvars rules of the ledg network collection."""
+    return (group(plan, "ledg")["network_rule_collection"][0]["rule"],
+            plan["variables"]["ledg"]["value"]["network_rule_collections"][LEDG]["rules"])
+
+
+def add_rule(plan, name, fields):
+    """Add a new rule at the end of ledg's network collection, in both the plan and the tfvars."""
+    planned, tfvars = ledg_rules(plan)
+    key = f"{len(tfvars) + 1:03d}-{name}"
+    tfvars[key] = {"name": name, **fields}
+    planned.append(_rule("network_rule_collection", tfvars[key]))
+    return key
+
+
+def lines(plan, standard):
+    """The finding lines for one standard."""
+    return [f.line() for f in tier1.run(plan) if f.standard == standard]
+
+
+COPY_OF_001 = {"protocols": ["TCP"], "source_addresses": ["10.104.16.0/24"],
+               "destination_addresses": ["203.0.113.64/28"], "destination_ports": ["443"]}
+
+
+def test_a_plan_with_no_changes_has_no_change_findings(plan):
+    changing(plan, "ledg")
+    assert not lines(plan, "STD-COLL-07") and not lines(plan, "STD-COLL-08")
+
+
+# ------------------------------------------------------------ STD-COLL-07
+
+def test_new_rule_that_duplicates_an_existing_one(plan):
+    changing(plan, "ledg")
+    add_rule(plan, "https-ledg-to-litwareFsCopy", COPY_OF_001)
+    [line] = lines(plan, "STD-COLL-07")
+    assert "https-ledg-to-litwareFsCopy: duplicate by 001-https-ledg-to-litwareFs" in line
+    assert line.endswith("ledg.tfvars")
+
+
+def test_new_rule_covered_by_a_wider_rule(plan):
+    changing(plan, "ledg")
+    add_rule(plan, "https-ledg-to-litwareHost", {**COPY_OF_001, "destination_addresses": ["203.0.113.65"]})
+    [line] = lines(plan, "STD-COLL-07")
+    assert "covers by 001-https-ledg-to-litwareFs" in line
+
+
+def test_new_rule_with_new_traffic_is_not_flagged(plan):
+    changing(plan, "ledg")
+    add_rule(plan, "https-ledg-to-newPartner", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
+    assert not lines(plan, "STD-COLL-07")
+
+
+def test_a_new_rule_already_in_the_files_does_not_match_itself(plan):
+    change = changing(plan, "ledg")
+    change["before"]["network_rule_collection"][0]["rule"].pop()  # the last rule is new in this plan
+    assert not lines(plan, "STD-COLL-07") and not lines(plan, "STD-COLL-08")
+
+
+def test_existing_duplicates_are_not_reported_when_nothing_is_added(plan):
+    add_rule(plan, "https-ledg-to-litwareFsCopy", COPY_OF_001)  # in the plan, but no resource_changes
+    assert not lines(plan, "STD-COLL-07")
+
+
+def test_a_duplicate_already_in_before_is_not_new(plan):
+    add_rule(plan, "https-ledg-to-litwareFsCopy", COPY_OF_001)
+    changing(plan, "ledg")  # before and after both hold the copy, so this plan adds nothing
+    assert not lines(plan, "STD-COLL-07")
+
+
+def test_new_rule_missing_from_tfvars_is_a_caution_not_a_crash(plan):
+    changing(plan, "ledg")
+    planned, _ = ledg_rules(plan)
+    planned.append({**planned[0], "name": "https-ledg-to-ghost"})
+    assert any("not in the tfvars" in x for x in lines(plan, "STD-COLL-07"))
+
+
+def test_new_rule_the_tool_refuses_is_a_caution_not_a_crash(plan):
+    changing(plan, "ledg")
+    add_rule(plan, "https-ledg-to-badGroup", {**COPY_OF_001, "source_addresses": [], "source_ip_groups": ["ipg-nope-dev"]})
+    assert any("not checked" in x for x in lines(plan, "STD-COLL-07"))
+
+
+# ------------------------------------------------------------ STD-COLL-08
+
+def test_removing_a_rule_is_allowed(plan):
+    change = changing(plan, "ledg")
+    change["after"] = copy.deepcopy(change["after"])
+    change["after"]["network_rule_collection"][0]["rule"].pop(1)
+    assert not lines(plan, "STD-COLL-08")
+
+
+def test_changing_an_existing_rule(plan):
+    changing(plan, "ledg")
+    planned, _ = ledg_rules(plan)
+    planned[0]["destination_ports"] = ["8443"]
+    [line] = lines(plan, "STD-COLL-08")
+    assert line.endswith(f"ledg/{LEDG}/{planned[0]['name']}: an existing rule was changed")
+
+
+def test_description_change_is_not_a_rule_change(plan):
+    changing(plan, "ledg")
+    ledg_rules(plan)[0][0]["description"] = "new words"
+    assert not lines(plan, "STD-COLL-08")
+
+
+def test_reordering_rules(plan):
+    changing(plan, "ledg")
+    planned, _ = ledg_rules(plan)
+    planned[0], planned[1] = planned[1], planned[0]
+    assert any("reordered" in x for x in lines(plan, "STD-COLL-08"))
+
+
+def test_new_rule_not_at_the_end(plan):
+    changing(plan, "ledg")
+    add_rule(plan, "https-ledg-to-newPartner", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
+    planned, _ = ledg_rules(plan)
+    planned.insert(0, planned.pop())
+    assert any("reordered" in x for x in lines(plan, "STD-COLL-08"))
+
+
+def test_new_rule_at_the_end_is_fine(plan):
+    changing(plan, "ledg")
+    add_rule(plan, "https-ledg-to-newPartner", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
+    assert not lines(plan, "STD-COLL-08")
+
+
+# ------------------------------------------------------------ service tags
+
+@pytest.mark.parametrize("address", ["Storage", "Storage.EastUS2", "AzureCloud.eastus2",
+                                     "10.104.16.5", "10.104.16.5-10.104.16.9", "203.0.113.64/28", "*"])
+def test_valid_addresses_and_tags_pass(plan, address):
+    ledg_rules(plan)[0][0]["destination_addresses"] = [address]
+    assert not lines(plan, "SERVICE-TAG")
+
+
+def test_unknown_service_tag(plan):
+    ledg_rules(plan)[0][0]["destination_addresses"] = ["StorageAccounts"]
+    [line] = lines(plan, "SERVICE-TAG")
+    assert line.endswith("StorageAccounts is not an Azure service tag")
+
+
+def test_service_tag_for_another_region(plan):
+    ledg_rules(plan)[0][0]["destination_addresses"] = ["Storage.WestEurope"]
+    [line] = lines(plan, "SERVICE-TAG")
+    assert "this policy is in eastus2" in line
+
+
+def test_tag_on_the_source_side_is_checked_too(plan):
+    ledg_rules(plan)[0][0]["source_addresses"] = ["Sql.CentralUS"]
+    assert lines(plan, "SERVICE-TAG")
+
+
+def test_service_tag_list_has_no_comments_or_blanks():
+    assert "Storage" in tier1.SERVICE_TAGS and len(tier1.SERVICE_TAGS) > 1000
+    assert not any(t.startswith("#") or not t for t in tier1.SERVICE_TAGS)

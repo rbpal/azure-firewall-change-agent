@@ -8,7 +8,8 @@ The workflow runs these on every draft, and CI runs them on every PR, so the
 same plan always gets the same answer. No model is involved.
 
 Safety rule: STD-COLL-04 (open DNAT) is the only check that blocks. Every other
-finding is a caution the engineer approves past with a reason.
+finding is a caution the engineer approves past with a reason. STD-COLL-07 calls
+duplicate_rule_check, the agent's own tool, so the agent and the gate cannot disagree.
 """
 
 import ipaddress
@@ -22,6 +23,8 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "mcp"))
 
 from data_readers.read_addressplan_routing import LocalSource, load_hubs, load_ranges  # noqa: E402
+from errors import BadArguments  # noqa: E402
+from tools.duplicate_rule_check import duplicate_rule_check  # noqa: E402
 
 KINDS = {  # plan block -> (type word in names, priority, action)
     "nat_rule_collection": ("dnat", 1000, "Dnat"),
@@ -36,6 +39,10 @@ RULE_KEY = re.compile(r"^(\d{3})-([a-z]+)-([a-z]+)-to-([a-z][a-zA-Z]+)$")
 IP_GROUP = re.compile(r"^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|partner-[a-z]+)$")
 TICKET = re.compile(r"(RITM|REQ|CHG|INC)-?\d+|\d{4}-?\d{2}-?\d{2}", re.IGNORECASE)
 OPEN = {"*", "0.0.0.0/0", "any", "Any"}
+TOOL_TYPE = {"nat_rule_collection": "dnat", "network_rule_collection": "network",
+             "application_rule_collection": "application"}
+SERVICE_TAGS = frozenset(line.strip() for line in (Path(__file__).parent / "service_tags.txt").read_text().splitlines()
+                         if line.strip() and not line.startswith("#"))
 
 
 @dataclass(frozen=True)
@@ -88,14 +95,31 @@ def model(plan: dict) -> dict:
                 rules = []
                 for rule in c.get("rule") or []:
                     key, rv = by_name.get(rule["name"], (None, {}))
-                    rules.append({**rule, "key": key,
+                    rules.append({**rule, "key": key, "tfvars": rv,
                                   "source_ip_group_names": rv.get("source_ip_groups", []),
                                   "destination_ip_group_names": rv.get("destination_ip_groups", [])})
                 cols.append({"block": block, "type": word, "name": c["name"], "priority": c["priority"],
                              "action": c["action"], "rules": rules})
         groups.append({"name": v["name"], "priority": v["priority"], "collections": cols})
     ip_groups = {r["values"]["name"]: r["values"].get("cidrs", []) for r in res if r["type"] == "azurerm_ip_group"}
-    return {"policy": policies[0]["name"] if policies else None, "groups": groups, "ip_groups": ip_groups}
+    return {"policy": policies[0]["name"] if policies else None, "groups": groups, "ip_groups": ip_groups,
+            "changes": _changes(plan)}
+
+
+def _changes(plan: dict) -> dict:
+    """For each rule collection group, the rule lists before and after the plan, by collection name."""
+    out = {}
+    for c in plan.get("resource_changes", []):
+        if c.get("type") != "azurerm_firewall_policy_rule_collection_group":
+            continue
+        before, after = c["change"].get("before") or {}, c["change"].get("after") or {}
+        name = after.get("name") or before.get("name")
+        sides = {}
+        for side, v in (("before", before), ("after", after)):
+            sides[side] = {col["name"]: (block, col.get("rule") or [])
+                           for block in KINDS for col in v.get(block) or []}
+        out[name] = sides
+    return out
 
 
 # ------------------------------------------------------------ the checks
@@ -207,7 +231,74 @@ def check_names(m: dict, **_) -> list[Finding]:
     return out
 
 
-CHECKS = [check_open_dnat, check_wildcards, check_layout, check_dnat_targets, check_names]
+def check_duplicates(m: dict, root: Path = REPO, **_) -> list[Finding]:
+    """STD-COLL-07: ask duplicate_rule_check, the agent's own tool, whether an existing rule already allows each new rule."""
+    added = _added(m)
+    if not added:
+        return []
+    env_site = _env_site(m["policy"], root)
+    if env_site is None:
+        return [Finding("caution", "STD-COLL-07", m["policy"] or "?", "policy is not in routing.yaml")]
+    out = []
+    for g, c, r in added:
+        if not r["tfvars"]:
+            out.append(Finding("caution", "STD-COLL-07", _where(g, c, r), "rule is not in the tfvars, so it was not checked"))
+            continue
+        rule = {k: v for k, v in r["tfvars"].items() if k != "name"}
+        try:
+            answer = duplicate_rule_check(None, {"env_site": env_site, "type": TOOL_TYPE[c["block"]], "rule": rule},
+                                          source=LocalSource(root))
+        except BadArguments as exc:
+            out.append(Finding("caution", "STD-COLL-07", _where(g, c, r), f"not checked: {exc}"))
+            continue
+        for hit in answer["matches"]:
+            if hit["key"] == r["key"] and hit["file"].endswith(f"/{g['name']}.tfvars"):
+                continue  # the new rule itself, already in the files of this change
+            out.append(Finding("caution", "STD-COLL-07", _where(g, c, r),
+                               f"{hit['relation']} by {hit['key']} in {hit['file']}"))
+    return out
+
+
+def check_removals(m: dict, **_) -> list[Finding]:
+    """STD-COLL-08: a change may only delete rules and add new ones at the end; every other rule stays as it was, in order."""
+    out = []
+    for gname, sides in m["changes"].items():
+        before, after = sides["before"], sides["after"]
+        for cname in sorted(set(before) | set(after)):
+            old = before.get(cname, (None, []))[1]
+            new = after.get(cname, (None, []))[1]
+            old_names, new_names = [r["name"] for r in old], [r["name"] for r in new]
+            kept = [n for n in old_names if n in new_names]
+            added = [n for n in new_names if n not in old_names]
+            if new_names != kept + added:
+                out.append(Finding("caution", "STD-COLL-08", f"{gname}/{cname}",
+                                   "rules were reordered, or a new rule is not at the end"))
+            old_by, new_by = {r["name"]: r for r in old}, {r["name"]: r for r in new}
+            for n in kept:
+                if _fields(old_by[n]) != _fields(new_by[n]):
+                    out.append(Finding("caution", "STD-COLL-08", f"{gname}/{cname}/{n}", "an existing rule was changed"))
+    return out
+
+
+def check_service_tags(m: dict, root: Path = REPO, **_) -> list[Finding]:
+    """Service tags: an address that is not an IP, range, CIDR or * must be a real Azure service tag, in this policy's region."""
+    region = (_env_site(m["policy"], root) or "").split("-", 1)[-1]
+    out = []
+    for g, c, r in _rules(m):
+        for f in ("source_addresses", "destination_addresses"):
+            for a in r.get(f) or []:
+                if a in OPEN or _is_address(a):
+                    continue
+                if a not in SERVICE_TAGS:
+                    out.append(Finding("caution", "SERVICE-TAG", _where(g, c, r), f"{a} is not an Azure service tag"))
+                elif "." in a and a.split(".", 1)[1].lower() != region:
+                    out.append(Finding("caution", "SERVICE-TAG", _where(g, c, r),
+                                       f"{a} is for another region; this policy is in {region}"))
+    return out
+
+
+CHECKS = [check_open_dnat, check_wildcards, check_layout, check_dnat_targets, check_names,
+          check_duplicates, check_removals, check_service_tags]
 
 
 def run(plan: dict, root: Path = REPO) -> list[Finding]:
@@ -226,6 +317,39 @@ def _rules(m: dict, block: str | None = None):
             if block is None or c["block"] == block:
                 for r in c["rules"]:
                     yield g, c, r
+
+
+def _added(m: dict) -> list:
+    """(group, collection, rule) for each rule this plan adds: in the after list of its collection, not in the before list."""
+    out = []
+    for g, c, r in _rules(m):
+        sides = m["changes"].get(g["name"])
+        if sides is None:
+            continue
+        before_names = {x["name"] for x in sides["before"].get(c["name"], (None, []))[1]}
+        if r["name"] not in before_names:
+            out.append((g, c, r))
+    return out
+
+
+def _env_site(policy: str | None, root: Path) -> str | None:
+    """The env-site whose hub uses this policy, from routing.yaml."""
+    return next((k for k, h in load_hubs(LocalSource(root)).items() if h.firewall_policy == policy), None)
+
+
+def _fields(rule: dict) -> dict:
+    """A rule's fields that matter for traffic, for before-and-after comparison."""
+    return {k: v for k, v in rule.items() if k not in ("description",)}
+
+
+def _is_address(text: str) -> bool:
+    """True for an IPv4 address, CIDR or a-b range."""
+    try:
+        for part in text.split("-"):
+            ipaddress.ip_network(part.strip(), strict=False)
+        return True
+    except ValueError:
+        return False
 
 
 def _where(g: dict, c: dict, r: dict) -> str:

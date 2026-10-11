@@ -13,6 +13,8 @@ dev = [
     "pytest>=8.3",
     "python-hcl2>=8.1.4",
     "dnspython>=2.7,<3",  # dns_lookup_for_fqdn; the Function app gets it from mcp/requirements.txt
+    "azure-storage-blob>=12.19,<13",  # BlobSource reads the snapshot container
+    "azure-identity>=1.17,<2",  # BlobSource signs in with the managed identity
 ]
 
 [tool.pytest.ini_options]

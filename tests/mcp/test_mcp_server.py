@@ -33,6 +33,13 @@ def test_every_tool_returns_through_the_gateway(fn, deco):
     assert isinstance(call.args[0], ast.Name) and call.args[0].id == arg_name
 
 
+def test_every_file_in_tools_is_registered_under_its_own_name():
+    """tools/ holds only what the agent can call, so each file there must be a registered tool."""
+    names = {next(k.value.value for k in d.keywords if k.arg == "tool_name") for _, d in tool_functions()}
+    files = {p.stem for p in (MCP / "tools").glob("*.py") if p.stem != "__init__"}
+    assert files <= names, f"in tools/ but not registered: {sorted(files - names)}"
+
+
 def test_tool_names_are_unique():
     names = [next(k.value.value for k in d.keywords if k.arg == "tool_name") for _, d in tool_functions()]
     assert len(names) == len(set(names))

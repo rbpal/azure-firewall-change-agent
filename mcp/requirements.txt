@@ -6,3 +6,7 @@ pyyaml>=6.0,<7
 python-hcl2>=8.1.4,<9
 # Asks one chosen nameserver (Azure DNS) for dns_lookup_for_fqdn.
 dnspython>=2.7,<3
+# BlobSource reads the copy of main in the snapshot container (ADR 0003),
+# signed in with the Function app's managed identity.
+azure-storage-blob>=12.19,<13
+azure-identity>=1.17,<2

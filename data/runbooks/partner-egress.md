@@ -23,6 +23,8 @@ The ticket names each destination port. "All ports", or a range wider than ten p
 
 HTTPS to a named host: an application rule, by FQDN. Anything else, or HTTPS to a bare IP: a network rule.
 
+For every hostname on the ticket, call the `dns_lookup_for_fqdn` tool first. Never judge a hostname yourself. If the tool refuses the URL, escalate under RB-01-6. If it answers `resolves: false`, draft the rule anyway and mark a caution under RB-01-7. Never change the URL yourself, even for an obvious typing mistake: the approved ticket is the scope.
+
 Check first that no broader network rule already matches. A matching network rule stops evaluation before any application rule runs (STD-COLL-07).
 
 ## RB-01-5 — Place and name the rule
@@ -38,7 +40,7 @@ Put the rule in the source spoke's group, in the collection for its type (STD-CO
 - the sources do not match the chosen environments and their "DR site built" answers, or the free text names a different environment
 - an internal address is not in the address plan, or belongs to an environment or site the ticket does not name
 - the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place
-- the hostname does not resolve, or resolves to a private address
+- the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address
 - non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change
 
 ## RB-01-7 — Draft, but mark a caution, when
@@ -47,5 +49,6 @@ Put the rule in the source spoke's group, in the collection for its type (STD-CO
 - the ticket's FQDN has a wildcard, such as `*.northwind.example` (STD-COLL-02)
 - the ticket's source range covers a whole environment, such as a `/16`, rather than one workload
 - any Tier 1 check does not pass
+- the hostname does not resolve (`dns_lookup_for_fqdn` answers `resolves: false`). The engineer has three choices: correct the URL on the ticket and run it again, reject the ticket because the URL may be wrong, or approve anyway with a reason, for example a DNS record the partner creates at go-live. An approval past this caution is written into the PR description
 
 The engineer sees the caution and approves or rejects. The agent does not decide.

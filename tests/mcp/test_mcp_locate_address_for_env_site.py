@@ -9,7 +9,7 @@ import pytest
 
 import gateway
 from errors import BadArguments
-from tools.read_addressplan_routing import ADDRESS_PLAN, ROUTING, NetworkDataError, LocalSource
+from data_readers.read_addressplan_routing import ADDRESS_PLAN, ROUTING, NetworkDataError, LocalSource
 from tools.locate_address_for_env_site import locate_address_for_env_site
 
 REPO = Path(__file__).resolve().parents[2]

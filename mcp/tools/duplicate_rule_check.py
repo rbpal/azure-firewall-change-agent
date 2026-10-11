@@ -18,8 +18,8 @@ Each answer includes the commit it read.
 import ipaddress
 
 from errors import BadArguments
-from tools.read_addressplan_routing import Source, load_hubs
-from tools.read_env_site_ipgroup import IP_GROUPS_FILE, read_env_site, read_ip_groups
+from data_readers.read_addressplan_routing import Source, load_hubs
+from data_readers.read_env_site_ipgroup import IP_GROUPS_FILE, read_env_site, read_ip_groups
 
 TYPES = {"network", "application", "dnat"}
 ALLOWED_KEYS = {

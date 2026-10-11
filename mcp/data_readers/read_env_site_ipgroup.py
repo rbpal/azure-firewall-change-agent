@@ -11,7 +11,7 @@ A rule can name an IP group, so it also reads the IP groups and their addresses.
 import hcl2
 from hcl2.utils import SerializationOptions
 
-from tools.read_addressplan_routing import NetworkDataError, Source, load_hubs
+from data_readers.read_addressplan_routing import NetworkDataError, Source, load_hubs
 
 HUB = "hub"
 RULES_FILE = "infra/envs/{env_site}/firewall_policy_rule_collection_groups/{name}.tfvars"

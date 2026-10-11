@@ -1,4 +1,4 @@
-"""tools/read_env_site_ipgroup.py, the rules reader for the duplicate rule tool. Uses the real tfvars
+"""data_readers/read_env_site_ipgroup.py, the rules reader for the duplicate rule tool. Uses the real tfvars
 for known facts and small in-memory files for edge cases. Each test fails if
 the file choice, the parsing or the answer's shape change."""
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from tools.read_addressplan_routing import ROUTING, LocalSource, NetworkDataError
-from tools.read_env_site_ipgroup import parse_rules, read_env_site, read_ip_groups
+from data_readers.read_addressplan_routing import ROUTING, LocalSource, NetworkDataError
+from data_readers.read_env_site_ipgroup import parse_rules, read_env_site, read_ip_groups
 
 REPO = Path(__file__).resolve().parents[2]
 REAL = LocalSource(REPO)

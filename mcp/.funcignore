@@ -3,3 +3,4 @@ __pycache__/
 .venv/
 README.md
 tools/README.md
+data_readers/README.md

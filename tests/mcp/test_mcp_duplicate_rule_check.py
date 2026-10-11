@@ -9,7 +9,7 @@ import pytest
 
 import gateway
 from errors import BadArguments
-from tools.read_addressplan_routing import LocalSource
+from data_readers.read_addressplan_routing import LocalSource
 from tools.duplicate_rule_check import duplicate_rule_check
 
 REPO = Path(__file__).resolve().parents[2]

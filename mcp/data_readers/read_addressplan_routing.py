@@ -93,6 +93,7 @@ class Hub:
     firewall: str
     firewall_policy: str
     spokes: frozenset[str] = frozenset()
+    public_ip: str | None = None
 
 
 def load_hubs(source: Source) -> dict[str, Hub]:
@@ -105,7 +106,7 @@ def load_hubs(source: Source) -> dict[str, Hub]:
     for env_site, site in sites.items():
         try:
             hubs[env_site] = Hub(firewall=site["firewall"], firewall_policy=site["firewall_policy"],
-                                 spokes=frozenset(site.get("spokes") or {}))
+                                 spokes=frozenset(site.get("spokes") or {}), public_ip=site.get("public_ip"))
         except (KeyError, TypeError) as exc:
             raise NetworkDataError(f"routing entry {env_site!r} has no firewall or policy: {exc}") from exc
     return hubs

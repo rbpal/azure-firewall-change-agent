@@ -52,6 +52,13 @@ rprt = {
           destination_addresses = ["198.51.100.32/28"]
           destination_ports     = ["443"]
         }
+        "007-sftp-rprt-to-xferSftp" = {
+          name                  = "sftp-rprt-to-xferSftp"
+          protocols             = ["TCP"]
+          source_ip_groups      = ["ipg-rprt-dev"]
+          destination_ip_groups = ["ipg-xfer-dev"]
+          destination_ports     = ["22"]
+        }
       }
     }
   }

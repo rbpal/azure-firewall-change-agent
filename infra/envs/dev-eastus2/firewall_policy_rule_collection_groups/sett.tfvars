@@ -172,6 +172,30 @@ sett = {
           source_ip_groups  = ["ipg-sett-dev"]
           destination_fqdns = ["api.woodgrove.example"]
         }
+        "003-https-sett-to-googleWww" = {
+          name              = "https-sett-to-googleWww"
+          protocols         = ["Https:443"]
+          source_ip_groups  = ["ipg-sett-dev"]
+          destination_fqdns = ["www.google.com"]
+        }
+        "004-https-sett-to-cnnWww" = {
+          name              = "https-sett-to-cnnWww"
+          protocols         = ["Https:443"]
+          source_ip_groups  = ["ipg-sett-dev"]
+          destination_fqdns = ["www.cnn.com"]
+        }
+        "005-https-sett-to-googleAll" = {
+          name              = "https-sett-to-googleAll"
+          protocols         = ["Https:443"]
+          source_ip_groups  = ["ipg-sett-dev"]
+          destination_fqdns = ["*.google.com"]
+        }
+        "006-https-sett-to-cnnAll" = {
+          name              = "https-sett-to-cnnAll"
+          protocols         = ["Https:443"]
+          source_ip_groups  = ["ipg-sett-dev"]
+          destination_fqdns = ["*.cnn.com"]
+        }
       }
     }
   }

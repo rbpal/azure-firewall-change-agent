@@ -4,6 +4,25 @@ xfer = {
   firewall_policy_key = "firewall_policy"
   priority            = 200
 
+  nat_rule_collections = {
+    allow-xfer-dnat-rules = {
+      name     = "allow-xfer-dnat-rules"
+      priority = 1000
+      action   = "Dnat"
+      rules = {
+        "001-sftp-woodgrove-to-xferSftp" = {
+          name                = "sftp-woodgrove-to-xferSftp"
+          protocols           = ["TCP"]
+          source_addresses    = ["203.0.113.48/28"]
+          destination_address = "192.0.2.14"
+          destination_ports   = ["2221"]
+          translated_address  = "10.104.20.14"
+          translated_port     = "22"
+        }
+      }
+    }
+  }
+
   network_rule_collections = {
     allow-xfer-network-rules = {
       name     = "allow-xfer-network-rules"

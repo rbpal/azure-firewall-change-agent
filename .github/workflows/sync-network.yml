@@ -1,0 +1,84 @@
+# Copies the files the agent's tools read into Blob storage on every push to
+# main (ADR 0003). The tools read the copy, never GitHub.
+#
+# Sign-in has no secret. GitHub signs a token naming this repo and branch, and
+# Azure accepts it only for main (federated credential fic-fwagentic-sync-main,
+# built by infra/06-sync). The three IDs are repo variables, not secrets: they
+# name the identity, and knowing them does not let anyone sign in.
+name: sync-network
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # lets the job ask GitHub for the signed token
+
+# One sync at a time, in push order, so current.json never moves backwards.
+concurrency:
+  group: sync-network
+  cancel-in-progress: false
+
+env:
+  ACCOUNT: stfwagentfuncdev
+  CONTAINER: network-snapshot
+  KEEP: "5"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Actions are pinned to a commit, not a tag, so a moved tag cannot change what runs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Files go into a folder named after the commit. Nothing reads it yet.
+      - name: Upload this commit's files
+        run: |
+          for dir in data/network infra/envs; do
+            az storage blob upload-batch --auth-mode login --account-name "$ACCOUNT" \
+              --destination "$CONTAINER" --destination-path "snapshots/$GITHUB_SHA/$dir" \
+              --source "$dir" --overwrite --only-show-errors --output none
+          done
+
+      # Every local file must be in the upload before the pointer moves.
+      - name: Check the upload is complete
+        run: |
+          local_count=$(find data/network infra/envs -type f | wc -l)
+          remote_count=$(az storage blob list --auth-mode login --account-name "$ACCOUNT" \
+            --container-name "$CONTAINER" --prefix "snapshots/$GITHUB_SHA/" --num-results "*" \
+            --query "length(@)" --output tsv)
+          echo "local $local_count, uploaded $remote_count"
+          test "$local_count" -eq "$remote_count"
+
+      # Only now do the tools see the new commit. A tool reads current.json once per call.
+      - name: Point current.json at this commit
+        run: |
+          printf '{"commit": "%s"}\n' "$GITHUB_SHA" > current.json
+          az storage blob upload --auth-mode login --account-name "$ACCOUNT" \
+            --container-name "$CONTAINER" --name current.json --file current.json \
+            --content-type application/json --overwrite --only-show-errors --output none
+
+      # Keep the newest copies; never delete the one current.json points at.
+      - name: Delete old copies
+        run: |
+          az storage blob list --auth-mode login --account-name "$ACCOUNT" \
+            --container-name "$CONTAINER" --prefix snapshots/ --num-results "*" \
+            --query "[].[properties.lastModified, name]" --output tsv \
+          | awk -F'\t' '{split($2, p, "/"); if (!(p[2] in t) || $1 > t[p[2]]) t[p[2]] = $1}
+                        END {for (c in t) print t[c] "\t" c}' \
+          | sort -r | tail -n +$((KEEP + 1)) | cut -f2 \
+          | while read -r old; do
+              [ "$old" = "$GITHUB_SHA" ] && continue
+              echo "deleting snapshots/$old/"
+              az storage blob delete-batch --auth-mode login --account-name "$ACCOUNT" \
+                --source "$CONTAINER" --pattern "snapshots/$old/*" --only-show-errors --output none
+            done

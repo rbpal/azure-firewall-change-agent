@@ -66,6 +66,13 @@ ledg = {
           destination_addresses = ["203.0.113.16/28"]
           destination_ports     = ["5671"]
         }
+        "009-https-ledg-to-litwareFsCopy" = {
+          name                  = "https-ledg-to-litwareFsCopy"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.104.16.0/24"]
+          destination_addresses = ["203.0.113.64/28"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

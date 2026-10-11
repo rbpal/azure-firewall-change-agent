@@ -1,0 +1,104 @@
+# The Tier 1 gate on every pull request: format, validate, plan each dev
+# firewall policy, then run the Tier 1 checks on the plan. A block fails the PR;
+# cautions are printed for the engineer.
+#
+# The plan job signs in as uami-fwagentic-tf-plan-dev (infra/08-plan-gate) with
+# no secret. It can only read: Reader on the workload resource group and blob
+# read on the envs-* state files. Plan runs with -lock=false, so it never
+# writes the state. Never switch this to pull_request_target: that event runs
+# fork code with this repo's rights.
+#
+# This repo's logs are public. Plan text is written to a file and only the
+# resource addresses and the summary line are printed. The plan JSON holds
+# resource IDs, so it is never uploaded.
+name: tier1-gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Actions are pinned to a commit, not a tag, so a moved tag cannot change what runs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.14.9
+          terraform_wrapper: false
+
+      - name: Format
+        run: terraform fmt -check -recursive infra
+
+      # Every Terraform root, without a backend, so no Azure sign-in is needed.
+      - name: Validate every root
+        run: |
+          for dir in $(find infra -name main.tf -not -path '*/modules/*' -not -path '*/.terraform/*' -exec dirname {} \; | sort); do
+            echo "== $dir"
+            terraform -chdir="$dir" init -backend=false -input=false -no-color > /dev/null
+            terraform -chdir="$dir" validate -no-color
+          done
+
+  plan:
+    needs: validate
+    # Pull requests from forks get no Azure token, so the job would only fail.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # lets the job ask GitHub for the signed token
+    strategy:
+      fail-fast: false
+      matrix:
+        env_site: [dev-eastus2, dev-centralus]
+    env:
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ROOT: infra/envs/${{ matrix.env_site }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.14.9
+          terraform_wrapper: false
+
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_PLAN_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # The identity must not read other steps' state. If this read works, the
+      # role condition is broken, and the job stops before anything else runs.
+      - name: Check the identity cannot read other state
+        run: |
+          if az storage blob download --auth-mode login --account-name stfwagentstaterbpal \
+               --container-name tfstate --name 06-sync.tfstate --file /dev/null --only-show-errors > /dev/null 2>&1; then
+            echo "06-sync.tfstate was readable: the plan identity has too much access"
+            exit 1
+          fi
+          echo "06-sync.tfstate refused, as expected"
+
+      - name: Plan
+        run: |
+          VF="-var-file=firewall-policy.tfvars -var-file=ip-groups.tfvars"
+          for f in "$ROOT"/firewall_policy_rule_collection_groups/*.tfvars; do
+            VF="$VF -var-file=firewall_policy_rule_collection_groups/$(basename "$f")"
+          done
+          terraform -chdir="$ROOT" init -input=false -no-color > /dev/null
+          terraform -chdir="$ROOT" plan -input=false -no-color -lock=false $VF -out=gate.tfplan > "$RUNNER_TEMP/plan.txt"
+          grep -E '^  # |^Plan:|^No changes' "$RUNNER_TEMP/plan.txt" || true
+          terraform -chdir="$ROOT" show -json gate.tfplan > "$RUNNER_TEMP/plan.json"
+
+      - name: Tier 1 checks
+        run: uv run --python 3.11 python -m policy.tier1 "$RUNNER_TEMP/plan.json"

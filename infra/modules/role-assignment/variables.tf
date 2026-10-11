@@ -17,3 +17,9 @@ variable "principal_type" {
   description = "Kind of identity: ServicePrincipal, User or Group. Managed identities are ServicePrincipal."
   type        = string
 }
+
+variable "condition" {
+  description = "Optional Azure ABAC condition that narrows the role, such as a blob path prefix. Null means no condition."
+  type        = string
+  default     = null
+}

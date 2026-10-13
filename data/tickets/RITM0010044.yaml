@@ -4,13 +4,11 @@
 # exactly. A rule that allows more than this flow is escalated, not trimmed.
 
 number: RITM0010044
-item: Firewall Change Request
+item: Firewall Rule Removal
 state: approved              # all three group approvals are in
 requested_for: Priya Shah (Contoso app owner)
 opened: "2026-10-08T10:05:00-04:00"   # US Eastern (EDT in October); quoted, or YAML turns it into a date object
 
-change_type: remove_rule
-direction: egress
 environments: [dev]
 dr_site_built:
   dev: true

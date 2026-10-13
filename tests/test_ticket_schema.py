@@ -16,7 +16,6 @@ def ticket():
 
 
 def inbound(ticket):
-    ticket["direction"] = "inbound"
     ticket["sources"] = [{"cidr": "203.0.113.16/28"}]
     ticket["destination"] = [{"environment": "prod", "site": "primary", "cidr": "10.100.20.14/32"}]
     ticket["ports"] = ["22"]
@@ -34,7 +33,7 @@ def test_valid_inbound_ticket(ticket):
 
 
 def test_valid_remove_ticket(ticket):
-    ticket["change_type"] = "remove_rule"
+    ticket["item"] = "Firewall Rule Removal"
     ticket["existing_rule"] = "https-sett-to-northwindFs"
     assert ticket_errors(ticket) == []
 
@@ -90,6 +89,11 @@ BAD = {
     "temporary field": lambda t: t.update(temporary=True),
     "public port on egress": lambda t: t.update(public_port="2222"),
     "existing rule on add": lambda t: t.update(existing_rule="https-sett-to-northwindFs"),
+    "unknown catalog item": lambda t: t.update(item="Firewall Rule Change"),
+    # Real tickets carry neither field: the catalog item says add or remove,
+    # and the addresses say egress or inbound.
+    "change_type field": lambda t: t.update(change_type="add_rule"),
+    "direction field": lambda t: t.update(direction="egress"),
     "bad ticket number": lambda t: t.update(number="REQ-0042"),
     "empty justification": lambda t: t.update(justification=""),
     "url as a source": lambda t: t["sources"].__setitem__(0, {"url": "https://www.cnn.com/"}),
@@ -115,6 +119,20 @@ def test_inbound_without_public_port_is_refused(ticket):
     t = inbound(ticket)
     del t["public_port"]
     assert ticket_errors(t) != []
+
+
+def test_public_port_between_two_internal_addresses_is_refused(ticket):
+    # Both sides internal is not inbound, so a public port has no place.
+    ticket["destination"] = [{"environment": "prod", "site": "primary", "cidr": "10.100.20.14/32"}]
+    ticket["public_port"] = "2222"
+    assert ticket_errors(ticket) != []
+
+
+def test_public_port_with_no_internal_destination_is_refused(ticket):
+    # A public port publishes an internal server; with no internal side there is none.
+    ticket["sources"] = [{"cidr": "203.0.113.16/28"}]
+    ticket["public_port"] = "2222"
+    assert ticket_errors(ticket) != []
 
 
 def test_inbound_icmp_is_refused(ticket):

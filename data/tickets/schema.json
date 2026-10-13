@@ -1,23 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Firewall Change Request ticket",
-  "description": "Synthetic stand-in for a ServiceNow Firewall Change Request requested item. Checks shape only; code checks meaning (address plan, routing, existing rules).",
+  "title": "Firewall ticket",
+  "description": "Synthetic stand-in for a ServiceNow firewall requested item. The catalog item says add or remove; the addresses say egress or inbound. Checks shape only; code checks meaning (address plan, routing, existing rules).",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "number", "item", "state", "requested_for", "opened",
-    "change_type", "direction", "environments", "dr_site_built",
+    "environments", "dr_site_built",
     "sources", "destination", "protocol", "ports", "partner",
     "justification", "approvals", "assigned_to"
   ],
   "properties": {
     "number": { "type": "string", "pattern": "^RITM[0-9]{7}$" },
-    "item": { "const": "Firewall Change Request" },
+    "item": { "enum": ["Firewall Change Request", "Firewall Rule Removal"] },
     "state": { "enum": ["pending", "approved", "rejected"] },
     "requested_for": { "type": "string", "minLength": 1 },
     "opened": { "type": "string", "format": "date-time" },
-    "change_type": { "enum": ["add_rule", "remove_rule"] },
-    "direction": { "enum": ["egress", "inbound"] },
     "environments": {
       "type": "array",
       "minItems": 1,
@@ -48,12 +46,12 @@
       "items": { "$ref": "#/$defs/port" }
     },
     "public_port": {
-      "description": "Inbound only: the port the partner connects to on the hub firewall's public IP. The public IP itself comes from the network data, never from the ticket.",
+      "description": "Inbound only (partner source, internal destination): the port the partner connects to on the hub firewall's public IP. The public IP itself comes from the network data, never from the ticket.",
       "type": "string",
       "pattern": "^[1-9][0-9]{0,4}$"
     },
     "existing_rule": {
-      "description": "Remove only, optional: the rule name if the requester knows it. The workflow still matches the flow itself.",
+      "description": "Firewall Rule Removal only, optional: the rule name if the requester knows it. The workflow still matches the flow itself.",
       "type": "string",
       "minLength": 1,
       "maxLength": 80
@@ -81,7 +79,13 @@
   },
   "allOf": [
     {
-      "if": { "properties": { "direction": { "const": "inbound" } } },
+      "$comment": "Inbound: the destination is internal (has environment) and no source is.",
+      "if": {
+        "properties": {
+          "destination": { "contains": { "required": ["environment"] } },
+          "sources": { "not": { "contains": { "required": ["environment"] } } }
+        }
+      },
       "then": {
         "required": ["public_port"],
         "properties": { "protocol": { "enum": ["TCP", "UDP"] } }
@@ -89,7 +93,7 @@
       "else": { "not": { "required": ["public_port"] } }
     },
     {
-      "if": { "properties": { "change_type": { "const": "add_rule" } } },
+      "if": { "properties": { "item": { "const": "Firewall Change Request" } } },
       "then": { "not": { "required": ["existing_rule"] } }
     },
     {

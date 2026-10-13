@@ -1,6 +1,6 @@
 # RB-02 — Inbound DNAT request
 
-Use for: a partner needs to reach an internal server from outside, such as an SFTP server. The ticket's direction is `inbound`.
+Use for: a partner needs to reach an internal server from outside, such as an SFTP server. The ticket's source is a partner address and its destination is an internal address with an environment and site.
 Do not use for: outbound access (use RB-01) or removing a rule (use RB-03).
 
 ## RB-02-1 — Check what already exists

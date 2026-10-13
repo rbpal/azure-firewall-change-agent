@@ -8,8 +8,6 @@ state: approved              # all three group approvals are in
 requested_for: Alex Kim (Contoso transfer team)
 opened: "2026-10-08T08:40:00-04:00"   # US Eastern (EDT in October); quoted, or YAML turns it into a date object
 
-change_type: add_rule
-direction: inbound
 environments: [prod]
 dr_site_built:
   prod: false                # prod primary only; no DR listener yet

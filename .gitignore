@@ -241,6 +241,9 @@ __marimo__/
 # Private planning docs (not published)
 privatedocs/
 
+# Personal scratch folder (not published)
+rajtest/
+
 # Local-only tooling: the network data generator and its tests
 data/generate_network.py
 tests/test_network_data.py

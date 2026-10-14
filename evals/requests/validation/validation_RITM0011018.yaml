@@ -1,0 +1,30 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011018
+category: inbound-dnat
+why: Inbound SFTP from adventureworks to the xfer SFTP host in lab, stage.
+ticket:
+  number: RITM0011018
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-09T09:20:00-04:00'
+  environments: [lab, stage]
+  dr_site_built: {lab: true, stage: true}
+  sources:
+  - {cidr: 198.51.100.64/28}
+  destination:
+  - {environment: lab, site: primary, cidr: 10.106.20.14/32}
+  - {environment: lab, site: dr, cidr: 10.107.20.14/32}
+  - {environment: stage, site: primary, cidr: 10.102.20.14/32}
+  - {environment: stage, site: dr, cidr: 10.103.20.14/32}
+  protocol: TCP
+  ports: ['22']
+  partner: Adventure Works
+  justification: Adventure Works pushes files to our SFTP server.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

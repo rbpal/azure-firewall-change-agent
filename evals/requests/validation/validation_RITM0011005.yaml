@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011005
+category: one-environment
+why: New smtp flow from rprt to proseware, dev only.
+ticket:
+  number: RITM0011005
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-05T15:20:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.15.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.15.0/24}
+  destination:
+  - {cidr: 198.51.100.32/28}
+  protocol: TCP
+  ports: ['587']
+  partner: Proseware
+  justification: The reporting batch servers in dev send files to Proseware.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

@@ -1,0 +1,30 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011019
+category: inbound-dnat
+why: Inbound SFTP from proseware to the xfer SFTP host in lab, prod.
+ticket:
+  number: RITM0011019
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-05T16:50:00-04:00'
+  environments: [lab, prod]
+  dr_site_built: {lab: true, prod: true}
+  sources:
+  - {cidr: 198.51.100.32/28}
+  destination:
+  - {environment: lab, site: primary, cidr: 10.106.20.14/32}
+  - {environment: lab, site: dr, cidr: 10.107.20.14/32}
+  - {environment: prod, site: primary, cidr: 10.100.20.14/32}
+  - {environment: prod, site: dr, cidr: 10.101.20.14/32}
+  protocol: TCP
+  ports: ['22']
+  partner: Proseware
+  justification: Proseware pushes files to our SFTP server.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

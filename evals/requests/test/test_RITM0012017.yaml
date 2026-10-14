@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012017
+category: address-not-in-plan
+why: Source ranges are outside the address plan; ticket says dev.
+ticket:
+  number: RITM0012017
+  item: Firewall Change Request
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-09T16:50:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  sources:
+  - {environment: dev, site: primary, cidr: 10.159.78.0/24}
+  - {environment: dev, site: dr, cidr: 10.132.72.0/24}
+  destination:
+  - {cidr: 198.51.100.48/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Lamna Healthcare
+  justification: New sftp and partner file transfer need Lamna Healthcare.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

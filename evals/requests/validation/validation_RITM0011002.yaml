@@ -1,0 +1,27 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011002
+category: one-environment
+why: New amqps flow from port to northwind, lab only.
+ticket:
+  number: RITM0011002
+  item: Firewall Change Request
+  state: approved
+  requested_for: Priya Shah (Contoso app owner)
+  opened: '2026-10-06T14:30:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: false}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.17.0/24}
+  destination:
+  - {cidr: 203.0.113.16/28}
+  protocol: TCP
+  ports: ['5671']
+  partner: Northwind Traders
+  justification: The client portal web front ends in lab send files to Northwind Traders.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

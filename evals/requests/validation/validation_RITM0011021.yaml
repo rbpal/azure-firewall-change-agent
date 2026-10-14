@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011021
+category: removal
+why: Remove amqps-sett-to-tailspinMq in lab.
+ticket:
+  number: RITM0011021
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-05T15:40:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.14.0/24}
+  - {environment: lab, site: dr, cidr: 10.107.14.0/24}
+  destination:
+  - {cidr: 198.51.100.16/28}
+  protocol: TCP
+  ports: ['5671']
+  partner: Tailspin
+  justification: The settlement app servers no longer use Tailspin in lab.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

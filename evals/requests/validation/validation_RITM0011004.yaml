@@ -1,0 +1,27 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011004
+category: one-environment
+why: New sftp flow from port to fourthcoffee, lab only.
+ticket:
+  number: RITM0011004
+  item: Firewall Change Request
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-07T09:30:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: false}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.17.0/24}
+  destination:
+  - {cidr: 203.0.113.80/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Fourth Coffee
+  justification: The client portal web front ends in lab send files to Fourth Coffee.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

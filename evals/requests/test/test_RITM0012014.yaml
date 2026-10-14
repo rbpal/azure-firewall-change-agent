@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012014
+category: already-exists
+why: Asks for a flow https-ledg-to-litwareFs already allows in dev.
+ticket:
+  number: RITM0012014
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-07T09:10:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.16.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.16.0/24}
+  destination:
+  - {cidr: 203.0.113.64/28}
+  protocol: TCP
+  ports: ['443']
+  partner: Litware
+  justification: The ledger databases need Litware in dev.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

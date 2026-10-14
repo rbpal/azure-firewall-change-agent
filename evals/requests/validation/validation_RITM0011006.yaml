@@ -1,0 +1,30 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011006
+category: two-or-three-environments
+why: New flow from xfer to fabrikam in lab, prod.
+ticket:
+  number: RITM0011006
+  item: Firewall Change Request
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-09T16:30:00-04:00'
+  environments: [lab, prod]
+  dr_site_built: {lab: true, prod: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.20.0/24}
+  - {environment: lab, site: dr, cidr: 10.107.20.0/24}
+  - {environment: prod, site: primary, cidr: 10.100.20.0/24}
+  - {environment: prod, site: dr, cidr: 10.101.20.0/24}
+  destination:
+  - {cidr: 203.0.113.32/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Fabrikam
+  justification: The sftp and partner file transfer need Fabrikam's service in lab and prod.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

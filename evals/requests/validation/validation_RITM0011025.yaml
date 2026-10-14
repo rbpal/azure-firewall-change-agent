@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011025
+category: already-exists
+why: Asks for a flow https-port-to-tailspinFs already allows in prod.
+ticket:
+  number: RITM0011025
+  item: Firewall Change Request
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-06T10:50:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  sources:
+  - {environment: prod, site: primary, cidr: 10.100.17.0/24}
+  - {environment: prod, site: dr, cidr: 10.101.17.0/24}
+  destination:
+  - {cidr: 198.51.100.16/28}
+  protocol: TCP
+  ports: ['443']
+  partner: Tailspin
+  justification: The client portal web front ends need Tailspin in prod.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

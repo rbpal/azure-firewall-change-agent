@@ -1,0 +1,30 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011008
+category: two-or-three-environments
+why: New flow from rprt to wingtip in dev, stage.
+ticket:
+  number: RITM0011008
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-07T10:40:00-04:00'
+  environments: [dev, stage]
+  dr_site_built: {dev: true, stage: true}
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.15.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.15.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.15.0/24}
+  - {environment: stage, site: dr, cidr: 10.103.15.0/24}
+  destination:
+  - {cidr: 198.51.100.80/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Wingtip Toys
+  justification: The reporting batch servers need Wingtip Toys's service in dev and stage.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

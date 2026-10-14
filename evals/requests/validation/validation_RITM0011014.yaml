@@ -1,0 +1,29 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011014
+category: dr-not-built-in-some
+why: Flow from port in lab, stage; DR is not built in lab.
+ticket:
+  number: RITM0011014
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-07T13:00:00-04:00'
+  environments: [lab, stage]
+  dr_site_built: {lab: false, stage: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.17.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.17.0/24}
+  - {environment: stage, site: dr, cidr: 10.103.17.0/24}
+  destination:
+  - {cidr: 198.51.100.32/28}
+  protocol: TCP
+  ports: ['443']
+  partner: Proseware
+  justification: The client portal web front ends need Proseware.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

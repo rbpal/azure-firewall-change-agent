@@ -1,0 +1,34 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011011
+category: all-four-with-dr
+why: New flow from ledg to wingtip in all four environments, DR everywhere.
+ticket:
+  number: RITM0011011
+  item: Firewall Change Request
+  state: approved
+  requested_for: Priya Shah (Contoso app owner)
+  opened: '2026-10-08T14:50:00-04:00'
+  environments: [lab, dev, stage, prod]
+  dr_site_built: {lab: true, dev: true, stage: true, prod: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.16.0/24}
+  - {environment: lab, site: dr, cidr: 10.107.16.0/24}
+  - {environment: dev, site: primary, cidr: 10.104.16.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.16.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.16.0/24}
+  - {environment: stage, site: dr, cidr: 10.103.16.0/24}
+  - {environment: prod, site: primary, cidr: 10.100.16.0/24}
+  - {environment: prod, site: dr, cidr: 10.101.16.0/24}
+  destination:
+  - {cidr: 198.51.100.80/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Wingtip Toys
+  justification: The ledger databases in every environment need Wingtip Toys.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

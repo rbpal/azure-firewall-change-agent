@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012010
+category: fqdn-destination
+why: HTTPS from sett to api.proseware.example in stage.
+ticket:
+  number: RITM0012010
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-08T10:40:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  sources:
+  - {environment: stage, site: primary, cidr: 10.102.14.0/24}
+  - {environment: stage, site: dr, cidr: 10.103.14.0/24}
+  destination:
+  - {fqdn: api.proseware.example}
+  protocol: HTTPS
+  ports: ['443']
+  partner: Proseware
+  justification: The settlement app servers call Proseware's API.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

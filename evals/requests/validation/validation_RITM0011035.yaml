@@ -1,0 +1,27 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011035
+category: free-text-names-another-environment
+why: Fields say lab; the justification asks for dev.
+ticket:
+  number: RITM0011035
+  item: Firewall Change Request
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-05T16:10:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: false}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.15.0/24}
+  destination:
+  - {cidr: 198.51.100.64/28}
+  protocol: TCP
+  ports: ['587']
+  partner: Adventure Works
+  justification: Needed in dev before the dev release next week. Adventure Works confirmed.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011030
+category: address-environment-contradicts-ticket
+why: Ticket says lab; the source ranges are dev's.
+ticket:
+  number: RITM0011030
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-06T11:40:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.104.20.0/24}
+  - {environment: lab, site: dr, cidr: 10.105.20.0/24}
+  destination:
+  - {cidr: 198.51.100.64/28}
+  protocol: TCP
+  ports: ['587']
+  partner: Adventure Works
+  justification: The sftp and partner file transfer in lab need Adventure Works.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

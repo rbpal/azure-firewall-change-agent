@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011024
+category: already-exists
+why: Asks for a flow sftp-sett-to-lamnaSftp already allows in prod.
+ticket:
+  number: RITM0011024
+  item: Firewall Change Request
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-09T13:40:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  sources:
+  - {environment: prod, site: primary, cidr: 10.100.14.0/24}
+  - {environment: prod, site: dr, cidr: 10.101.14.0/24}
+  destination:
+  - {cidr: 198.51.100.48/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Lamna Healthcare
+  justification: The settlement app servers need Lamna Healthcare in prod.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

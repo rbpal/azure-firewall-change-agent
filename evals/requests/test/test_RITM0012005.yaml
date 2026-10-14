@@ -1,0 +1,32 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012005
+category: two-or-three-environments
+why: New flow from ledg to adventureworks in lab, dev, prod.
+ticket:
+  number: RITM0012005
+  item: Firewall Change Request
+  state: approved
+  requested_for: Priya Shah (Contoso app owner)
+  opened: '2026-10-07T14:20:00-04:00'
+  environments: [lab, dev, prod]
+  dr_site_built: {lab: true, dev: true, prod: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.16.0/24}
+  - {environment: lab, site: dr, cidr: 10.107.16.0/24}
+  - {environment: dev, site: primary, cidr: 10.104.16.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.16.0/24}
+  - {environment: prod, site: primary, cidr: 10.100.16.0/24}
+  - {environment: prod, site: dr, cidr: 10.101.16.0/24}
+  destination:
+  - {cidr: 198.51.100.64/28}
+  protocol: TCP
+  ports: ['587']
+  partner: Adventure Works
+  justification: The ledger databases need Adventure Works's service in lab and dev and prod.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

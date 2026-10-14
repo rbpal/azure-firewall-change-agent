@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012002
+category: one-environment
+why: New sftp flow from port to litware, prod only.
+ticket:
+  number: RITM0012002
+  item: Firewall Change Request
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-09T13:30:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  sources:
+  - {environment: prod, site: primary, cidr: 10.100.17.0/24}
+  - {environment: prod, site: dr, cidr: 10.101.17.0/24}
+  destination:
+  - {cidr: 203.0.113.64/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Litware
+  justification: The client portal web front ends in prod send files to Litware.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

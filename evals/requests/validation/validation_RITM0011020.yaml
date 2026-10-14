@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011020
+category: inbound-dnat
+why: Inbound SFTP from wingtip to the xfer SFTP host in stage.
+ticket:
+  number: RITM0011020
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-05T16:50:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  sources:
+  - {cidr: 198.51.100.80/28}
+  destination:
+  - {environment: stage, site: primary, cidr: 10.102.20.14/32}
+  - {environment: stage, site: dr, cidr: 10.103.20.14/32}
+  protocol: TCP
+  ports: ['22']
+  partner: Wingtip Toys
+  justification: Wingtip Toys pushes files to our SFTP server.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

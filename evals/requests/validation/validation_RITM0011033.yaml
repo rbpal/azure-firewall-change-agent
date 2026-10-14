@@ -1,0 +1,28 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011033
+category: address-not-in-plan
+why: Source ranges are outside the address plan; ticket says lab.
+ticket:
+  number: RITM0011033
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-05T15:00:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.178.42.0/24}
+  - {environment: lab, site: dr, cidr: 10.187.46.0/24}
+  destination:
+  - {cidr: 203.0.113.16/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Northwind Traders
+  justification: New settlement app servers need Northwind Traders.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected: null  # written by hand, never by the script

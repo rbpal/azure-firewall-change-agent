@@ -1,0 +1,29 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011022
+category: removal
+why: Remove sftp-xfer-to-woodgroveSftp in lab.
+ticket:
+  number: RITM0011022
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-05T13:10:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.20.0/24}
+  - {environment: lab, site: dr, cidr: 10.107.20.0/24}
+  destination:
+  - {cidr: 203.0.113.48/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Woodgrove Bank
+  justification: The sftp and partner file transfer no longer use Woodgrove Bank in lab.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+  existing_rule: sftp-xfer-to-woodgroveSftp
+expected: null  # written by hand, never by the script

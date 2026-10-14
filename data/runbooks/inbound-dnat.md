@@ -13,8 +13,7 @@ From the ticket, take exactly:
 
 - the source: the partner's range or partner IP group
 - the destination: the internal host, one per environment and site
-- the internal port, from `ports`
-- the public port the partner connects to, from `public_port`
+- the port, from `ports`: the partner connects on it at the firewall's public IP, and it is translated to the same port on the internal host
 - the protocol: TCP or UDP
 
 Never widen the source. A source of `0.0.0.0/0` or `*` is never drafted (STD-COLL-04).
@@ -23,7 +22,7 @@ Never widen the source. A source of `0.0.0.0/0` or `*` is never drafted (STD-COL
 
 The rule's destination address is the public IP of the hub firewall at that environment and site. Take it from the routing data, never from the ticket (STD-COLL-06).
 
-Check that the public port is not already published on that firewall. If it is, escalate. Two DNAT rules cannot share one public IP and port.
+Check that the port is not already published on that firewall. If it is, escalate. Two DNAT rules cannot share one public IP and port.
 
 ## RB-02-4 — Place and name the rule
 
@@ -35,7 +34,7 @@ Azure Firewall adds a matching allow rule for the translated traffic itself. Do 
 
 - the source is `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block)
 - the destination is not a single internal host, or the host is not in the address plan
-- the public port is already published on that firewall
+- the port is already published on that firewall
 - the ticket marks "DR site built: Yes" but gives no DR host, or gives a DR host where DR is not built
 - the protocol is anything other than TCP or UDP
 

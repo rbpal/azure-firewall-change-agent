@@ -45,10 +45,7 @@ def ticket_errors(ticket: dict) -> list[str]:
                 except ValueError as e:
                     errors.append(f"{field}/{i}/cidr: {e}")
 
-    ports = list(ticket["ports"])
-    if "public_port" in ticket:
-        ports.append(ticket["public_port"])
-    for port in ports:
+    for port in ticket["ports"]:
         if port == "*":
             continue
         low, _, high = port.partition("-")

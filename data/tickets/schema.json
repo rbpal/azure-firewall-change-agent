@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Firewall ticket",
-  "description": "Synthetic stand-in for a ServiceNow firewall requested item. The catalog item says add or remove; the addresses say egress or inbound. Checks shape only; code checks meaning (address plan, routing, existing rules).",
+  "description": "Synthetic stand-in for a ServiceNow firewall requested item. The catalog item says add or remove; the addresses say egress or inbound. An inbound ticket's port is the port the partner connects to and the port on the internal host. Checks shape only; code checks meaning (address plan, routing, existing rules).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -45,11 +45,6 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/port" }
     },
-    "public_port": {
-      "description": "Inbound only (partner source, internal destination): the port the partner connects to on the hub firewall's public IP. The public IP itself comes from the network data, never from the ticket.",
-      "type": "string",
-      "pattern": "^[1-9][0-9]{0,4}$"
-    },
     "existing_rule": {
       "description": "Firewall Rule Removal only, optional: the rule name if the requester knows it. The workflow still matches the flow itself.",
       "type": "string",
@@ -79,18 +74,13 @@
   },
   "allOf": [
     {
-      "$comment": "Inbound: the destination is internal (has environment) and no source is.",
+      "$comment": "Inbound: no source is internal (none has environment). DNAT takes TCP or UDP only.",
       "if": {
         "properties": {
-          "destination": { "contains": { "required": ["environment"] } },
           "sources": { "not": { "contains": { "required": ["environment"] } } }
         }
       },
-      "then": {
-        "required": ["public_port"],
-        "properties": { "protocol": { "enum": ["TCP", "UDP"] } }
-      },
-      "else": { "not": { "required": ["public_port"] } }
+      "then": { "properties": { "protocol": { "enum": ["TCP", "UDP"] } } }
     },
     {
       "if": { "properties": { "item": { "const": "Firewall Change Request" } } },

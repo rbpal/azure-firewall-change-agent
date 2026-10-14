@@ -18,8 +18,7 @@ sources:
 destination:                 # the internal listener, one per environment and site
   - {environment: prod, site: primary, cidr: 10.100.20.14/32}
 protocol: TCP
-ports: ["22"]                # the internal SFTP port
-public_port: "2222"          # the port Northwind connects to
+ports: ["22"]                # Northwind connects on 22; the internal SFTP port is 22
 partner: Northwind Traders
 
 justification: |

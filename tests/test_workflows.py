@@ -7,6 +7,7 @@ weakens the gate without any error showing.
 Safety rule: the gate only reads. It never applies and never takes the state lock.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,9 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 WORKFLOWS = sorted((REPO / ".github" / "workflows").glob("*.yml"))
 GATE = REPO / ".github" / "workflows" / "tier1-gate.yml"
+SYNC = REPO / ".github" / "workflows" / "sync-network.yml"
+# The only folders the agent's tools may read. evals/ holds the eval answers.
+TOOL_DATA = {"data/network", "infra/envs"}
 
 
 def load(path: Path) -> dict:
@@ -23,6 +27,11 @@ def load(path: Path) -> dict:
     if True in data:
         data["on"] = data.pop(True)
     return data
+
+
+def run_steps(path: Path) -> list[str]:
+    """The shell text of every run step in a workflow."""
+    return [s["run"] for job in load(path)["jobs"].values() for s in job["steps"] if "run" in s]
 
 
 def triggers(data: dict) -> set[str]:
@@ -73,3 +82,19 @@ def test_gate_never_applies_and_never_locks_state():
 def test_gate_signs_in_as_the_plan_identity():
     logins = [s for s in load(GATE)["jobs"]["plan"]["steps"] if s.get("uses", "").startswith("azure/login@")]
     assert [s["with"]["client-id"] for s in logins] == ["${{ secrets.AZURE_PLAN_CLIENT_ID }}"]
+
+
+def test_sync_uploads_only_the_tool_data():
+    # The agent's tools read this copy. Any other folder uploaded, such as
+    # evals/ with the answers, would be readable by the agent.
+    [upload] = [r for r in run_steps(SYNC) if "upload-batch" in r]
+    assert set(re.search(r"for dir in ([^;]+);", upload).group(1).split()) == TOOL_DATA
+    [count] = [r for r in run_steps(SYNC) if "find " in r]
+    assert set(re.search(r"find (.+?) -type f", count).group(1).split()) == TOOL_DATA
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+def test_no_workflow_uploads_the_eval_answers(path):
+    for run in run_steps(path):
+        if "az storage" in run:
+            assert "evals" not in run

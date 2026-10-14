@@ -27,3 +27,7 @@ jobs:
 
       - name: Run tests
         run: uv run --python 3.11 pytest -v
+
+      # Breaks each eval scorer on purpose; fails if any break goes unnoticed.
+      - name: Mutation test the eval scorers
+        run: uv run --python 3.11 python evals/mutate_scorers.py

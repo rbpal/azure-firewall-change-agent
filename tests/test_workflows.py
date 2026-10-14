@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parents[1]
 WORKFLOWS = sorted((REPO / ".github" / "workflows").glob("*.yml"))
 GATE = REPO / ".github" / "workflows" / "tier1-gate.yml"
 SYNC = REPO / ".github" / "workflows" / "sync-network.yml"
+TESTS = REPO / ".github" / "workflows" / "tests.yml"
 # The only folders the agent's tools may read. evals/ holds the eval answers.
 TOOL_DATA = {"data/network", "infra/envs"}
 
@@ -98,3 +99,10 @@ def test_no_workflow_uploads_the_eval_answers(path):
     for run in run_steps(path):
         if "az storage" in run:
             assert "evals" not in run
+
+
+def test_tests_workflow_mutation_tests_the_scorers_after_the_suite():
+    # The scorers are the gate before Foundry spend; a weakened scorer must turn CI red.
+    runs = run_steps(TESTS)
+    assert runs[-1] == "uv run --python 3.11 python evals/mutate_scorers.py"
+    assert any(r.startswith("uv run --python 3.11 pytest") for r in runs[:-1])

@@ -24,4 +24,22 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Lab only, no DR for port in lab. Rule 003-https-port-to-fourthcoffeeFs already links the same
+    addresses on port 443 only; port 22 is new. Adding 22 to rule 003 would change an existing rule
+    (STD-COLL-08) and is wrong.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: sftp-port-to-fourthcoffeeSftp
+    sources: [10.106.17.0/24]
+    destinations: [203.0.113.80/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.17.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}

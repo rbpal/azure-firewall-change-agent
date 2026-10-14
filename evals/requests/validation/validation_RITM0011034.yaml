@@ -25,4 +25,13 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Neither 10.174.46.0/24 nor 10.163.82.0/24 is in the address plan.
+  outcome: stop_and_ask
+  reason: address_not_in_plan
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.174.46.0/24}
+  - {tool: locate_address_for_env_site, address: 10.163.82.0/24}

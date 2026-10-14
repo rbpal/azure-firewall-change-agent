@@ -25,4 +25,34 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Lab, DR built: two application rules. The ticket gave a URL; the rule uses its hostname and port,
+    and the path stays on the ticket. xfer has no application collection in lab yet: the agent drafts
+    the rule anyway, and the workflow code creates allow-xfer-app-rules by STD-NAME-02 (decided
+    2026-10-13). The hostname ends in .example and will not resolve: a caution (RB-01-7), not a stop.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: xfer
+    collection: allow-xfer-app-rules
+    name: https-xfer-to-litwareApi
+    sources: [10.106.20.0/24]
+    destinations: [api.litware.example]
+    ports: ['443']
+    protocol: HTTPS
+  - env_site: lab-centralus
+    spoke: xfer
+    collection: allow-xfer-app-rules
+    name: https-xfer-to-litwareApi
+    sources: [10.107.20.0/24]
+    destinations: [api.litware.example]
+    ports: ['443']
+    protocol: HTTPS
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.20.0/24}
+  - {tool: dns_lookup_for_fqdn, fqdn: api.litware.example}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}

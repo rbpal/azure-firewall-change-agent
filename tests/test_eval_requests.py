@@ -19,8 +19,11 @@ OUTCOMES = {"draft", "stop_and_ask", "already_allowed"}
 STOP_REASONS = {
     "dr_yes_no_source", "dr_no_but_dr_source", "env_mismatch",
     "address_not_in_plan", "dr_policy_not_built", "free_text_conflict",
+    "skip_approval_requested",  # RB-01-6
+    "port_already_published",  # RB-02-5
 }
 RULE_FIELDS = {"env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"}
+DNAT_FIELDS = RULE_FIELDS | {"translated_address", "translated_port"}  # inbound rules also name the internal host
 
 
 def load(path):
@@ -126,4 +129,10 @@ def test_label_has_the_agreed_shape(path):
     else:
         assert expected["rules"], "a draft or already_allowed label names its rules"
         for rule in expected["rules"]:
-            assert set(rule) == RULE_FIELDS
+            dnat = rule["collection"].endswith("-dnat-rules")
+            assert set(rule) == (DNAT_FIELDS if dnat else RULE_FIELDS)
+
+
+def test_every_request_is_labelled():
+    unlabelled = [p.name for p in COMMITTED if load(p)["expected"] is None]
+    assert unlabelled == []

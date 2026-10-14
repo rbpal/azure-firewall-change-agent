@@ -27,4 +27,52 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Lab and dev, DR built: four application rules. The hostname ends in .example and will not resolve:
+    that is a caution for the engineer (RB-01-7), not a reason to stop.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: sett
+    collection: allow-sett-app-rules
+    name: https-sett-to-wingtipApi
+    sources: [10.106.14.0/24]
+    destinations: [api.wingtip.example]
+    ports: ['443']
+    protocol: HTTPS
+  - env_site: lab-centralus
+    spoke: sett
+    collection: allow-sett-app-rules
+    name: https-sett-to-wingtipApi
+    sources: [10.107.14.0/24]
+    destinations: [api.wingtip.example]
+    ports: ['443']
+    protocol: HTTPS
+  - env_site: dev-eastus2
+    spoke: sett
+    collection: allow-sett-app-rules
+    name: https-sett-to-wingtipApi
+    sources: [10.104.14.0/24]
+    destinations: [api.wingtip.example]
+    ports: ['443']
+    protocol: HTTPS
+  - env_site: dev-centralus
+    spoke: sett
+    collection: allow-sett-app-rules
+    name: https-sett-to-wingtipApi
+    sources: [10.105.14.0/24]
+    destinations: [api.wingtip.example]
+    ports: ['443']
+    protocol: HTTPS
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.104.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.105.14.0/24}
+  - {tool: dns_lookup_for_fqdn, fqdn: api.wingtip.example}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: dev-centralus}

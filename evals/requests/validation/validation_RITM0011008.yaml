@@ -27,4 +27,51 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Dev and stage, DR built: four rules. No rule in the spoke or hub file at any of these sites allows
+    this flow.
+  outcome: draft
+  rules:
+  - env_site: dev-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-wingtipSftp
+    sources: [10.104.15.0/24]
+    destinations: [198.51.100.80/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: dev-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-wingtipSftp
+    sources: [10.105.15.0/24]
+    destinations: [198.51.100.80/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: stage-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-wingtipSftp
+    sources: [10.102.15.0/24]
+    destinations: [198.51.100.80/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-wingtipSftp
+    sources: [10.103.15.0/24]
+    destinations: [198.51.100.80/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.105.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: dev-centralus}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

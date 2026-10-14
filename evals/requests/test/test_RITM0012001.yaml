@@ -25,4 +25,31 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Stage, DR built: two rules. Rule 001-amqps-port-to-lamnaMq links the same addresses on 5671 only;
+    port 22 is new.
+  outcome: draft
+  rules:
+  - env_site: stage-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: sftp-port-to-lamnaSftp
+    sources: [10.102.17.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: port
+    collection: allow-port-network-rules
+    name: sftp-port-to-lamnaSftp
+    sources: [10.103.17.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.17.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.17.0/24}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

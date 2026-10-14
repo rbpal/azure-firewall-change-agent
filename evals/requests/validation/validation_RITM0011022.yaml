@@ -26,4 +26,32 @@ ticket:
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
   existing_rule: sftp-xfer-to-woodgroveSftp
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    The ticket names the rule. Its sources are IP groups ipg-xfer-lab and ipg-xfer-lab-dr, which hold
+    exactly 10.106.20.0/24 and 10.107.20.0/24, so it matches the flow exactly.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: lab-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-woodgroveSftp
+    sources: [ipg-xfer-lab]
+    destinations: [203.0.113.48/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: lab-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-woodgroveSftp
+    sources: [ipg-xfer-lab-dr]
+    destinations: [203.0.113.48/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.20.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}

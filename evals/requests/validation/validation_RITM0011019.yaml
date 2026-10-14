@@ -27,4 +27,62 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Inbound: one DNAT rule per destination site. The destination is that site's hub firewall public IP
+    from routing.yaml, never from the ticket (STD-COLL-06); the partner connects on the ticket's port,
+    translated to the same port on the SFTP host. prod-eastus2 already publishes ports 2221 (Woodgrove)
+    and 2223 (Litware); 22 is free. Lab and prod-centralus have no DNAT collection yet: code creates it
+    (decided 2026-10-13).
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: xfer
+    collection: allow-xfer-dnat-rules
+    name: sftp-proseware-to-xferSftp
+    sources: [198.51.100.32/28]
+    destinations: [192.0.2.16]
+    ports: ['22']
+    protocol: TCP
+    translated_address: 10.106.20.14
+    translated_port: '22'
+  - env_site: lab-centralus
+    spoke: xfer
+    collection: allow-xfer-dnat-rules
+    name: sftp-proseware-to-xferSftp
+    sources: [198.51.100.32/28]
+    destinations: [192.0.2.17]
+    ports: ['22']
+    protocol: TCP
+    translated_address: 10.107.20.14
+    translated_port: '22'
+  - env_site: prod-eastus2
+    spoke: xfer
+    collection: allow-xfer-dnat-rules
+    name: sftp-proseware-to-xferSftp
+    sources: [198.51.100.32/28]
+    destinations: [192.0.2.10]
+    ports: ['22']
+    protocol: TCP
+    translated_address: 10.100.20.14
+    translated_port: '22'
+  - env_site: prod-centralus
+    spoke: xfer
+    collection: allow-xfer-dnat-rules
+    name: sftp-proseware-to-xferSftp
+    sources: [198.51.100.32/28]
+    destinations: [192.0.2.11]
+    ports: ['22']
+    protocol: TCP
+    translated_address: 10.101.20.14
+    translated_port: '22'
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.20.14/32}
+  - {tool: locate_address_for_env_site, address: 10.107.20.14/32}
+  - {tool: locate_address_for_env_site, address: 10.100.20.14/32}
+  - {tool: locate_address_for_env_site, address: 10.101.20.14/32}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

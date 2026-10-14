@@ -28,4 +28,61 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    rprt has no DR site in lab, so lab gets one rule; stage and prod get two each: five rules. Rule
+    004-amqps-rprt-to-lamnaMq links the same addresses on 5671 only; port 22 is new.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-lamnaSftp
+    sources: [10.106.15.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: stage-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-lamnaSftp
+    sources: [10.102.15.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-lamnaSftp
+    sources: [10.103.15.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-lamnaSftp
+    sources: [10.100.15.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-lamnaSftp
+    sources: [10.101.15.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.100.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.15.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

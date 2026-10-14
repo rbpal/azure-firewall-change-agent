@@ -27,4 +27,51 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Lab and prod, DR built: four rules. Rule 008-amqps-ledg-to-northwindMq links the same addresses on
+    5671 only; port 22 is new. Changing rule 008 would be wrong (STD-COLL-08).
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: sftp-ledg-to-northwindSftp
+    sources: [10.106.16.0/24]
+    destinations: [203.0.113.16/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: lab-centralus
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: sftp-ledg-to-northwindSftp
+    sources: [10.107.16.0/24]
+    destinations: [203.0.113.16/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-eastus2
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: sftp-ledg-to-northwindSftp
+    sources: [10.100.16.0/24]
+    destinations: [203.0.113.16/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: sftp-ledg-to-northwindSftp
+    sources: [10.101.16.0/24]
+    destinations: [203.0.113.16/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.16.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.16.0/24}
+  - {tool: locate_address_for_env_site, address: 10.100.16.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.16.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

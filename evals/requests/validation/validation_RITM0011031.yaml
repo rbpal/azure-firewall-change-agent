@@ -25,4 +25,13 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    The ticket says lab; the address plan says 10.100.20.0/24 and 10.101.20.0/24 are prod xfer.
+  outcome: stop_and_ask
+  reason: env_mismatch
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.20.0/24}

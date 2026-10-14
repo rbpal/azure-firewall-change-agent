@@ -24,4 +24,13 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    DR site built is Yes for stage, and ledg does have a stage DR site, but the ticket gives no DR
+    source.
+  outcome: stop_and_ask
+  reason: dr_yes_no_source
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.16.0/24}

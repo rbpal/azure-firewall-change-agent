@@ -25,4 +25,30 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Rule 001 allows it at both dev sites.
+  outcome: already_allowed
+  rules:
+  - env_site: dev-eastus2
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: https-ledg-to-litwareFs
+    sources: [10.104.16.0/24]
+    destinations: [203.0.113.64/28]
+    ports: ['443']
+    protocol: TCP
+  - env_site: dev-centralus
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: https-ledg-to-litwareFs
+    sources: [10.105.16.0/24]
+    destinations: [203.0.113.64/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.16.0/24}
+  - {tool: locate_address_for_env_site, address: 10.105.16.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: dev-centralus}

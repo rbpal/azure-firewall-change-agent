@@ -25,4 +25,37 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Inbound: one DNAT rule per destination site. The destination is that site's hub firewall public IP
+    from routing.yaml, never from the ticket (STD-COLL-06); the partner connects on the ticket's port,
+    translated to the same port on the SFTP host. Stage xfer has no DNAT collection yet: code creates it
+    (decided 2026-10-13). Port 22 is not yet published on either stage firewall.
+  outcome: draft
+  rules:
+  - env_site: stage-eastus2
+    spoke: xfer
+    collection: allow-xfer-dnat-rules
+    name: sftp-wingtip-to-xferSftp
+    sources: [198.51.100.80/28]
+    destinations: [192.0.2.12]
+    ports: ['22']
+    protocol: TCP
+    translated_address: 10.102.20.14
+    translated_port: '22'
+  - env_site: stage-centralus
+    spoke: xfer
+    collection: allow-xfer-dnat-rules
+    name: sftp-wingtip-to-xferSftp
+    sources: [198.51.100.80/28]
+    destinations: [192.0.2.13]
+    ports: ['22']
+    protocol: TCP
+    translated_address: 10.103.20.14
+    translated_port: '22'
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.20.14/32}
+  - {tool: locate_address_for_env_site, address: 10.103.20.14/32}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

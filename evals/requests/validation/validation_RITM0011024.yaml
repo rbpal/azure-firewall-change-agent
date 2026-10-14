@@ -25,4 +25,31 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Rule 005 allows it at both prod sites. Its sources are IP groups holding exactly the ticket's
+    ranges; the duplicate check must expand them to see the match.
+  outcome: already_allowed
+  rules:
+  - env_site: prod-eastus2
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: sftp-sett-to-lamnaSftp
+    sources: [ipg-sett-prod]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: sftp-sett-to-lamnaSftp
+    sources: [ipg-sett-prod-dr]
+    destinations: [198.51.100.48/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.14.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

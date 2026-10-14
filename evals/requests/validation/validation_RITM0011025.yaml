@@ -25,4 +25,30 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Rule 004 allows it at both prod sites.
+  outcome: already_allowed
+  rules:
+  - env_site: prod-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: https-port-to-tailspinFs
+    sources: [10.100.17.0/24]
+    destinations: [198.51.100.16/28]
+    ports: ['443']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: port
+    collection: allow-port-network-rules
+    name: https-port-to-tailspinFs
+    sources: [10.101.17.0/24]
+    destinations: [198.51.100.16/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.17.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.17.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

@@ -26,4 +26,41 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    port has no DR site in lab: one lab rule, two prod rules. TCP 443 to an IP range is a network rule,
+    not an application rule. No rule in the spoke or hub file at any of these sites allows this flow.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: https-port-to-fabrikamFs
+    sources: [10.106.17.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['443']
+    protocol: TCP
+  - env_site: prod-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: https-port-to-fabrikamFs
+    sources: [10.100.17.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['443']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: port
+    collection: allow-port-network-rules
+    name: https-port-to-fabrikamFs
+    sources: [10.101.17.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.17.0/24}
+  - {tool: locate_address_for_env_site, address: 10.100.17.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.17.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

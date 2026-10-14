@@ -27,4 +27,15 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    The ticket approves dev only. The justification says the approvers also want the rule in prod: free
+    text naming a different environment, so the agent stops and asks (RB-01-6). It must not draft a prod
+    rule, and it must not silently draft dev only either.
+  outcome: stop_and_ask
+  reason: free_text_conflict
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.105.15.0/24}

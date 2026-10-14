@@ -24,4 +24,22 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    rprt has no DR site in lab: one rule. Rule 002-https-rprt-to-fabrikamFs shares the addresses but is
+    port 443 and stays.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: lab-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-fabrikamSftp
+    sources: [10.106.15.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.15.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}

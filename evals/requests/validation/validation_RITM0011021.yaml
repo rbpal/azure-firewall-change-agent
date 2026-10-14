@@ -25,4 +25,32 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Rule 017-amqps-sett-to-tailspinMq matches the flow exactly at both lab sites. Rule 016-smtp-sett-to-
+    tailspinSmtp shares the addresses but is port 587 and stays. Code renumbers the rules after 017.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: lab-eastus2
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: amqps-sett-to-tailspinMq
+    sources: [10.106.14.0/24]
+    destinations: [198.51.100.16/28]
+    ports: ['5671']
+    protocol: TCP
+  - env_site: lab-centralus
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: amqps-sett-to-tailspinMq
+    sources: [10.107.14.0/24]
+    destinations: [198.51.100.16/28]
+    ports: ['5671']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.14.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}

@@ -25,4 +25,31 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Rule 015-amqps-sett-to-woodgroveMq matches the flow exactly at both prod sites.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: prod-eastus2
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: amqps-sett-to-woodgroveMq
+    sources: [10.100.14.0/24]
+    destinations: [203.0.113.48/28]
+    ports: ['5671']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: amqps-sett-to-woodgroveMq
+    sources: [10.101.14.0/24]
+    destinations: [203.0.113.48/28]
+    ports: ['5671']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.14.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

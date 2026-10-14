@@ -25,4 +25,32 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Stage, DR built: two application rules. The hostname ends in .example and will not resolve: that is
+    a caution for the engineer (RB-01-7), not a reason to stop.
+  outcome: draft
+  rules:
+  - env_site: stage-eastus2
+    spoke: sett
+    collection: allow-sett-app-rules
+    name: https-sett-to-prosewareApi
+    sources: [10.102.14.0/24]
+    destinations: [api.proseware.example]
+    ports: ['443']
+    protocol: HTTPS
+  - env_site: stage-centralus
+    spoke: sett
+    collection: allow-sett-app-rules
+    name: https-sett-to-prosewareApi
+    sources: [10.103.14.0/24]
+    destinations: [api.proseware.example]
+    ports: ['443']
+    protocol: HTTPS
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.14.0/24}
+  - {tool: dns_lookup_for_fqdn, fqdn: api.proseware.example}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

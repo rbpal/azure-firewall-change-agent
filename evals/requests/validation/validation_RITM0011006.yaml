@@ -27,4 +27,52 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Lab and prod, DR built in both, so four rules. No xfer or hub rule reaches Fabrikam
+    (203.0.113.32/28) at any of the four sites. prod-eastus2 xfer also has a DNAT collection; this
+    egress rule goes in the network collection.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-fabrikamSftp
+    sources: [10.106.20.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: lab-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-fabrikamSftp
+    sources: [10.107.20.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-fabrikamSftp
+    sources: [10.100.20.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-fabrikamSftp
+    sources: [10.101.20.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.100.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.20.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

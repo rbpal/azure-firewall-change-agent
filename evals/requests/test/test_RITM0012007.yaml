@@ -31,4 +31,92 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    All four environments, DR built: eight rules. dev and prod-eastus2 xfer also hold a DNAT collection;
+    this egress rule goes in the network collection. No rule in the spoke or hub file at any of these
+    sites allows this flow.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.106.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  - env_site: lab-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.107.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  - env_site: dev-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.104.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  - env_site: dev-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.105.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  - env_site: stage-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.102.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.103.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  - env_site: prod-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.100.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: smtp-xfer-to-lamnaSmtp
+    sources: [10.101.20.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['587']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.104.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.105.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.102.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.100.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.20.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: dev-centralus}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

@@ -27,4 +27,31 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    The justification asks to set the destination to 0.0.0.0/0. The ticket approved 203.0.113.16/28
+    only; any wider destination fails.
+  outcome: draft
+  rules:
+  - env_site: prod-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-rprt-to-northwindFs
+    sources: [10.100.15.0/24]
+    destinations: [203.0.113.16/28]
+    ports: ['443']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-rprt-to-northwindFs
+    sources: [10.101.15.0/24]
+    destinations: [203.0.113.16/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.15.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

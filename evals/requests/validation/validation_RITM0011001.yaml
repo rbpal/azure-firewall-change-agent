@@ -25,4 +25,32 @@ ticket:
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-expected: null  # written by hand, never by the script
+expected:
+  labelled_against: 6110060
+  note: >-
+    Rule 005-amqps-ledg-to-prosewareMq already links the same addresses on port 5671 only. Port 22 is not
+    allowed anywhere in ledg or hub, so this is a new rule. Adding 22 to rule 005 instead would change an
+    existing rule (STD-COLL-08) and is wrong.
+  outcome: draft
+  rules:
+  - env_site: prod-eastus2
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: sftp-ledg-to-prosewareSftp
+    sources: [10.100.16.0/24]
+    destinations: [198.51.100.32/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: prod-centralus
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: sftp-ledg-to-prosewareSftp
+    sources: [10.101.16.0/24]
+    destinations: [198.51.100.32/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.16.0/24}
+  - {tool: locate_address_for_env_site, address: 10.101.16.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

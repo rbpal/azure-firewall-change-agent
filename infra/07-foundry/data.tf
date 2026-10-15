@@ -12,3 +12,7 @@ data "azurerm_user_assigned_identity" "project" {
   name                = var.project_identity_name
   resource_group_name = data.azurerm_resource_group.this.name
 }
+
+# Who is running Terraform. Used to give that person the Foundry User role on
+# this resource only.
+data "azurerm_client_config" "current" {}

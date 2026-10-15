@@ -58,3 +58,20 @@ variable "project_identity_name" {
   description = "User-assigned identity the project signs in as, built by step 05-func."
   type        = string
 }
+
+# ---- Model deployments and access: values in deployments.tfvars
+
+variable "deployments" {
+  description = "Model deployments on the Foundry resource, keyed by deployment name."
+  type = map(object({
+    model_name    = string
+    model_version = string
+    sku_name      = string
+    capacity      = number
+  }))
+}
+
+variable "foundry_user_role_for_terraform_user" {
+  description = "Whether the person running Terraform gets Foundry User on this Foundry resource, to call the agent from the laptop."
+  type        = bool
+}

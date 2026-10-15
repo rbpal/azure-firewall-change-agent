@@ -22,3 +22,8 @@ output "project_endpoints" {
   description = "Web addresses of the Foundry project."
   value       = module.foundry_project.endpoints
 }
+
+output "deployment_names" {
+  description = "Model deployment names that code calls."
+  value       = [for d in module.foundry_deployment : d.name]
+}

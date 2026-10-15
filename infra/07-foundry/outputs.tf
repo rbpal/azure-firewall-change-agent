@@ -12,3 +12,13 @@ output "foundry_endpoint" {
   description = "Web address of the Foundry resource."
   value       = module.foundry_account.endpoint
 }
+
+output "project_name" {
+  description = "Name of the Foundry project. Later steps look it up by this name."
+  value       = module.foundry_project.name
+}
+
+output "project_endpoints" {
+  description = "Web addresses of the Foundry project."
+  value       = module.foundry_project.endpoints
+}

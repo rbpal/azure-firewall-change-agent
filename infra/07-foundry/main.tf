@@ -1,5 +1,6 @@
-# Step 07: the Foundry resource (Step 03 Task 04), its project (Task 05), and
-# the model deployments plus Foundry User for the laptop (Task 06).
+# Step 07: the Foundry resource (Step 03 Task 04), its project (Task 05), the
+# model deployments plus Foundry User for the laptop (Task 06), and the project's
+# connection to Application Insights for traces (Task 07).
 
 module "foundry_account" {
   source = "../modules/foundry-account"
@@ -46,4 +47,53 @@ module "terraform_user_foundry_user" {
   role_definition_name = "Foundry User"
   principal_id         = data.azurerm_client_config.current.object_id
   principal_type       = "User"
+}
+
+module "appi_connection" {
+  source = "../modules/foundry-project-connection"
+
+  name        = var.appi_connection_name
+  project_id  = module.foundry_project.id
+  category    = "AppInsights"
+  auth_type   = "ProjectManagedIdentity"
+  target      = data.azurerm_application_insights.this.id
+  api_version = var.connection_api_version
+
+  # Azure requires it for AppInsights. With local auth off on appi-fwagentic-dev
+  # it only identifies the resource; it grants no access on its own.
+  extra_metadata = {
+    ApplicationInsightsConnectionString = data.azurerm_application_insights.this.connection_string
+  }
+}
+
+# The project's identity sends traces with Entra sign-in, so it needs this role.
+# Application Insights refuses the ingestion key (section 04).
+module "project_identity_metrics_publisher" {
+  source = "../modules/role-assignment"
+
+  scope                = data.azurerm_application_insights.this.id
+  role_definition_name = "Monitoring Metrics Publisher"
+  principal_id         = data.azurerm_user_assigned_identity.project.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
+# Platform logs: Azure's own records about the Foundry resource and project,
+# sent to the workspace. Separate from the traces above. Categories are set in
+# diagnostics.tfvars.
+module "foundry_account_diagnostics" {
+  source = "../modules/diagnostic-setting"
+
+  name                       = var.diagnostic_setting_name
+  target_resource_id         = module.foundry_account.id
+  log_analytics_workspace_id = data.azurerm_log_analytics_workspace.this.id
+  log_categories             = var.foundry_account_log_categories
+}
+
+module "foundry_project_diagnostics" {
+  source = "../modules/diagnostic-setting"
+
+  name                       = var.diagnostic_setting_name
+  target_resource_id         = module.foundry_project.id
+  log_analytics_workspace_id = data.azurerm_log_analytics_workspace.this.id
+  log_categories             = var.foundry_project_log_categories
 }

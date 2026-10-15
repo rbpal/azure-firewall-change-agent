@@ -6,3 +6,6 @@ provider "azurerm" {
   storage_use_azuread             = true
   resource_provider_registrations = "none"
 }
+
+# azapi signs in the same way as azurerm (az login locally, ARM_SUBSCRIPTION_ID).
+provider "azapi" {}

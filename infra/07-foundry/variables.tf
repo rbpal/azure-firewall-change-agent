@@ -75,3 +75,42 @@ variable "foundry_user_role_for_terraform_user" {
   description = "Whether the person running Terraform gets Foundry User on this Foundry resource, to call the agent from the laptop."
   type        = bool
 }
+
+# ---- Monitoring connection: values in monitoring.tfvars
+
+variable "appi_name" {
+  description = "Application Insights resource built by step 04-monitoring."
+  type        = string
+}
+
+variable "appi_connection_name" {
+  description = "Name of the project's connection to Application Insights."
+  type        = string
+}
+
+variable "connection_api_version" {
+  description = "API version used for project connections (azapi)."
+  type        = string
+}
+
+# ---- Platform logs (diagnostic settings): values in diagnostics.tfvars
+
+variable "law_name" {
+  description = "Log Analytics workspace built by step 04-monitoring."
+  type        = string
+}
+
+variable "diagnostic_setting_name" {
+  description = "Name of the diagnostic setting on the Foundry resource and on the project."
+  type        = string
+}
+
+variable "foundry_account_log_categories" {
+  description = "Platform log categories sent from the Foundry resource."
+  type        = list(string)
+}
+
+variable "foundry_project_log_categories" {
+  description = "Platform log categories sent from the Foundry project."
+  type        = list(string)
+}

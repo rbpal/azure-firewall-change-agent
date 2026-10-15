@@ -27,3 +27,8 @@ output "deployment_names" {
   description = "Model deployment names that code calls."
   value       = [for d in module.foundry_deployment : d.name]
 }
+
+output "appi_connection_name" {
+  description = "Name of the project's connection to Application Insights."
+  value       = module.appi_connection.name
+}

@@ -1,13 +1,14 @@
-"""Mutation test for the two eval scorers: break each one on purpose and check a test notices.
+"""Mutation test for the two eval scorers and the Tier 2 runner: break each on purpose and check a test notices.
 
 Example: `uv run --python 3.11 python evals/mutate_scorers.py` prints one line per
 mutation, such as "caught    widen a port range", and exits 1 if any survives.
 
-Why: the scorers grade the agent before any Foundry spend. If the tests still pass
-when a scorer is broken, a weak agent could pass too, so CI runs this on every push.
+Why: the scorers grade the agent before any Foundry spend, and the runner adds up
+their marks. If the tests still pass when either is broken, a weak agent could pass
+too, so CI runs this on every push.
 
-Safety rule: each mutation edits a scorer file in place and the original is always
-written back, even on error. It runs only the scorer tests in tests/evals/.
+Safety rule: each mutation edits one file in place and the original is always
+written back, even on error. It runs only the eval tests in tests/evals/.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 LP = "evals/least_privilege.py"
 AB = "evals/abstention.py"
+RUN = "evals/run_eval.py"
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,16 @@ MUTATIONS = [
     Mutation("allow rules on a stop", AB, 'if reply.get("rules"):', "if False:"),
     Mutation("accept a needless stop", AB, 'return Score("fail", "over_abstain"', 'return Score("pass", "over_abstain"'),
     Mutation("treat any non-draft as a stop", AB, 'stopped = reply.get("outcome") == STOP', 'stopped = reply.get("outcome") != "draft"'),
+    # Runner: the ways it could leak the answer key or miscount the marks.
+    Mutation("hand the agent its answer key", RUN, "reply = agent(copy.deepcopy(request.ticket))",
+             'reply = agent({**request.ticket, "expected": request.expected})'),
+    Mutation("let a crash stop the run", RUN, "except Exception as error:", "except KeyError as error:"),
+    Mutation("count incomplete as complete", RUN, "return self.passed and not self.incomplete", "return self.passed"),
+    Mutation("ignore a Least-Privilege fail", RUN, 'if lp.result == "fail":', "if False:"),
+    Mutation("ignore an Abstention fail", RUN, 'if ab.result == "fail":', "if False:"),
+    Mutation("skip the outcome word check", RUN, 'if reply["outcome"] != expected["outcome"]:', "if False:"),
+    Mutation("unseal the test split", RUN, 'if split == "test" and not allow_test:', "if False:"),
+    Mutation("count a category ticket twice", RUN, "row[1] += 1", "row[1] += 2"),
 ]
 # Not listed: removing the 1-65535 port bounds. An out-of-range port is already
 # outside every approved range, so no score can change; that mutant is equivalent.

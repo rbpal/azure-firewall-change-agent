@@ -1,15 +1,15 @@
-"""The scorer mutation list stays valid as the scorers change. Every check here must be able to fail."""
+"""The mutation list stays valid as the scorers and the runner change. Every check here must be able to fail."""
 
 from pathlib import Path
 
 import pytest
 
-from evals.mutate_scorers import AB, LP, MUTATIONS, REPO, mutated
+from evals.mutate_scorers import AB, LP, MUTATIONS, REPO, RUN, mutated
 
 
 @pytest.mark.parametrize("m", MUTATIONS, ids=lambda m: m.name)
 def test_every_mutation_matches_its_scorer_exactly_once(m):
-    """If a scorer is edited and a mutation no longer applies, this fails before CI's mutation run does."""
+    """If a mutated file is edited and a mutation no longer applies, this fails before CI's mutation run does."""
     assert (REPO / m.path).read_text().count(m.old) == 1
 
 
@@ -19,10 +19,10 @@ def test_every_mutation_changes_the_code(m):
     assert m.old != m.new
 
 
-def test_mutation_names_are_unique_and_cover_both_scorers():
-    """Each line of output names one mutation, and both scorers are mutated."""
+def test_mutation_names_are_unique_and_cover_scorers_and_runner():
+    """Each line of output names one mutation, and both scorers and the runner are mutated."""
     assert len({m.name for m in MUTATIONS}) == len(MUTATIONS)
-    assert {m.path for m in MUTATIONS} == {LP, AB}
+    assert {m.path for m in MUTATIONS} == {LP, AB, RUN}
 
 
 def test_the_plans_three_mutations_are_listed():

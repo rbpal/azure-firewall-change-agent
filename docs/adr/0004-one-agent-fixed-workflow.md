@@ -29,16 +29,15 @@ There is one agent. Code runs the steps, always in the same order. The agent run
 
 1. **The order never changes.** Several agents help when a model has to choose between paths. Here the path is fixed, so code can follow it exactly.
 2. **The job fits one context.** A ticket, a few tool answers and about 4,000 tokens of standards and runbooks fit easily in one model call.
-3. **No handoffs.** Each time one agent passes work to another, a fact can be dropped or reworded. One agent has no handoffs.
+3. **One agent, not several.** One agent avoids the extra coordination and handoffs between multiple agents. We expect this to reduce complexity and potentially cost and response time. Actual cost and response time will be measured during evaluation.
 4. **No model sits next to write access.** Code holds the identity that opens pull requests (ADR 0002). A separate "pull request agent" would put a model next to that identity for no gain.
 5. **One thing to score.** The Tier 2 eval scores one agent on one job. Its score says something clear about that job.
-6. **Cheaper and faster.** One agent run per ticket costs less and finishes sooner than several.
 
 ## What we did not choose
 
-1. **A main agent that calls specialist agents.** In Foundry today this is the Agent-to-Agent (A2A) tool. It replaced "connected agents", which the new Foundry Agent Service removed. The main agent would choose the order of steps, which code already does exactly.
+1. **A main agent that delegates work to specialist agents.** The current task fits one agent, and code already controls the surrounding workflow. We will reconsider only if evaluation shows that splitting the work improves results.
 2. **Multi-agent workflows**, in Foundry or in Microsoft Agent Framework. Several agents pass work along a graph, or take turns in a group chat. This suits work whose path depends on the content. Our path does not, so it adds parts to build, trace and score.
-3. **No agent at all.** Code alone cannot read free-text justifications, turn a URL into a hostname rule, or notice a planted instruction. The eval has categories for each of these.
+3. **Only Python, no model.** We use a language model to interpret free-text requests and propose firewall rules. Ordinary Python handles structured validation, URL parsing and workflow steps. The evaluation measures how reliably the model performs its part.
 
 ## What this costs us
 

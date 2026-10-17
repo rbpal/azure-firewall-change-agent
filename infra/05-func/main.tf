@@ -56,6 +56,11 @@ module "func" {
 }
 
 # The Functions host reads and writes its storage with the app's identity.
+# The condition keeps the read-only container read-only: every write, delete,
+# tag or permission change there is refused, so a tool bug cannot rewrite the
+# data the tools trust. Reads still work. The condition covers data actions
+# only; container create or delete through Azure Resource Manager is not
+# covered (register 50.18).
 module "role_storage" {
   source = "../modules/role-assignment"
 
@@ -63,6 +68,27 @@ module "role_storage" {
   role_definition_name = "Storage Blob Data Owner"
   principal_id         = module.func.principal_id
   principal_type       = "ServicePrincipal"
+  condition            = <<-EOT
+    (
+      (
+        !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/deleteBlobVersion/action'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/permanentDelete/action'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/move/action'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/tags/write'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/immutableStorage/runAsSuperUser/action'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/modifyPermissions/action'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/manageOwnership/action'})
+        AND !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/runAsSuperUser/action'})
+      )
+      OR
+      (
+        @Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringNotEquals '${var.storage_readonly_container}'
+      )
+    )
+  EOT
 }
 
 # Application Insights refuses the key, so the app needs this role to send.

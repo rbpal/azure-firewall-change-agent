@@ -11,3 +11,8 @@ storage_replication_type = "LRS"
 storage_shared_access_key_enabled = false
 
 storage_package_container = "app-package"
+
+# The tools read the network snapshot here; only the sync pipeline may write it.
+# The app's Blob Data Owner role carries a condition that refuses every write,
+# delete, tag or permission change in this container (security register 50.18).
+storage_readonly_container = "network-snapshot"

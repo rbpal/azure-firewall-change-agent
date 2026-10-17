@@ -79,6 +79,11 @@ variable "storage_package_container" {
   type        = string
 }
 
+variable "storage_readonly_container" {
+  description = "Blob container in this account the app may read but never change. The sync pipeline in 06-sync writes it."
+  type        = string
+}
+
 # ---- Hosting plan: values in plan.tfvars
 
 variable "plan_name" {

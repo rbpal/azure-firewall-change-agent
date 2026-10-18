@@ -1,0 +1,46 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011042
+category: add-primary-only-dr-built
+why: New flow from rprt to wingtip, dev primary only; dev DR is built but not in scope.
+ticket:
+  number: RITM0011042
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-06T09:50:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.15.0/24}
+  destination:
+  - {cidr: 198.51.100.80/28}
+  protocol: TCP
+  ports: ['443']
+  partner: Wingtip Toys
+  justification: The reporting batch servers in dev send files to Wingtip Toys. DR follows later.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 6110060
+  review: pending
+  note: >-
+    Dev primary only. Dev DR is built for rprt but is not in scope, so dev-centralus gets nothing. No rule in dev-eastus2 rprt or hub reaches Wingtip Toys (198.51.100.80/28).
+  outcome: draft
+  rules:
+  - env_site: dev-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-rprt-to-wingtipFs
+    sources: [10.104.15.0/24]
+    destinations: [198.51.100.80/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.15.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}

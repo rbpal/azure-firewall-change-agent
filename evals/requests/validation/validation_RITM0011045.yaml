@@ -1,0 +1,47 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011045
+category: removal-primary-only
+why: Remove smtp-sett-to-wingtipSmtp in lab primary only; the DR copy stays.
+ticket:
+  number: RITM0011045
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-08T11:20:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  change_sites:
+    lab: [primary]
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.14.0/24}
+  destination:
+  - {cidr: 198.51.100.80/28}
+  protocol: TCP
+  ports: ['587']
+  partner: Wingtip Toys
+  justification: The settlement app servers at the lab primary site no longer use Wingtip Toys.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 6110060
+  review: pending
+  note: >-
+    Lab primary only. Rule 008-smtp-sett-to-wingtipSmtp matches the flow exactly in lab-eastus2 and is removed; code renumbers the rules after it. The same rule in lab-centralus is outside the scope and stays. That is not a reason to stop.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: lab-eastus2
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: smtp-sett-to-wingtipSmtp
+    sources: [10.106.14.0/24]
+    destinations: [198.51.100.80/28]
+    ports: ['587']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.14.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}

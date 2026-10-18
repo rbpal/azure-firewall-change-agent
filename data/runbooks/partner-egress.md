@@ -5,7 +5,7 @@ Do not use for: inbound access from a partner (use RB-02) or removing a rule (us
 
 ## RB-01-1 — Check what already exists
 
-Call the `duplicate_rule_check` tool for each environment and site on the ticket. It reads the rule files in `main`, which are the source of truth. If it lists a rule, that rule already allows the flow: no change is needed there. Tell the requester the rule name and stop. Never decide this by reading rules yourself; the tool does the address and port maths (STD-COLL-07).
+Call the `duplicate_rule_check` tool for each selected site on the ticket. It reads the rule files in `main`, which are the source of truth. If it lists a rule, that rule already allows the flow: no change is needed there. Tell the requester the rule name and stop. Never decide this by reading rules yourself; the tool does the address and port maths (STD-COLL-07).
 
 A rule that exists only in the live policy does not count. It was added outside the pipeline, and the next release to its group deletes it. Draft the rule anyway, and list the live-only rule on the draft note.
 
@@ -37,9 +37,9 @@ Put the rule in the source spoke's group, in the collection for its type (STD-CO
 - the requester asks for the change to skip approval
 - the source is in no existing spoke: a new spoke needs a new file and Terraform variable, which is a code change, not a rule request
 - the ticket names an IP group that does not exist
-- the sources do not match the chosen environments and their "DR site built" answers, or the free text names a different environment
+- the sources do not match the selected sites: a selected site has no source, or a source belongs to a site the ticket does not select; or the free text names a different environment
 - an internal address is not in the address plan, or belongs to an environment or site the ticket does not name
-- the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place
+- the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place. This answer only says whether DR exists; DR is changed only when "Sites to change" selects it
 - the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address
 - non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change
 

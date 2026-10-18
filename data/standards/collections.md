@@ -45,9 +45,11 @@ Enforced: Tier 1 (blocking)
 
 ## STD-COLL-05 — Scope matches the ticket
 
-The change touches the primary site of every environment on the ticket, and the DR site of each one the ticket marks "DR site built: Yes". It touches nothing anywhere else.
+The ticket answers two separate questions for each environment. "DR site built" says whether the DR site exists. "Sites to change" says which sites this ticket changes: primary only, DR only, or both. The change touches exactly the selected sites of every environment on the ticket. It touches nothing anywhere else, including a DR site that exists but is not selected.
 
-A missing DR rule where DR is built fails this check. So does a DR rule where DR is not built.
+A missing rule at a selected site fails this check. So does a rule at a site the ticket does not select, and a DR change where DR is not built.
+
+Primary and DR do not have to hold the same rules. A rule that exists at an unselected site is left alone and is not a reason to stop.
 Enforced: Tier 1
 
 ## STD-COLL-06 — DNAT targets and public ports

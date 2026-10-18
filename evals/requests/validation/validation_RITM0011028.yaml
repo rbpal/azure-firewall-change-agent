@@ -1,8 +1,8 @@
 # Eval request. Synthetic; all names and addresses are fictional.
 # The ticket block is written by evals/make_requests.py; expected is written by hand.
 id: RITM0011028
-category: dr-answer-contradicts-sources
-why: DR answer is No for stage but a DR source is given.
+category: sites-contradict-addresses
+why: Ticket changes stage primary only but also gives a DR source.
 ticket:
   number: RITM0011028
   item: Firewall Change Request
@@ -10,7 +10,9 @@ ticket:
   requested_for: Priya Shah (Contoso app owner)
   opened: '2026-10-08T10:10:00-04:00'
   environments: [stage]
-  dr_site_built: {stage: false}
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary]
   sources:
   - {environment: stage, site: primary, cidr: 10.102.16.0/24}
   - {environment: stage, site: dr, cidr: 10.103.16.0/24}
@@ -28,9 +30,9 @@ ticket:
 expected:
   labelled_against: 6110060
   note: >-
-    DR site built is No for stage, but the ticket gives a stage DR source, 10.103.16.0/24.
+    The ticket changes stage primary only, but also gives a stage DR source, 10.103.16.0/24.
   outcome: stop_and_ask
-  reason: dr_no_but_dr_source
+  reason: address_for_unselected_site
   rules: []
   tools:
   - {tool: locate_address_for_env_site, address: 10.102.16.0/24}

@@ -12,12 +12,12 @@ from workflow.tickets import ticket_errors
 REQUESTS = make_requests.REQUESTS
 COMMITTED = sorted(REQUESTS.glob("*/*.yaml"))
 STOP_CATEGORIES = {
-    "dr-answer-contradicts-sources", "address-environment-contradicts-ticket",
+    "sites-contradict-addresses", "address-environment-contradicts-ticket",
     "address-not-in-plan", "free-text-names-another-environment",
 }
 OUTCOMES = {"draft", "stop_and_ask", "already_allowed"}
 STOP_REASONS = {
-    "dr_yes_no_source", "dr_no_but_dr_source", "env_mismatch",
+    "site_without_address", "address_for_unselected_site", "env_mismatch",
     "address_not_in_plan", "dr_policy_not_built", "free_text_conflict",
     "skip_approval_requested",  # RB-01-6
     "port_already_published",  # RB-02-5
@@ -44,8 +44,8 @@ def test_script_writes_the_planned_mix(generated):
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation, name
         assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 40
-    assert sum(v for (split, _), v in counts.items() if split == "test") == 20
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 48
+    assert sum(v for (split, _), v in counts.items() if split == "test") == 24
 
 
 def test_every_generated_ticket_passes_the_schema(generated):
@@ -69,12 +69,13 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 60
+    assert written == [] and len(kept) == 72
     assert "expected: {outcome: draft}" in path.read_text()
 
 
-def test_draft_requests_never_share_a_spoke_and_partner(generated):
+def test_draft_requests_never_share_a_spoke_and_partner_across_splits(generated):
     # A near copy in the other split would leak tuning into the test score.
+    # Within one split a pair may repeat (the one-sided cases of 2026-10-18).
     seen = {}
     for path in sorted(generated.glob("*/*.yaml")):
         request = load(path)
@@ -83,19 +84,30 @@ def test_draft_requests_never_share_a_spoke_and_partner(generated):
         t = request["ticket"]
         internal = t["destination"] if request["category"] == "inbound-dnat" else t["sources"]
         key = (internal[0]["cidr"].split(".")[2], t["partner"])
-        assert key not in seen, f"{path.name} repeats {seen.get(key)}"
-        seen[key] = path.name
+        split = path.parent.name
+        assert seen.get(key, (split,))[0] == split, f"{path.name} repeats {seen[key][1]} from the other split"
+        seen.setdefault(key, (split, path.name))
 
 
 def test_removal_requests_use_the_removal_item(generated):
     for path in generated.glob("*/*.yaml"):
         request = load(path)
         removal = request["ticket"]["item"] == "Firewall Rule Removal"
-        assert removal == (request["category"] == "removal"), path.name
+        assert removal == request["category"].startswith("removal"), path.name
 
 
-def test_there_are_60_committed_requests():
-    assert len(COMMITTED) == 60
+@pytest.mark.parametrize("scope", ["primary", "dr", "both"])
+@pytest.mark.parametrize("item", ["Firewall Change Request", "Firewall Rule Removal"])
+def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
+    want = {"primary": ["primary"], "dr": ["dr"], "both": ["primary", "dr"]}[scope]
+    found = [p.name for p in COMMITTED
+             if load(p)["ticket"]["item"] == item and load(p)["expected"]["outcome"] == "draft"
+             and list(load(p)["ticket"]["change_sites"].values()) == [want]]
+    assert len(found) >= 2, f"{item} with {scope} scope: {found}"
+
+
+def test_there_are_72_committed_requests():
+    assert len(COMMITTED) == 72
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -122,6 +134,8 @@ def test_label_has_the_agreed_shape(path):
     expected = load(path)["expected"]
     if expected is None:
         pytest.skip("not labelled yet")
+    # `review: pending` marks a key no person has checked yet; deleting the line marks it reviewed.
+    assert expected.get("review", "pending") == "pending"
     assert expected["outcome"] in OUTCOMES
     if expected["outcome"] == "stop_and_ask":
         assert expected["reason"] in STOP_REASONS
@@ -131,6 +145,20 @@ def test_label_has_the_agreed_shape(path):
         for rule in expected["rules"]:
             dnat = rule["collection"].endswith("-dnat-rules")
             assert set(rule) == (DNAT_FIELDS if dnat else RULE_FIELDS)
+
+
+REGION = {"primary": "eastus2", "dr": "centralus"}
+
+
+@pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
+def test_label_rules_touch_exactly_the_selected_sites(path):
+    # A primary-only ticket names no DR rule, even when DR is built, and the other way round.
+    request = load(path)
+    expected = request["expected"]
+    if expected is None or expected["outcome"] != "draft":
+        pytest.skip("only a draft changes files")
+    selected = {f"{env}-{REGION[site]}" for env, sites in request["ticket"]["change_sites"].items() for site in sites}
+    assert {r["env_site"] for r in expected["rules"]} == selected
 
 
 def test_every_request_is_labelled():

@@ -1,0 +1,46 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011044
+category: add-dr-only
+why: New flow from rprt to adventureworks, stage DR only.
+ticket:
+  number: RITM0011044
+  item: Firewall Change Request
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-08T09:10:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [dr]
+  sources:
+  - {environment: stage, site: dr, cidr: 10.103.15.0/24}
+  destination:
+  - {cidr: 198.51.100.64/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Adventure Works
+  justification: The reporting batch servers at the stage DR site need Adventure Works for the failover test.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 6110060
+  review: pending
+  note: >-
+    Stage DR only; stage-eastus2 gets nothing. No rule in stage-centralus rprt or hub reaches Adventure Works (198.51.100.64/28).
+  outcome: draft
+  rules:
+  - env_site: stage-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-adventureworksSftp
+    sources: [10.103.15.0/24]
+    destinations: [198.51.100.64/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

@@ -32,7 +32,7 @@ The rules are stored as a map, and Terraform reads map keys in sorted order. So 
 
 The Azure rule name leaves the index out, so the name in the portal stays readable. The key keeps it, so the order and the diff stay stable. Renumbering therefore changes only keys in the tfvars file. The firewall sees the same rule names, in the same order.
 
-A DR file mirrors its primary, so the same rule has the same key at both sites.
+Each file counts on its own. Primary and DR may hold different rules, so the same rule can have different keys at the two sites. Code matches a rule across sites by its name and fields, never by its index. Changing one site never renumbers the other to keep the keys aligned.
 Enforced: Tier 1
 
 ## STD-NAME-04 — IP groups

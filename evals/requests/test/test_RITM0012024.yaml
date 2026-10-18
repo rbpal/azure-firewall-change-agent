@@ -1,0 +1,48 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012024
+category: removal-dr-only
+why: Remove amqps-sett-to-woodgroveMq in lab DR only; the primary copy stays.
+ticket:
+  number: RITM0012024
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-08T16:00:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  change_sites:
+    lab: [dr]
+  sources:
+  - {environment: lab, site: dr, cidr: 10.107.14.0/24}
+  destination:
+  - {cidr: 203.0.113.48/28}
+  protocol: TCP
+  ports: ['5671']
+  partner: Woodgrove Bank
+  justification: The lab DR site no longer sends to Woodgrove Bank.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+  existing_rule: amqps-sett-to-woodgroveMq
+expected:
+  labelled_against: 6110060
+  review: pending
+  note: >-
+    Lab DR only. The ticket names the rule. Rule 015-amqps-sett-to-woodgroveMq matches the flow exactly in lab-centralus and is removed. The lab-eastus2 copy stays.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: lab-centralus
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: amqps-sett-to-woodgroveMq
+    sources: [10.107.14.0/24]
+    destinations: [203.0.113.48/28]
+    ports: ['5671']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.107.14.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}

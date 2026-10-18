@@ -1,0 +1,46 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012022
+category: add-dr-only
+why: New flow from xfer to fourthcoffee, stage DR only.
+ticket:
+  number: RITM0012022
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-08T15:40:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [dr]
+  sources:
+  - {environment: stage, site: dr, cidr: 10.103.20.0/24}
+  destination:
+  - {cidr: 203.0.113.80/28}
+  protocol: TCP
+  ports: ['5671']
+  partner: Fourth Coffee
+  justification: The sftp and partner file transfer at the stage DR site need Fourth Coffee for the failover test.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 6110060
+  review: pending
+  note: >-
+    Stage DR only; stage-eastus2 gets nothing. stage-centralus xfer reaches Fourth Coffee only on 443 (001-https-xfer-to-fourthcoffeeFs), so 5671 is new.
+  outcome: draft
+  rules:
+  - env_site: stage-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: amqps-xfer-to-fourthcoffeeMq
+    sources: [10.103.20.0/24]
+    destinations: [203.0.113.80/28]
+    ports: ['5671']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.103.20.0/24}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

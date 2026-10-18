@@ -77,6 +77,7 @@ MUTATIONS = [
     Mutation("skip the outcome word check", RUN, 'if reply["outcome"] != expected["outcome"]:', "if False:"),
     Mutation("unseal the test split", RUN, 'if split == "test" and not allow_test:', "if False:"),
     Mutation("count a category ticket twice", RUN, "row[1] += 1", "row[1] += 2"),
+    Mutation("hide labels pending review", RUN, 'pending = request.expected.get("review") == "pending"', "pending = False"),
 ]
 # Not listed: removing the 1-65535 port bounds. An out-of-range port is already
 # outside every approved range, so no score can change; that mutant is equivalent.

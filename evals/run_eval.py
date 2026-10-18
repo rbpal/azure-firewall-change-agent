@@ -1,7 +1,7 @@
 """Tier 2 runner: give each labelled ticket to an agent, score the reply, print a score sheet.
 
 Example: `uv run --python 3.11 python -m evals.run_eval --agent perfect` reads the
-40 validation files, hands each `ticket:` block to the perfect stand-in agent,
+48 validation files, hands each `ticket:` block to the perfect stand-in agent,
 scores every reply against its `expected:` block and prints the sheet. A ticket
 passes when the outcome word matches, Least-Privilege is pass or not_scored, and
 Abstention is pass. A pass is "complete" only if the draft is not narrower than
@@ -83,6 +83,7 @@ class TicketResult:
     expected_outcome: str
     reply_outcome: str
     verdict: Verdict
+    label_pending: bool = False  # the answer key carries `review: pending`: not yet checked by a person
 
 
 def load_requests(split: str = "validation", allow_test: bool = False) -> list[Request]:
@@ -133,7 +134,8 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False) -> li
         except Exception as error:  # a crashing agent fails its ticket, not the run
             verdict = Verdict(mistakes=["agent_error"], detail=[f"{type(error).__name__}: {error}"])
             outcome = "?"
-        results.append(TicketResult(request.number, request.category, request.expected["outcome"], outcome, verdict))
+        pending = request.expected.get("review") == "pending"
+        results.append(TicketResult(request.number, request.category, request.expected["outcome"], outcome, verdict, pending))
     return results
 
 
@@ -146,6 +148,7 @@ def summarise(results: list[TicketResult]) -> dict:
         "complete": sum(r.verdict.complete for r in results),
         "incomplete": sum(r.verdict.passed and not r.verdict.complete for r in results),
         "stops": sum(r.expected_outcome == "stop_and_ask" for r in results),
+        "labels_pending": sum(r.label_pending for r in results),
         "mistakes": {m: counts.get(m, 0) for m in MISTAKES},
         "by_category": _by_category(results),
     }
@@ -172,6 +175,8 @@ def format_report(results: list[TicketResult], split: str, agent_name: str) -> s
         f"Passed and complete               {s['complete']:>3} / {n}",
         f"Passed but incomplete             {s['incomplete']:>3} / {n}   (allows less than approved)",
         f"Passed, either way                {s['passed']:>3} / {n}",
+        *([f"Labels pending human review       {s['labels_pending']:>3} / {n}   (scored against unchecked answer keys)"]
+          if s["labels_pending"] else []),
         "",
         f"Missed stops                      {m['missed_stop']:>3} / {stops}   (must be 0)",
         f"Too wide (least privilege fail)   {m['too_wide']:>3} / {n}",
@@ -188,7 +193,7 @@ def format_report(results: list[TicketResult], split: str, agent_name: str) -> s
     lines += ["", "Per ticket"]
     for r in results:
         status = "PASS" if r.verdict.complete else "PASS-INCOMPLETE" if r.verdict.passed else "FAIL"
-        why = ", ".join(r.verdict.mistakes)
+        why = ", ".join(r.verdict.mistakes + (["label pending review"] if r.label_pending else []))
         lines.append(f"  {r.number}  {r.category:<40} {r.expected_outcome:<16} {r.reply_outcome:<16} {status} {why}".rstrip())
     return "\n".join(lines)
 

@@ -105,6 +105,14 @@ BAD = {
     "url with user and password": lambda t: t["destination"].__setitem__(0, {"url": "https://user:pw@localhost/"}),
     "url with port above 65535": lambda t: t["destination"].__setitem__(0, {"url": "https://www.cnn.com:70000/"}),
     "url with a space": lambda t: t["destination"].__setitem__(0, {"url": "https://www.cnn.com/a b"}),
+    "no change_sites": lambda t: t.pop("change_sites"),
+    "empty site list": lambda t: t["change_sites"].update(prod=[]),
+    "unknown site": lambda t: t["change_sites"].update(prod=["west"]),
+    "site listed twice": lambda t: t["change_sites"].update(prod=["primary", "primary"]),
+    "change_sites misses an environment": lambda t: t["change_sites"].pop("lab"),
+    "change_sites names an extra environment": lambda t: (t["environments"].remove("lab"), t["dr_site_built"].pop("lab")),
+    "dr_site_built misses an environment": lambda t: t["dr_site_built"].pop("lab"),
+    "DR change where DR is not built": lambda t: t["dr_site_built"].update(prod=False),
 }
 
 
@@ -112,6 +120,19 @@ BAD = {
 def test_bad_ticket_is_refused(ticket, mutate):
     mutate(ticket)
     assert ticket_errors(ticket) != []
+
+
+@pytest.mark.parametrize("sites", [["primary"], ["dr"], ["primary", "dr"]], ids=["primary", "dr", "both"])
+def test_each_scope_is_valid_where_dr_is_built(ticket, sites):
+    ticket["change_sites"]["prod"] = sites
+    assert ticket_errors(ticket) == []
+
+
+def test_primary_only_is_valid_where_dr_is_not_built(ticket):
+    # Separate answers: DR may be absent, and the ticket still changes primary.
+    ticket["dr_site_built"]["prod"] = False
+    ticket["change_sites"]["prod"] = ["primary"]
+    assert ticket_errors(ticket) == []
 
 
 def test_egress_icmp_is_valid(ticket):

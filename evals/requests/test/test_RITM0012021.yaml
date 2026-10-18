@@ -1,0 +1,46 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012021
+category: add-primary-only-dr-built
+why: New flow from ledg to fabrikam, lab primary only; lab DR is built but not in scope.
+ticket:
+  number: RITM0012021
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-08T08:40:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  change_sites:
+    lab: [primary]
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.16.0/24}
+  destination:
+  - {cidr: 203.0.113.32/28}
+  protocol: TCP
+  ports: ['443']
+  partner: Fabrikam
+  justification: The ledger databases in lab send files to Fabrikam. DR follows later.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 6110060
+  review: pending
+  note: >-
+    Lab primary only. Lab DR is built for ledg but is not in scope, so lab-centralus gets nothing. No rule in lab-eastus2 ledg or hub reaches Fabrikam (203.0.113.32/28).
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: https-ledg-to-fabrikamFs
+    sources: [10.106.16.0/24]
+    destinations: [203.0.113.32/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.16.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}

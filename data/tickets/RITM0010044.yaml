@@ -12,6 +12,8 @@ opened: "2026-10-08T10:05:00-04:00"   # US Eastern (EDT in October); quoted, or 
 environments: [dev]
 dr_site_built:
   dev: true
+change_sites:                # remove at both dev sites
+  dev: [primary, dr]
 
 sources:                     # the IP groups the existing rules use
   - {environment: dev, site: primary, ip_group: ipg-sett-dev}

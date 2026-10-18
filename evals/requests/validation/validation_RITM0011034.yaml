@@ -11,6 +11,8 @@ ticket:
   opened: '2026-10-08T16:40:00-04:00'
   environments: [stage]
   dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary, dr]
   sources:
   - {environment: stage, site: primary, cidr: 10.174.46.0/24}
   - {environment: stage, site: dr, cidr: 10.163.82.0/24}

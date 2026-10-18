@@ -13,6 +13,11 @@ dr_site_built:
   dev: true
   stage: true
   prod: true
+change_sites:                # the sites this ticket changes; DR existing does not put it in scope
+  lab: [primary, dr]
+  dev: [primary, dr]
+  stage: [primary, dr]
+  prod: [primary, dr]
 
 sources:                     # one range per environment and site
   - {environment: lab,   site: primary, cidr: 10.106.14.0/24}

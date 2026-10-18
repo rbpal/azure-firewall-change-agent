@@ -11,6 +11,8 @@ opened: "2026-10-08T08:40:00-04:00"   # US Eastern (EDT in October); quoted, or 
 environments: [prod]
 dr_site_built:
   prod: false                # prod primary only; no DR listener yet
+change_sites:
+  prod: [primary]
 
 sources:
   - {cidr: 203.0.113.16/28}  # Northwind; never 0.0.0.0/0

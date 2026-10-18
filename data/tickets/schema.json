@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "number", "item", "state", "requested_for", "opened",
-    "environments", "dr_site_built",
+    "environments", "dr_site_built", "change_sites",
     "sources", "destination", "protocol", "ports", "partner",
     "justification", "approvals", "assigned_to"
   ],
@@ -23,10 +23,23 @@
       "items": { "$ref": "#/$defs/environment" }
     },
     "dr_site_built": {
+      "description": "Per environment: does the application's DR site exist? A fact about the landing zone, checked against the network. It does not put DR in scope.",
       "type": "object",
       "minProperties": 1,
       "propertyNames": { "$ref": "#/$defs/environment" },
       "additionalProperties": { "type": "boolean" }
+    },
+    "change_sites": {
+      "description": "Per environment: the sites this ticket changes, primary, dr or both. Only these files are edited; an existing DR site is not in scope unless listed here.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/environment" },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "$ref": "#/$defs/site" }
+      }
     },
     "sources": {
       "type": "array",

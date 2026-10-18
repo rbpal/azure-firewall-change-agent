@@ -1,0 +1,48 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011048
+category: removal-dr-only
+why: Remove https-sett-to-lamnaFs in prod DR only; the primary copy stays.
+ticket:
+  number: RITM0011048
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-05T09:50:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  change_sites:
+    prod: [dr]
+  sources:
+  - {environment: prod, site: dr, cidr: 10.101.14.0/24}
+  destination:
+  - {cidr: 198.51.100.48/28}
+  protocol: TCP
+  ports: ['443']
+  partner: Lamna Healthcare
+  justification: The prod DR site no longer sends to Lamna Healthcare.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+  existing_rule: https-sett-to-lamnaFs
+expected:
+  labelled_against: 6110060
+  review: pending
+  note: >-
+    Prod DR only. The ticket names the rule. Rule 013-https-sett-to-lamnaFs matches the flow exactly in prod-centralus and is removed. The prod-eastus2 copy stays. Other sett rules to Lamna use other ports and stay.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: prod-centralus
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: https-sett-to-lamnaFs
+    sources: [10.101.14.0/24]
+    destinations: [198.51.100.48/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.101.14.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-centralus}

@@ -35,7 +35,7 @@ Azure Firewall adds a matching allow rule for the translated traffic itself. Do 
 - the source is `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block)
 - the destination is not a single internal host, or the host is not in the address plan
 - the port is already published on that firewall
-- the ticket marks "DR site built: Yes" but gives no DR host, or gives a DR host where DR is not built
+- a selected site has no internal host, or a host belongs to a site the ticket does not select
 - the protocol is anything other than TCP or UDP
 
 ## RB-02-6 — Draft, but mark a caution, when

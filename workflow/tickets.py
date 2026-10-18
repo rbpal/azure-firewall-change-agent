@@ -2,7 +2,9 @@
 
 Two layers. The JSON Schema in data/tickets/schema.json checks shape. The
 code below checks what a pattern cannot: a CIDR with host bits set, a port
-outside 1-65535, a range that runs high to low. Meaning (does this source
+outside 1-65535, a range that runs high to low, scope answers that do not cover
+exactly the ticket's environments, and a DR change asked for where the ticket
+itself says DR is not built. Meaning (does this source
 belong to this environment?) is checked later, against the address plan.
 """
 
@@ -44,6 +46,14 @@ def ticket_errors(ticket: dict) -> list[str]:
                     ipaddress.IPv4Network(address["cidr"], strict=True)
                 except ValueError as e:
                     errors.append(f"{field}/{i}/cidr: {e}")
+
+    envs = set(ticket["environments"])
+    for field in ("dr_site_built", "change_sites"):
+        if set(ticket[field]) != envs:
+            errors.append(f"{field}: answers {sorted(ticket[field])}, ticket names {sorted(envs)}")
+    for env, sites in ticket["change_sites"].items():
+        if "dr" in sites and ticket["dr_site_built"].get(env) is False:
+            errors.append(f"change_sites/{env}: asks for a DR change, but dr_site_built says {env} DR is not built")
 
     for port in ticket["ports"]:
         if port == "*":

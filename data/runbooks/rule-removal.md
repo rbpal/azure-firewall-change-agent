@@ -5,13 +5,13 @@ Do not use for: a partner leaving altogether (use RB-04).
 
 ## RB-03-1 — Find the rules that match the flow
 
-The ticket describes the traffic to remove: source, destination, protocol and ports. Call `duplicate_rule_check` with that flow at every environment and site in scope. A rule it marks `duplicate` allows exactly that traffic, and only such a rule may be deleted. A rule marked `covers` allows more than the ticket's flow; see RB-03-2.
+The ticket describes the traffic to remove: source, destination, protocol and ports. Call `duplicate_rule_check` with that flow at every selected site: the environments on the ticket, and for each one the sites under "Sites to change". A rule it marks `duplicate` allows exactly that traffic, and only such a rule may be deleted. A rule marked `covers` allows more than the ticket's flow; see RB-03-2.
 
 The ticket may also name the rule. Use the name only to confirm the match. The match decides, not the name.
 
 ## RB-03-2 — Delete only an exact match
 
-If a rule matches the ticket's flow exactly, delete it. Delete it at every environment and site in scope, including DR where the ticket marks DR as built (STD-COLL-05).
+If a rule matches the ticket's flow exactly, delete it. Delete it at every selected site, and only there (STD-COLL-05). A primary-only ticket leaves the DR copy in place, and a DR-only ticket leaves the primary copy. The copy at the other site is not a reason to stop.
 
 If a rule allows more than the ticket's flow, such as an extra source or port, do not trim it. Removing part of a rule changes it, and nobody approved that change. Escalate.
 
@@ -23,11 +23,11 @@ If the traffic is allowed only by a rule that exists in the live policy but not 
 
 ## RB-03-4 — Close the gap
 
-Delete the rule's entry. The workflow code then renumbers the rules after it in the same collection, so the numbers run from `001` with no gaps (STD-NAME-03). Only the index moves. Every rule keeps its name, fields and order, and other collections keep their numbers (STD-COLL-08).
+Delete the rule's entry. The workflow code then renumbers the rules after it in the same collection, in that file only, so the numbers run from `001` with no gaps (STD-NAME-03). Only the index moves. Every rule keeps its name, fields and order, and other collections keep their numbers (STD-COLL-08).
 
 ## RB-03-5 — Escalate instead of drafting when
 
 - a matching rule also allows other traffic the ticket does not mention
 - the rule is in the `hub` group, which serves every spoke
 - the ticket asks to delete or change an IP group; IP groups have their own approval process
-- the ticket's scope disagrees with where the rule exists, such as a rule found at a site the ticket does not name
+- a selected site has no exact match while another selected site does; a rule at a site the ticket does not select is not a reason to escalate

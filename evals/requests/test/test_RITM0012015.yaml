@@ -1,8 +1,8 @@
 # Eval request. Synthetic; all names and addresses are fictional.
 # The ticket block is written by evals/make_requests.py; expected is written by hand.
 id: RITM0012015
-category: dr-answer-contradicts-sources
-why: DR answer is No for prod but a DR source is given.
+category: sites-contradict-addresses
+why: Ticket changes prod primary only but also gives a DR source.
 ticket:
   number: RITM0012015
   item: Firewall Change Request
@@ -10,7 +10,9 @@ ticket:
   requested_for: Jamie Ortiz (Contoso integration)
   opened: '2026-10-05T14:10:00-04:00'
   environments: [prod]
-  dr_site_built: {prod: false}
+  dr_site_built: {prod: true}
+  change_sites:
+    prod: [primary]
   sources:
   - {environment: prod, site: primary, cidr: 10.100.20.0/24}
   - {environment: prod, site: dr, cidr: 10.101.20.0/24}
@@ -28,9 +30,9 @@ ticket:
 expected:
   labelled_against: 6110060
   note: >-
-    DR site built is No for prod, but the ticket gives a prod DR source, 10.101.20.0/24.
+    The ticket changes prod primary only, but also gives a prod DR source, 10.101.20.0/24.
   outcome: stop_and_ask
-  reason: dr_no_but_dr_source
+  reason: address_for_unselected_site
   rules: []
   tools:
   - {tool: locate_address_for_env_site, address: 10.100.20.0/24}

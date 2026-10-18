@@ -11,6 +11,9 @@ ticket:
   opened: '2026-10-05T10:10:00-04:00'
   environments: [dev, prod]
   dr_site_built: {dev: false, prod: true}
+  change_sites:
+    dev: [primary]
+    prod: [primary, dr]
   sources:
   - {environment: dev, site: primary, cidr: 10.104.17.0/24}
   - {environment: prod, site: primary, cidr: 10.100.17.0/24}

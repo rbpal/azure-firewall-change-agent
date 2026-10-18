@@ -5,7 +5,7 @@ Do not use for: removing one rule while the partner stays (use RB-03).
 
 ## RB-04-1 — Confirm the partner and the scope
 
-The ticket names the partner. It must be a partner in the partner list. The scope is the environments on the ticket, usually all of them, with DR where built (STD-COLL-05).
+The ticket names the partner. It must be a partner in the partner list. The scope is the selected sites of the environments on the ticket, usually all of them at both sites (STD-COLL-05). Rules at sites the ticket does not select stay.
 
 ## RB-04-2 — Find every rule for the partner
 

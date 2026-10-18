@@ -110,10 +110,73 @@ def test_a_bad_draft_is_refused(change, error):
         insert(SETT, "sett", {**NETWORK, **change})
 
 
-def test_a_missing_collection_is_refused_for_now():
-    """Creating a new collection is not built yet, so a draft for one stops with a clear message."""
-    with pytest.raises(DraftError, match="not found"):
-        insert(SETT, "sett", {**DNAT, "collection": "allow-sett-dnat-rules"})
+LAB_XFER = "infra/envs/lab-eastus2/firewall_policy_rule_collection_groups/xfer.tfvars"
+
+
+@pytest.mark.parametrize("draft, block, follows", [
+    ({**DNAT, "collection": "allow-xfer-dnat-rules"}, "nat_rule_collections", None),
+    ({**APP, "collection": "allow-xfer-app-rules", "name": "https-xfer-to-contosoApi"}, "application_rule_collections",
+     "network_rule_collections"),
+], ids=["dnat-before-network", "app-after-network"])
+def test_a_missing_collection_is_created_in_azure_order(draft, block, follows):
+    """lab-eastus2 xfer has only network rules: DNAT goes before them, application after."""
+    before, after = insert(LAB_XFER, "xfer", draft)
+    assert block not in before
+    if follows:
+        assert after.index(follows) < after.index(block)
+    else:
+        assert after.index(block) < after.index("network_rule_collections")
+    assert f'"001-{draft["name"]}" = {{' in after
+
+
+@pytest.mark.skipif(TERRAFORM is None, reason="terraform not installed")
+def test_a_created_collection_passes_terraform_fmt_and_keeps_the_rest():
+    """The new collection and its first rule are in fmt layout; the old network rules are unchanged."""
+    before, after = insert(LAB_XFER, "xfer", {**DNAT, "collection": "allow-xfer-dnat-rules"})
+    assert fmt(after) == after
+    net = lambda t: t[t.index("  network_rule_collections"):]
+    assert net(after) == net(before)
+    assert "    }\n  }\n\n  network_rule_collections = {\n" in after  # a blank line between blocks, as in the repo
+    assert """    allow-xfer-dnat-rules = {
+      name     = "allow-xfer-dnat-rules"
+      priority = 1000
+      action   = "Dnat"
+""" in after
+
+
+@pytest.mark.parametrize("change", ["priority", "extra", "lost"])
+def test_the_added_collection_check_catches_any_other_change(change):
+    """If adding a collection ever gives a wrong priority, an extra rule or loses a collection, it stops."""
+    from workflow.tfvars_writer import _check_added
+    from data_readers.read_env_site_ipgroup import parse_rules
+    text = (REPO / LAB_XFER).read_text()
+    before = parse_rules(text, "xfer", LAB_XFER)
+    new = {"type": "dnat", "name": "allow-xfer-dnat-rules", "priority": 1000, "action": "Dnat", "rules": []}
+    _check_added(before, {**before, "collections": [new] + before["collections"]}, "dnat", new["name"], LAB_XFER)
+    bad = {"priority": [{**new, "priority": 900}] + before["collections"],
+           "extra": [{**new, "rules": [{"key": "001-x"}]}] + before["collections"],
+           "lost": [new]}[change]
+    with pytest.raises(DraftError, match="changed something else"):
+        _check_added(before, {**before, "collections": bad}, "dnat", new["name"], LAB_XFER)
+
+
+def test_adding_a_collection_always_runs_its_check(monkeypatch):
+    """The insert cannot skip the added-collection check."""
+    import workflow.tfvars_writer as w
+    def refuse(*args):
+        """Stand in for a check that finds a problem."""
+        raise DraftError("check ran")
+    monkeypatch.setattr(w, "_check_added", refuse)
+    with pytest.raises(DraftError, match="check ran"):
+        insert(LAB_XFER, "xfer", {**DNAT, "collection": "allow-xfer-dnat-rules"})
+
+
+def test_a_block_with_the_wrong_collection_is_refused():
+    """A network block holding a differently named collection is a standards break, not a place to add one."""
+    text = (REPO / LAB_XFER).read_text().replace("allow-xfer-network-rules", "allow-xfer-misc-rules")
+    from workflow.tfvars_writer import add_collection
+    with pytest.raises(DraftError, match="one per type"):
+        add_collection(text, "xfer", "network", LAB_XFER)
 
 
 def test_a_dnat_rule_needs_exactly_one_destination():
@@ -154,7 +217,7 @@ def test_write_rule_writes_the_file_on_disk(tmp_path):
 
 
 def _label_rules():
-    """Every add rule in the validation labels whose collection already exists in its file."""
+    """Every add rule in the validation labels, including those whose collection must be created."""
     out = []
     for p in sorted((REPO / "evals" / "requests" / "validation").glob("*.yaml")):
         e = yaml.safe_load(p.read_text())["expected"]
@@ -162,8 +225,7 @@ def _label_rules():
             continue
         for r in e["rules"]:
             rel = f"infra/envs/{r['env_site']}/firewall_policy_rule_collection_groups/{r['spoke']}.tfvars"
-            if f"    {r['collection']} = {{" in (REPO / rel).read_text():
-                out.append(pytest.param(rel, r, id=f"{p.stem[-4:]}-{r['env_site']}"))
+            out.append(pytest.param(rel, r, id=f"{p.stem[-4:]}-{r['env_site']}"))
     return out
 
 

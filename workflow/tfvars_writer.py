@@ -1,4 +1,4 @@
-"""Insert one drafted rule into a spoke's rules file as text, changing nothing else.
+"""Insert or remove one rule in a spoke's rules file as text, changing nothing else.
 
 Example: a draft for `https-sett-to-northwindFs` in prod-eastus2 becomes the entry
 "024-https-sett-to-northwindFs" at the end of `allow-sett-network-rules` in
@@ -9,13 +9,16 @@ known env-sites and spokes, picks the index (rule_index.py) and writes the entry
 the layout `terraform fmt` produces, so the engineer reviews a clean one-entry diff.
 
 If the rule's collection does not exist yet, code creates it first, with the
-priority and action Tier 1 expects (decided 2026-10-13).
+priority and action Tier 1 expects (decided 2026-10-13). A removal deletes the
+matching entry and moves every later rule in that collection down one number, so
+the collection still runs from 001 with no gap (STD-COLL-08).
 
 Safety rule: an unknown env-site or spoke, a collection that does not match the
 rule type, a malformed name, a name already in the collection, or a value that
 could break out of an HCL string is refused. After the insert the file is parsed
 again: the new rule must be there with the drafted fields, and every other rule
-must be unchanged.
+must be unchanged. A removal is refused unless the file's rule matches the request
+field for field; after it, the other rules keep their names, order and fields.
 """
 
 from __future__ import annotations
@@ -208,16 +211,78 @@ def _check_read_back(before: dict, after: dict, collection: str, key: str, field
         raise DraftError(f"{path}: the insert changed something other than {key}")
 
 
-def write_rule(repo: Path, env_site: str, spoke: str, draft: dict) -> tuple[Path, str]:
-    """Add the draft to one env-site's spoke file on disk; return the path and the new key."""
+def remove_rule(text: str, spoke: str, draft: dict, path: str = "<tfvars>") -> tuple[str, str]:
+    """Return the file text without the matching rule, later rules renumbered; and the removed key."""
+    kind = rule_type(draft)
+    collection = collection_name(spoke, kind)
+    if draft.get("collection", collection) != collection:
+        raise DraftError(f"draft names collection {draft['collection']!r}; a {kind} rule in {spoke} is in {collection}")
+    fields = rule_fields(draft)
+    before = parse_rules(text, spoke, path)
+    rules = next((c["rules"] for c in before["collections"] if c["name"] == collection), [])
+    found = [r for r in rules if r["name"] == fields["name"]]
+    if not found:
+        raise DraftError(f"{path}: {collection} has no rule named {fields['name']}")
+    key = found[0]["key"]
+    if {k: v for k, v in found[0].items() if k != "key"} != fields:
+        raise DraftError(f"{path}: {key} does not match the removal request field for field")
+    removed = int(key[:3])
+
+    lines = text.splitlines(keepends=True)
+    start = lines.index(f"    {collection} = {{\n")
+    close = _rules_close(lines, collection, path)
+    first = lines.index(f'{ENTRY_INDENT}"{key}" = {{\n', start, close)
+    last = lines.index(f"{ENTRY_INDENT}}}\n", first)
+    renumbered = []
+    for line in lines[last + 1:close]:
+        found_key = re.match(rf'^{ENTRY_INDENT}"(\d{{3}})-([^"]+)" = {{\n$', line)
+        if found_key and int(found_key.group(1)) > removed:
+            line = f'{ENTRY_INDENT}"{int(found_key.group(1)) - 1:03d}-{found_key.group(2)}" = {{\n'
+        renumbered.append(line)
+    new_text = "".join(lines[:first] + renumbered + lines[close:])
+    _check_removed(before, parse_rules(new_text, spoke, path), collection, key, path)
+    return new_text, key
+
+
+def _check_removed(before: dict, after: dict, collection: str, key: str, path: str) -> None:
+    """Confirm one rule left, later keys moved down by one, and nothing else changed."""
+    removed = int(key[:3])
+    expected = []
+    for c in before["collections"]:
+        c = dict(c)
+        if c["name"] == collection:
+            kept = [r for r in c["rules"] if r["key"] != key]
+            c["rules"] = [{**r, "key": f"{int(r['key'][:3]) - (int(r['key'][:3]) > removed):03d}{r['key'][3:]}"}
+                          for r in kept]
+        expected.append(c)
+    if after["collections"] != expected or {k: v for k, v in after.items() if k != "collections"} != \
+            {k: v for k, v in before.items() if k != "collections"}:
+        raise DraftError(f"{path}: removing {key} changed something other than that rule and the later numbers")
+
+
+def spoke_path(repo: Path, env_site: str, spoke: str) -> tuple[Path, str]:
+    """Build a spoke file's path from routing.yaml, refusing unknown env-sites and spokes."""
     hubs = load_hubs(LocalSource(repo))
     if env_site not in hubs:
         raise DraftError(f"unknown env-site {env_site!r}")
     if spoke not in hubs[env_site].spokes:
         raise DraftError(f"spoke {spoke!r} is not routed through {env_site}")
     rel = RULES_FILE.format(env_site=env_site, name=spoke)
-    path = Path(repo) / rel
+    return Path(repo) / rel, rel
+
+
+def write_rule(repo: Path, env_site: str, spoke: str, draft: dict) -> tuple[Path, str]:
+    """Add the draft to one env-site's spoke file on disk; return the path and the new key."""
+    path, rel = spoke_path(repo, env_site, spoke)
     text = path.read_text()
     index = next_index(text, spoke, rule_type(draft), rel)
     path.write_text(insert_rule(text, spoke, draft, index, rel))
     return path, f"{index}-{draft['name']}"
+
+
+def write_removal(repo: Path, env_site: str, spoke: str, draft: dict) -> tuple[Path, str]:
+    """Remove the matching rule from one env-site's spoke file on disk; return the path and the removed key."""
+    path, rel = spoke_path(repo, env_site, spoke)
+    new_text, key = remove_rule(path.read_text(), spoke, draft, rel)
+    path.write_text(new_text)
+    return path, key

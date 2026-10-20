@@ -13,7 +13,7 @@ A rule that exists only in the live policy does not count. It was added outside 
 
 The ticket is already approved, and that approval covers which systems may talk to each other. Do not re-check it or go back to the partner. Take the source, destination and ports from the ticket exactly as approved. Never widen, narrow or swap them.
 
-Put the ticket's addresses into the rule as given (STD-COLL-03). If the ticket names an IP group instead, use the group. Groups are approved through their own process. If the group does not exist, escalate rather than create it.
+Put the ticket's addresses into the rule as given, in the ticket's type (STD-COLL-03). A CIDR on the ticket goes into the rule as that CIDR. An IP group goes in only when the ticket names it, and then by name. The two never mix: never put a group in place of a CIDR, or a CIDR in place of a group. Groups are approved through their own process. If the named group does not exist, escalate rather than create it.
 
 ## RB-01-3 — Name the ports
 

@@ -33,7 +33,15 @@ Enforced: Tier 1
 
 ## STD-COLL-03 — Addresses match the ticket
 
-A rule uses the IP addresses, subnets or CIDRs the approved ticket gives, exactly as written. If the ticket names an IP group, the rule uses that group, and the group must already exist. No address in the rule may be missing from the ticket.
+A rule uses the addresses the approved ticket gives, exactly as written, and in the same type. The ticket gives each source and destination as one type: a CIDR, an IP group, a hostname or a URL. That type is part of what the groups approved.
+
+- A CIDR approves that CIDR. The rule writes it as an address (`source_addresses`, `destination_addresses`).
+- An IP group approves that group, by name. The ticket must name it, and the rule writes it as an IP group (`source_ip_groups`, `destination_ip_groups`). The group must already exist.
+- The two never mix. A ticket asks for a group or for CIDRs, and the rule uses exactly that. This holds for sources and destinations alike.
+- The on-prem user groups `ipg-onprem-primary` and `ipg-onprem-secondary` follow the same rule. Either, or both together, may be a source or a destination when the ticket names them. They may be used at any Azure site the ticket selects: "primary" and "secondary" name the on-prem data centre, not the Azure site. A group holds many prefixes, and its members change through its own process, so it is a different approval from any CIDR.
+- This holds for removals too. A CIDR ticket matches only rules written with addresses, and an IP-group ticket only rules that name that group.
+
+No address in the rule may be missing from the ticket. The workflow code also refuses to write a draft whose rule uses a value or type the ticket does not approve.
 Enforced: Tier 1
 
 ## STD-COLL-04 — No open DNAT

@@ -9,6 +9,8 @@ The ticket describes the traffic to remove: source, destination, protocol and po
 
 The ticket may also name the rule. Use the name only to confirm the match. The match decides, not the name.
 
+Compare like with like (STD-COLL-03). A ticket that gives CIDRs matches only rules written with addresses. A ticket that names an IP group matches only rules that name that group. `duplicate_rule_check` expands groups into their addresses, so check the rule's type yourself; a rule of the other type is not a match.
+
 ## RB-03-2 — Delete only an exact match
 
 If a rule matches the ticket's flow exactly, delete it. Delete it at every selected site, and only there (STD-COLL-05). A primary-only ticket leaves the DR copy in place, and a DR-only ticket leaves the primary copy. The copy at the other site is not a reason to stop.

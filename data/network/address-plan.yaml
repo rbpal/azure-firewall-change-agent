@@ -501,3 +501,69 @@ ranges:
   holds: SFTP and partner file transfer
   vnet: vnet-xfer-lab-dr
   ip_group: ipg-xfer-lab-dr
+onprem:
+- cidr: 172.20.10.0/23
+  location: onprem-primary
+  kind: users-wired
+  holds: Head office floors 1-2
+  ip_group: ipg-onprem-primary
+- cidr: 172.20.12.0/23
+  location: onprem-primary
+  kind: users-wired
+  holds: Head office floors 3-4
+  ip_group: ipg-onprem-primary
+- cidr: 172.20.14.0/24
+  location: onprem-primary
+  kind: users-wired
+  holds: Operations centre
+  ip_group: ipg-onprem-primary
+- cidr: 172.20.16.0/24
+  location: onprem-primary
+  kind: users-wired
+  holds: Trading floor
+  ip_group: ipg-onprem-primary
+- cidr: 172.20.20.0/24
+  location: onprem-primary
+  kind: users-wired
+  holds: Developer workstations
+  ip_group: ipg-onprem-primary
+- cidr: 172.20.64.0/22
+  location: onprem-primary
+  kind: users-wireless
+  holds: Corporate Wi-Fi
+  ip_group: ipg-onprem-primary
+- cidr: 172.20.68.0/23
+  location: onprem-primary
+  kind: users-wireless
+  holds: Executive Wi-Fi
+  ip_group: ipg-onprem-primary
+- cidr: 172.20.96.0/24
+  location: onprem-primary
+  kind: users-vpn
+  holds: Remote access VPN pool
+  ip_group: ipg-onprem-primary
+- cidr: 172.24.10.0/23
+  location: onprem-secondary
+  kind: users-wired
+  holds: Branch office floors 1-2
+  ip_group: ipg-onprem-secondary
+- cidr: 172.24.12.0/24
+  location: onprem-secondary
+  kind: users-wired
+  holds: Contact centre
+  ip_group: ipg-onprem-secondary
+- cidr: 172.24.14.0/24
+  location: onprem-secondary
+  kind: users-wired
+  holds: Operations centre (standby)
+  ip_group: ipg-onprem-secondary
+- cidr: 172.24.64.0/22
+  location: onprem-secondary
+  kind: users-wireless
+  holds: Corporate Wi-Fi
+  ip_group: ipg-onprem-secondary
+- cidr: 172.24.96.0/24
+  location: onprem-secondary
+  kind: users-vpn
+  holds: Remote access VPN pool (standby)
+  ip_group: ipg-onprem-secondary

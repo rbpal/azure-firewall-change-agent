@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Dev primary only. Dev DR is built for rprt but is not in scope, so dev-centralus gets nothing. No rule in dev-eastus2 rprt or hub reaches Wingtip Toys (198.51.100.80/28).
   outcome: draft

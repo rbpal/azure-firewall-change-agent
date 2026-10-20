@@ -4,8 +4,8 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 72 varied tickets, 48 for validation and 24 for test, spread
-over 17 kinds of request, including changes to the primary site only, the DR
+Why: the eval needs 71 varied tickets, 47 for validation and 24 for test, spread
+over 19 kinds of request, including changes to the primary site only, the DR
 site only, or both. A script gives variety and the same output every run.
 
 Safety rule: this script writes tickets only. Every `expected:` block is written
@@ -81,6 +81,10 @@ CATEGORIES = [
     ("add-dr-only", 2, 1),
     ("removal-primary-only", 2, 1),
     ("removal-dr-only", 2, 1),
+    # Added 2026-10-18: a removal whose rule and ticket both use the CIDR.
+    ("removal-cidr-source", 1, 0),
+    # Added 2026-10-18: the ticket names the IP group, so removing the group-sourced rule is approved.
+    ("removal-ip-group-source", 1, 0),
 ]
 
 
@@ -433,6 +437,40 @@ def build_removal_dr_only(rng, net, used):
         f"The {env} DR site no longer sends to {net.partners[code]['name']}."
 
 
+def build_removal_cidr_source(rng, net, used):
+    """Remove, at prod DR only, a rule whose source is written as an address, not an IP group.
+
+    The ticket gives the CIDR and the rule is written as
+    source_addresses = ["10.101.16.0/24"], so the CIDR ticket removes the CIDR rule.
+    RITM0011050 is the IP-group counterpart.
+    """
+    env, spoke, code, svc = "prod", "ledg", "proseware", "Mq"
+    name = f"{SERVICES[svc][0]}-{spoke}-to-{code}{svc}"
+    assert all(name in net.rules.get((env, s, spoke), {}) for s in net.sites(env, spoke)), name
+    used.update({(spoke, code), ("rule", env, name)})
+    fields = only_site(egress(net, [env], spoke, code, svc), env, "dr")
+    fields["existing_rule"] = name
+    return f"Remove {name} in {env} DR only; its source is an address, not an IP group.", fields, \
+        f"The {env} DR site no longer sends to {net.partners[code]['name']}."
+
+
+def build_removal_ip_group_source(rng, net, used):
+    """Remove, at prod DR only, a rule whose source is an IP group, on a ticket that names that group.
+
+    The ticket names ipg-ledg-prod-dr, the group the rule uses, so the removal is
+    approved and drafted. RITM0011049 is the CIDR counterpart.
+    """
+    env, spoke, code, svc = "prod", "ledg", "northwind", "Mq"
+    name = f"{SERVICES[svc][0]}-{spoke}-to-{code}{svc}"
+    assert all(name in net.rules.get((env, s, spoke), {}) for s in net.sites(env, spoke)), name
+    used.update({(spoke, code), ("rule", env, name)})
+    fields = only_site(egress(net, [env], spoke, code, svc), env, "dr")
+    fields["sources"] = [{"environment": env, "site": "dr", "ip_group": f"ipg-{spoke}-{env}-dr"}]
+    fields["existing_rule"] = name
+    return f"Remove {name} in {env} DR only; the ticket names the IP group the rule uses.", fields, \
+        f"The {env} DR ledger servers in {fields['sources'][0]['ip_group']} no longer send to {net.partners[code]['name']}."
+
+
 BUILDERS = {name: globals()["build_" + name.replace("-", "_")] for name, _, _ in CATEGORIES}
 
 
@@ -473,6 +511,7 @@ def plan():
                 used.add(("split", split))
                 before = {u for u in used if len(u) == 2 and u[0] in PARTNER_SPOKES}
                 why, fields, justification = BUILDERS[name](rng, net, used)
+                justification = REVISED_JUSTIFICATIONS.get(number, justification)
                 used.update(("pair", split, *u) for u in used - before if len(u) == 2 and u[0] in PARTNER_SPOKES)
                 if name.startswith("removal"):
                     fields["_removal"] = True
@@ -501,10 +540,28 @@ def render(number, name, why, body):
     )
 
 
+# Retired 2026-10-18. Each gave CIDRs but pointed at a rule written with an IP group that
+# holds exactly that one CIDR. That only happens because the synthetic groups hold one
+# CIDR each; real groups hold many prefixes, and a ticket asks for either a group or
+# CIDRs, never one standing in for the other. plan() still builds them, so every other
+# number keeps its ticket; write() skips them.
+RETIRED = {"RITM0011022", "RITM0011024", "RITM0011047"}
+
+# Revised justifications, 2026-10-18. The builder text named the spoke's role ("SFTP and
+# partner file transfer"), which read as a different service from the AMQPS port asked for.
+# The structured fields are unchanged; only this free text is replaced.
+REVISED_JUSTIFICATIONS = {
+    "RITM0012022": "The stage DR xfer subnet (10.103.20.0/24) needs AMQPS messaging to Fourth Coffee"
+    " on TCP 5671 for the failover test.",
+}
+
+
 def write(out: Path) -> tuple[list[Path], list[Path]]:
-    """Write every request file that does not exist yet; return (written, kept)."""
+    """Write every request file that does not exist yet, except retired numbers; return (written, kept)."""
     written, kept = [], []
     for split, number, name, why, body in plan():
+        if number in RETIRED:
+            continue
         path = out / split / f"{split}_{number}.yaml"
         if path.exists():
             kept.append(path)

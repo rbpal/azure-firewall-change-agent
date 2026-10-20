@@ -75,8 +75,10 @@ def test_narrower_source_is_covered_not_duplicate():
 
 
 def test_ip_group_is_swapped_for_its_addresses():
+    """ipg-port-dev holds the port subnet and 13 on-prem user subnets, so the CIDR-only rule 001 does not cover it."""
     rule = {**AMQPS, "source_addresses": [], "source_ip_groups": ["ipg-port-dev"]}
-    assert keys(check(rule)) == [("duplicate", "001-amqps-port-to-lamnaMq")]
+    out = check(rule)
+    assert out["matches"] == [] and out["already_allowed"] is False
 
 
 def test_other_port_is_not_allowed():
@@ -100,10 +102,82 @@ def test_hub_file_is_checked():
     assert out["matches"][0]["file"].endswith("/hub.tfvars")
 
 
-def test_application_rule_duplicate_through_ip_group():
+def test_a_cidr_request_inside_a_group_rule_is_covered_but_not_like_for_like():
+    """Rule 001 names ipg-port-dev, which holds 10.104.17.0/24 and more: the firewall allows the traffic,
+    but a CIDR ticket is not met by a group rule (STD-COLL-03), so already_allowed is False."""
     rule = {"protocols": ["Https:443"], "source_addresses": ["10.104.17.0/24"],
             "destination_fqdns": ["api.fabrikam.example"]}
-    assert keys(check(rule, "application")) == [("duplicate", "001-https-port-to-fabrikamApi")]
+    out = check(rule, "application")
+    assert keys(out) == [("covers", "001-https-port-to-fabrikamApi")]
+    assert out["matches"][0]["like_for_like"] is False and out["already_allowed"] is False
+
+
+def test_a_request_naming_the_rules_group_is_a_like_for_like_duplicate():
+    rule = {"protocols": ["Https:443"], "source_ip_groups": ["ipg-port-dev"],
+            "destination_fqdns": ["api.fabrikam.example"]}
+    out = check(rule, "application")
+    assert keys(out) == [("duplicate", "001-https-port-to-fabrikamApi")]
+    assert out["matches"][0]["like_for_like"] is True and out["already_allowed"] is True
+
+
+ONPREM_RULES = """
+        "001-https-onprem-to-portalFs" = {
+          name                  = "https-onprem-to-portalFs"
+          protocols             = ["TCP"]
+          source_ip_groups      = ["ipg-onprem-primary", "ipg-onprem-secondary"]
+          destination_addresses = ["10.104.17.0/24"]
+          destination_ports     = ["443"]
+        }
+        "002-syslog-port-to-onpremPrimary" = {
+          name                  = "syslog-port-to-onpremPrimary"
+          protocols             = ["UDP"]
+          source_addresses      = ["10.104.17.0/24"]
+          destination_ip_groups = ["ipg-onprem-primary"]
+          destination_ports     = ["514"]
+        }
+"""
+
+
+@pytest.mark.parametrize("groups, relation, like", [
+    (["ipg-onprem-primary", "ipg-onprem-secondary"], "duplicate", True),
+    (["ipg-onprem-primary"], "covers", True),
+    (["ipg-onprem-secondary"], "covers", True),
+], ids=["both on-prem groups", "primary only", "secondary only"])
+def test_on_prem_groups_as_sources(groups, relation, like):
+    """Users at either on-prem site, or both, reaching the portal through rule 001."""
+    rule = {"protocols": ["TCP"], "source_ip_groups": groups,
+            "destination_addresses": ["10.104.17.0/24"], "destination_ports": ["443"]}
+    out = check(rule, source=port_file(ONPREM_RULES))
+    assert keys(out) == [(relation, "001-https-onprem-to-portalFs")]
+    assert out["matches"][0]["like_for_like"] is like and out["already_allowed"] is like
+
+
+def test_on_prem_group_as_destination():
+    rule = {"protocols": ["UDP"], "source_addresses": ["10.104.17.0/24"],
+            "destination_ip_groups": ["ipg-onprem-primary"], "destination_ports": ["514"]}
+    out = check(rule, source=port_file(ONPREM_RULES))
+    assert keys(out) == [("duplicate", "002-syslog-port-to-onpremPrimary")] and out["already_allowed"] is True
+
+
+def test_the_secondary_group_is_not_covered_by_a_primary_group_rule():
+    """Rule 002 sends to on-prem primary users only; the secondary group is a different set of subnets."""
+    rule = {"protocols": ["UDP"], "source_addresses": ["10.104.17.0/24"],
+            "destination_ip_groups": ["ipg-onprem-secondary"], "destination_ports": ["514"]}
+    assert check(rule, source=port_file(ONPREM_RULES))["matches"] == []
+
+
+@pytest.mark.parametrize("side", ["source", "destination"])
+def test_a_user_subnet_cidr_is_not_like_for_like_with_an_on_prem_group_rule(side):
+    """172.20.64.0/22 is in ipg-onprem-primary, but a CIDR request is never met by the group rule."""
+    if side == "source":
+        rule = {"protocols": ["TCP"], "source_addresses": ["172.20.64.0/22"],
+                "destination_addresses": ["10.104.17.0/24"], "destination_ports": ["443"]}
+    else:
+        rule = {"protocols": ["UDP"], "source_addresses": ["10.104.17.0/24"],
+                "destination_addresses": ["172.20.64.0/22"], "destination_ports": ["514"]}
+    out = check(rule, source=port_file(ONPREM_RULES))
+    assert [m["relation"] for m in out["matches"]] == ["covers"]
+    assert out["matches"][0]["like_for_like"] is False and out["already_allowed"] is False
 
 
 def test_application_rule_to_another_name_is_not_allowed():

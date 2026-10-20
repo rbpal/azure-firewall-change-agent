@@ -2,7 +2,8 @@
 
 Two layers. The JSON Schema in data/tickets/schema.json checks shape. The
 code below checks what a pattern cannot: a CIDR with host bits set, a port
-outside 1-65535, a range that runs high to low, scope answers that do not cover
+outside 1-65535, a range that runs high to low, an IP group placed at another
+env-site than its name says, scope answers that do not cover
 exactly the ticket's environments, and a DR change asked for where the ticket
 itself says DR is not built. Meaning (does this source
 belong to this environment?) is checked later, against the address plan.
@@ -30,6 +31,22 @@ def load_ticket(path: str | Path) -> dict:
         return yaml.safe_load(f)
 
 
+def _ip_group_errors(where: str, address: dict) -> list[str]:
+    """An internal group must sit at the env-site its name says; partner and on-prem groups have no env-site."""
+    name = address["ip_group"]
+    if name.startswith(("ipg-partner-", "ipg-onprem-")):  # usable at any selected Azure site
+        kind = "partner" if name.startswith("ipg-partner-") else "on-prem"
+        return [f"{where}: {kind} group {name} is outside every env-site, so it takes no environment or site"] \
+            if "environment" in address else []
+    env, dr = name.split("-")[2], name.endswith("-dr")
+    if "environment" not in address:
+        return [f"{where}: internal group {name} needs its environment and site"]
+    site = "dr" if dr else "primary"
+    if (address["environment"], address["site"]) != (env, site):
+        return [f"{where}: {name} belongs to {env} {site}, not {address['environment']} {address['site']}"]
+    return []
+
+
 def ticket_errors(ticket: dict) -> list[str]:
     """Every problem with the ticket, as readable strings. Empty means valid."""
     errors = [
@@ -46,6 +63,8 @@ def ticket_errors(ticket: dict) -> list[str]:
                     ipaddress.IPv4Network(address["cidr"], strict=True)
                 except ValueError as e:
                     errors.append(f"{field}/{i}/cidr: {e}")
+            if "ip_group" in address:
+                errors += _ip_group_errors(f"{field}/{i}", address)
 
     envs = set(ticket["environments"])
     for field in ("dr_site_built", "change_sites"):

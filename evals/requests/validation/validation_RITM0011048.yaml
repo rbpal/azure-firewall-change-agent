@@ -29,7 +29,6 @@ ticket:
   existing_rule: https-sett-to-lamnaFs
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Prod DR only. The ticket names the rule. Rule 013-https-sett-to-lamnaFs matches the flow exactly in prod-centralus and is removed. The prod-eastus2 copy stays. Other sett rules to Lamna use other ports and stay.
   outcome: draft

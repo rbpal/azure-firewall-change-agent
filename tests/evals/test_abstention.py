@@ -13,7 +13,7 @@ LABELS = {p.stem: yaml.safe_load(p.read_text())["expected"] for p in sorted(REQU
 STOPS = {k: v for k, v in LABELS.items() if v["outcome"] == "stop_and_ask"}
 REASONS = sorted({v["reason"] for v in STOPS.values()})
 DRAFT = LABELS["validation_RITM0011001"]
-ALREADY = LABELS["validation_RITM0011024"]
+ALREADY = LABELS["validation_RITM0011025"]
 STOP = LABELS["validation_RITM0011030"]  # env_mismatch
 
 

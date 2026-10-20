@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Lab primary only. Lab DR is built for ledg but is not in scope, so lab-centralus gets nothing. No rule in lab-eastus2 ledg or hub reaches Fabrikam (203.0.113.32/28).
   outcome: draft

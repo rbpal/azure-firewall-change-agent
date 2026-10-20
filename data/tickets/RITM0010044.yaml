@@ -28,6 +28,12 @@ existing_rule: https-sett-to-northwindApi   # optional; the requester knew it
 
 justification: |
   Settlement moved to the batch upload in RITM0010042. The API call is retired.
+  Remove rule https-sett-to-northwindApi at both dev sites: source ipg-sett-dev
+  at primary and ipg-sett-dev-dr at DR, to api.northwind.example on HTTPS 443.
+  The removal covers every member of both groups: the settlement spoke subnet
+  and the on-prem primary and secondary user subnets (wired, wireless and VPN).
+  Only these two rules are removed; any other rule that allows these members
+  to this destination is not changed by this ticket.
 
 approvals:
   - {group: security, approver: Sam Ortiz,   state: approved}

@@ -29,7 +29,6 @@ ticket:
   existing_rule: smtp-ledg-to-tailspinSmtp
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Prod primary only. The ticket names the rule. Rule 002-smtp-ledg-to-tailspinSmtp matches the flow exactly in prod-eastus2 and is removed. The prod-centralus copy stays.
   outcome: draft

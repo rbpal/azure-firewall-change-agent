@@ -9,7 +9,13 @@ It lists each existing rule that already allows all of the new rule's traffic.
 An empty list means no existing rule allows it, so the new rule is needed.
 A remove request uses the same answer: only a "duplicate" may be deleted.
 
-IP groups are swapped for their addresses before comparing.
+IP groups are swapped for their addresses before comparing, because that is what
+the firewall does. Each match also says whether it is like for like (STD-COLL-03):
+for a request that names IP groups, the existing rule names those same groups; for a
+request with addresses, the existing rule uses addresses, not groups. A ticket asks
+for a group or for addresses, never one in place of the other, so already_allowed
+counts only like-for-like matches. Other matches are still listed: they show what
+the firewall would allow, and a narrower rule below them is shadowed.
 A network rule can cover an application rule, because Azure checks network rules first.
 The maths is done here, in code, so the same input always gives the same answer.
 Each answer includes the commit it read.
@@ -162,6 +168,18 @@ def _destination_within(new: dict, existing: dict, groups: dict[str, list[str]])
     return not new_nets or _within(new_nets, _addresses(existing, "destination", groups))
 
 
+def _like_for_like(existing: dict, new: dict) -> bool:
+    """True when, on both sides, the existing rule uses the request's kind of address: the same IP groups, or addresses."""
+    for side in ("source", "destination"):
+        wanted = {g.lower() for g in new.get(f"{side}_ip_groups") or []}
+        held = {g.strip('"').lower() for g in existing.get(f"{side}_ip_groups") or []}
+        if wanted and not wanted <= held:
+            return False
+        if not wanted and held:
+            return False
+    return True
+
+
 def _check_new_rule(new_type, rule) -> dict:
     """Check the new rule's fields for its type and return a clean copy."""
     if new_type not in TYPES:
@@ -221,9 +239,10 @@ def duplicate_rule_check(caller, arguments: dict, source: Source) -> dict:
                 # Exact when each rule allows all of the other's traffic.
                 exact = c["type"] == new_type and _covers(new, new_type, existing, c["type"], groups)
                 matches.append({"relation": "duplicate" if exact else "covers", "key": existing["key"],
+                                "like_for_like": _like_for_like(existing, new),
                                 "type": c["type"], "collection": c["name"], "file": group["file"],
                                 "rule": {k: v for k, v in existing.items() if k != "key"}})
-    return {"env_site": env_site, "already_allowed": bool(matches), "matches": matches,
+    return {"env_site": env_site, "already_allowed": any(m["like_for_like"] for m in matches), "matches": matches,
             "source": {"files": [g["file"] for g in groups_read] + [IP_GROUPS_FILE.format(env_site=env_site)],
                        "commit": source.commit}}
 

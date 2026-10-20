@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Stage DR only; stage-eastus2 gets nothing. No rule in stage-centralus rprt or hub reaches Adventure Works (198.51.100.64/28).
   outcome: draft

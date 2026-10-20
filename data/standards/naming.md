@@ -39,6 +39,7 @@ Enforced: Tier 1
 
 Internal: `ipg-<spoke>-<env>[-dr]`, such as `ipg-sett-prod` or `ipg-sett-dev-dr`.
 Partner: `ipg-partner-<partner>`, such as `ipg-partner-northwind`.
+On-prem users: `ipg-onprem-primary` and `ipg-onprem-secondary`, the wired, wireless and VPN user subnets at the on-prem primary and on-prem secondary data centres. Each exists in every env-site with the same members. "Primary" and "secondary" name the on-prem site; they do not tie the group to the Azure primary or DR site.
 
 IP groups are created through their own approval process, never through a rule request.
 Enforced: Tier 1

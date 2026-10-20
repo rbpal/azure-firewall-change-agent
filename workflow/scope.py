@@ -12,6 +12,10 @@ and a rule is matched by name and fields, never by its index.
 
 Safety rule: every rule in the reply must sit at a selected site, every selected
 site must get a rule, and an add or removal must match the ticket's catalog item.
+Every source and destination must be one the ticket approves for that env-site,
+in the ticket's type: a CIDR within an approved CIDR, or an IP group or hostname
+the ticket names. A group is never accepted for a CIDR or a CIDR for a group,
+even when they hold the same addresses (STD-COLL-03).
 Otherwise nothing is written. All files are worked out in memory first and written
 only when every one succeeds, so a refusal leaves every file byte for byte as it was.
 Disk failures: before anything is replaced, each original's exact bytes are saved
@@ -29,9 +33,11 @@ rename, so a rename or a backup may not have reached the disk.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -47,6 +53,69 @@ class ScopeError(DraftError):
     """The reply and the ticket's selected sites disagree; nothing is written."""
 
 
+class ApprovalError(ScopeError):
+    """A reply rule uses an address, or an address type, the ticket does not approve; nothing is written."""
+
+
+KINDS = {"cidr": "a CIDR", "ip_group": "an IP group", "fqdn": "a hostname"}
+
+
+def _kind(value: str) -> str:
+    """The type of one address in a reply rule: cidr, ip_group or fqdn."""
+    try:
+        ipaddress.ip_network(value, strict=False)
+        return "cidr"
+    except ValueError:
+        return "ip_group" if value.lower().startswith("ipg-") else "fqdn"
+
+
+def _approved(entries: list[dict], env: str, site: str) -> list[tuple[str, str]]:
+    """The ticket's typed values for one env-site: internal entries at that site, plus every external entry."""
+    out = []
+    for a in entries:
+        if "environment" in a and (a["environment"], a["site"]) != (env, site):
+            continue
+        if "url" in a:
+            out.append(("fqdn", urlsplit(a["url"]).hostname))
+        else:
+            kind = next(k for k in ("cidr", "ip_group", "fqdn") if k in a)
+            out.append((kind, a[kind]))
+    return out
+
+
+def _not_approved(value: str, approved: list[tuple[str, str]]) -> str:
+    """Say why one reply address is not approved by the ticket, or return ''."""
+    kind = _kind(value)
+    for k, v in approved:
+        if k == kind == "cidr" and ipaddress.ip_network(value, strict=False).subnet_of(ipaddress.ip_network(v)):
+            return ""
+        if k == kind and k != "cidr" and v.lower() == value.lower():
+            return ""
+    given = ", ".join(f"{v} ({k.replace('_', ' ')})" for k, v in approved) or "nothing"
+    same = [v for k, v in approved if k == kind]
+    why = "is not on the ticket" if same else f"is {KINDS[kind]}, a type the ticket does not approve here"
+    return f"{value} {why}; the ticket approves {given} (STD-COLL-03)"
+
+
+def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
+    """Every reply address whose value or type the ticket does not approve at that rule's env-site."""
+    sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
+    errors = []
+    for rule in reply.get("rules") or []:
+        where = sites[rule["env_site"]]
+        env, site = where["environment"], where["site"]
+        checks = [("source", rule.get("sources") or [], ticket["sources"])]
+        if "translated_address" in rule:  # DNAT: the rule's destination is the firewall; the ticket's is the host
+            checks.append(("translated address", [rule["translated_address"]], ticket["destination"]))
+        else:
+            checks.append(("destination", rule.get("destinations") or [], ticket["destination"]))
+        for side, values, entries in checks:
+            approved = _approved(entries, env, site)
+            errors += [f"{rule['env_site']} {rule['name']}: {side} {why}"
+                       for v in values if (why := _not_approved(str(v), approved))]
+    return errors
+
+
 def selected_env_sites(repo: Path, ticket: dict) -> set[str]:
     """The env-sites the ticket changes, such as {"prod-centralus"}, from routing.yaml."""
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
@@ -54,8 +123,8 @@ def selected_env_sites(repo: Path, ticket: dict) -> set[str]:
     return {by_name[(env, site)] for env, chosen in ticket["change_sites"].items() for site in chosen}
 
 
-def plan_writes(repo: Path, ticket: dict, reply: dict) -> list[tuple[Path, str, str]]:
-    """Work out every changed file in memory; return (path, new text, key) per rule, or raise."""
+def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None) -> list[tuple[Path, str, str]]:
+    """Work out every changed file in memory, starting from `base` texts where given; return (path, new text, key) per rule."""
     if reply.get("outcome") != "draft":
         return []
     removal = reply.get("action") == "remove"
@@ -67,8 +136,11 @@ def plan_writes(repo: Path, ticket: dict, reply: dict) -> list[tuple[Path, str, 
         raise ScopeError(f"reply changes {sorted(named - scope)}, which the ticket does not select")
     if scope - named:
         raise ScopeError(f"ticket selects {sorted(scope - named)}, but the reply has no rule there")
+    errors = approval_errors(repo, ticket, reply)
+    if errors:
+        raise ApprovalError("reply uses addresses the ticket does not approve:\n  " + "\n  ".join(errors))
 
-    texts: dict[Path, str] = {}
+    texts: dict[Path, str] = dict(base or {})  # fix plans the new draft on the text from before the old one
     out = []
     for rule in reply["rules"]:
         path, rel = spoke_path(repo, rule["env_site"], rule["spoke"])
@@ -85,6 +157,26 @@ def plan_writes(repo: Path, ticket: dict, reply: dict) -> list[tuple[Path, str, 
 
 
 BACKUP = ".backup-"  # in the backup file's name; it never ends in .tfvars, so Terraform ignores it
+
+
+class BackupsRemainError(DraftError):
+    """Backups from an earlier failed write are still on disk; no new write may start until they are dealt with."""
+
+
+def leftover_backups(repo: Path) -> list[Path]:
+    """Every backup file left beside an env-site file by a failed or interrupted write."""
+    return sorted(p for p in (Path(repo) / "infra" / "envs").rglob(f".*{BACKUP}*") if p.is_file())
+
+
+def check_no_backups(repo: Path) -> None:
+    """Refuse to go on while any backup remains, naming each one and the file it belongs to."""
+    found = leftover_backups(repo)
+    if found:
+        lines = [f"  {b}  (original bytes of {b.parent / b.name[1:].split(BACKUP)[0]})" for b in found]
+        raise BackupsRemainError(
+            f"{len(found)} recovery backup(s) remain from an earlier write; no new write starts until each is dealt with:\n"
+            + "\n".join(lines)
+            + "\nCompare each with its file. Move the backup over the file to restore it, or delete the backup to keep the file.")
 
 
 class PartialWriteError(OSError):
@@ -143,6 +235,7 @@ def write_all(texts: dict[Path, str]) -> None:
 
 def apply_reply(repo: Path, ticket: dict, reply: dict) -> list[tuple[Path, str]]:
     """Write the reply into the selected sites' files only; return (path, key) per rule."""
+    check_no_backups(repo)
     writes = plan_writes(repo, ticket, reply)
     write_all({path: text for path, text, _ in writes})  # a later rule in the same file holds the latest text
     return [(path, key) for path, _, key in writes]

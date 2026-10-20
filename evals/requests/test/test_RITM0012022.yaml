@@ -20,7 +20,8 @@ ticket:
   protocol: TCP
   ports: ['5671']
   partner: Fourth Coffee
-  justification: The sftp and partner file transfer at the stage DR site need Fourth Coffee for the failover test.
+  justification: The stage DR xfer subnet (10.103.20.0/24) needs AMQPS messaging to Fourth Coffee on TCP 5671 for the failover
+    test.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}
@@ -28,7 +29,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Stage DR only; stage-eastus2 gets nothing. stage-centralus xfer reaches Fourth Coffee only on 443 (001-https-xfer-to-fourthcoffeeFs), so 5671 is new.
   outcome: draft

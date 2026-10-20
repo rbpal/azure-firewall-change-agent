@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Stage primary only. Stage DR is built for rprt but is not in the ticket's scope, so stage-centralus gets nothing. No rule in stage-eastus2 rprt or hub reaches Fourth Coffee (203.0.113.80/28).
   outcome: draft

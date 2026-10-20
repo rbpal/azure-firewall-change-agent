@@ -29,7 +29,6 @@ ticket:
   existing_rule: amqps-sett-to-woodgroveMq
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Lab DR only. The ticket names the rule. Rule 015-amqps-sett-to-woodgroveMq matches the flow exactly in lab-centralus and is removed. The lab-eastus2 copy stays.
   outcome: draft

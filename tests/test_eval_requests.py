@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from evals import make_requests
+from workflow.tfvars_writer import parse_rules
 from workflow.tickets import ticket_errors
 
 REQUESTS = make_requests.REQUESTS
@@ -41,10 +42,11 @@ def generated(tmp_path_factory):
 
 def test_script_writes_the_planned_mix(generated):
     counts = collections.Counter((p.parent.name, load(p)["category"]) for p in generated.glob("*/*.yaml"))
+    retired = collections.Counter(c for split, n, c, _, _ in make_requests.plan() if n in make_requests.RETIRED)
     for name, n_validation, n_test in make_requests.CATEGORIES:
-        assert counts[("validation", name)] == n_validation, name
+        assert counts[("validation", name)] == n_validation - retired[name], name
         assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 48
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 47
     assert sum(v for (split, _), v in counts.items() if split == "test") == 24
 
 
@@ -69,7 +71,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 72
+    assert written == [] and len(kept) == 71
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -83,7 +85,8 @@ def test_draft_requests_never_share_a_spoke_and_partner_across_splits(generated)
             continue
         t = request["ticket"]
         internal = t["destination"] if request["category"] == "inbound-dnat" else t["sources"]
-        key = (internal[0]["cidr"].split(".")[2], t["partner"])
+        first = internal[0]
+        key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"], t["partner"])
         split = path.parent.name
         assert seen.get(key, (split,))[0] == split, f"{path.name} repeats {seen[key][1]} from the other split"
         seen.setdefault(key, (split, path.name))
@@ -106,8 +109,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_72_committed_requests():
-    assert len(COMMITTED) == 72
+def test_there_are_71_committed_requests():
+    assert len(COMMITTED) == 71
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -164,3 +167,38 @@ def test_label_rules_touch_exactly_the_selected_sites(path):
 def test_every_request_is_labelled():
     unlabelled = [p.name for p in COMMITTED if load(p)["expected"] is None]
     assert unlabelled == []
+
+
+def _file_sources(env_site, spoke, name):
+    """How the committed rule writes its source: ("source_ip_groups" or "source_addresses", values)."""
+    path = Path("infra/envs") / env_site / "firewall_policy_rule_collection_groups" / f"{spoke}.tfvars"
+    text = (make_requests.REPO / path).read_text()
+    for c in parse_rules(text, spoke, str(path))["collections"]:
+        for rule in c["rules"]:
+            if rule["name"].strip('"') == name:
+                field = "source_ip_groups" if "source_ip_groups" in rule else "source_addresses"
+                return field, [v.strip('"') for v in rule[field]]
+    raise AssertionError(f"{name} is not in {path}")
+
+
+REMOVALS = [p for p in COMMITTED if (load(p)["expected"] or {}).get("action") == "remove"]
+
+
+@pytest.mark.parametrize("path", REMOVALS, ids=lambda p: p.name)
+def test_a_removal_label_keeps_the_source_form_its_rule_uses(path):
+    # An IP group and the address it holds resolve the same, but the label copies the file:
+    # a rule written with source_ip_groups is labelled by group name, one with source_addresses by address.
+    for rule in load(path)["expected"]["rules"]:
+        field, values = _file_sources(rule["env_site"], rule["spoke"], rule["name"])
+        assert rule["sources"] == values, f"{rule['env_site']} {rule['name']}: file has {field} = {values}"
+
+
+def test_validation_removals_cover_ip_group_and_address_sources():
+    forms = {_file_sources(r["env_site"], r["spoke"], r["name"])[0]
+             for p in REMOVALS if p.parent.name == "validation" for r in load(p)["expected"]["rules"]}
+    assert forms == {"source_ip_groups", "source_addresses"}
+
+
+def test_retired_numbers_are_never_written(generated):
+    names = {p.stem.split("_")[1] for p in generated.glob("*/*.yaml")}
+    assert make_requests.RETIRED and not names & make_requests.RETIRED

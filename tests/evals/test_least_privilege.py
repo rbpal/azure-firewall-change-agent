@@ -28,9 +28,10 @@ def reply(expected, **changes):
 NETWORK = label("1001")  # prod ledg to Proseware, TCP 22, two sites
 HOSTNAME = label("1015")  # lab xfer to api.litware.example, HTTPS 443
 DNAT = label("1020")  # inbound Wingtip to stage xfer SFTP host
-REMOVE_IPG = label("1022")  # removal whose sources are IP groups
+REMOVE_IPG = label("1050")  # removal whose ticket names the IP group the rule uses
+REMOVE_TWO = label("1021")  # removal at both lab sites, CIDR sources
 REMOVE = label("1023")  # removal with CIDR sources, one site
-ALREADY = label("1024")  # already allowed by a rule with IP group sources
+ALREADY = label("1025")  # already allowed by a rule with CIDR sources
 STOP = label("1030")  # stop_and_ask, env_mismatch
 
 
@@ -172,6 +173,19 @@ def test_a_different_ip_group_fails():
     assert score_least_privilege(expected, reply(expected, sources=["ipg-ledg-prod-dr"])).result == "fail"
 
 
+def test_an_ip_group_in_place_of_the_tickets_destination_cidr_fails():
+    """The same rule for destinations: a partner group is not the partner CIDR the ticket approved."""
+    score = score_least_privilege(NETWORK, reply(NETWORK, destinations=["ipg-partner-proseware"]))
+    assert score.result == "fail"
+    assert any("ipg-partner-proseware is an IP group the ticket does not give" in line for line in score.excess)
+
+
+def test_the_cidr_in_place_of_the_labelled_destination_group_fails():
+    """A label that names a destination group is not met by the group's CIDR."""
+    expected = reply(NETWORK, destinations=["ipg-partner-proseware"])
+    assert score_least_privilege(expected, reply(expected, destinations=["198.51.100.32/28"])).result == "fail"
+
+
 def test_the_cidr_in_place_of_the_labelled_ip_group_fails():
     """The scorer does not expand a group, so its CIDR is not the approved value."""
     expected = reply(NETWORK, sources=["ipg-ledg-prod"])
@@ -220,11 +234,11 @@ def test_removing_with_a_different_field_fails(changes):
 
 def test_removing_only_one_of_two_sites_fails():
     """Leaving the DR site's rule in place is an incomplete removal, and fails."""
-    out = copy.deepcopy(REMOVE_IPG)
+    out = copy.deepcopy(REMOVE_TWO)
     out["rules"].pop()
-    score = score_least_privilege(REMOVE_IPG, out)
+    score = score_least_privilege(REMOVE_TWO, out)
     assert score.result == "fail"
-    assert score.removal_mismatch == ["lab-centralus/xfer/allow-xfer-network-rules/sftp-xfer-to-woodgroveSftp: does not remove the ticket's rule"]
+    assert score.removal_mismatch == ["lab-centralus/sett/allow-sett-network-rules/amqps-sett-to-tailspinMq: does not remove the ticket's rule"]
 
 
 def test_removing_an_extra_rule_fails():
@@ -235,8 +249,8 @@ def test_removing_an_extra_rule_fails():
 
 
 def test_removing_with_the_groups_cidr_in_place_of_the_group_fails():
-    """The existing rule names ipg-xfer-lab; its CIDR is not the same rule."""
-    assert score_least_privilege(REMOVE_IPG, reply(REMOVE_IPG, sources=["10.106.20.0/24"])).result == "fail"
+    """The existing rule names ipg-ledg-prod-dr; its CIDR is not the same rule."""
+    assert score_least_privilege(REMOVE_IPG, reply(REMOVE_IPG, sources=["10.101.16.0/24"])).result == "fail"
 
 
 def test_a_removal_label_answered_with_an_add_fails():

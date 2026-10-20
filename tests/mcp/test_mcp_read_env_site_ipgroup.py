@@ -98,9 +98,23 @@ def test_dnat_collection_is_typed_dnat_and_listed_first():
     assert dnat["rules"][0]["translated_port"] == "22"
 
 
+ONPREM_PRIMARY = ["172.20.10.0/23", "172.20.12.0/23", "172.20.14.0/24", "172.20.16.0/24", "172.20.20.0/24",
+                  "172.20.64.0/22", "172.20.68.0/23", "172.20.96.0/24"]
+ONPREM_SECONDARY = ["172.24.10.0/23", "172.24.12.0/24", "172.24.14.0/24", "172.24.64.0/22", "172.24.96.0/24"]
+
+
 def test_ip_groups_map_names_to_cidrs():
+    """A spoke group holds its own subnet first, then every on-prem user subnet; it is a pool, not one CIDR."""
     groups = read_ip_groups(REAL, "dev-eastus2")
-    assert groups["ipg-port-dev"] == ["10.104.17.0/24"]
+    assert groups["ipg-port-dev"] == ["10.104.17.0/24"] + ONPREM_PRIMARY + ONPREM_SECONDARY
+
+
+@pytest.mark.parametrize("env_site", ENVS)
+def test_both_on_prem_groups_exist_in_every_env_site_with_the_same_members(env_site):
+    """On-prem membership does not depend on the Azure site: primary and DR env-sites hold identical groups."""
+    groups = read_ip_groups(REAL, env_site)
+    assert groups["ipg-onprem-primary"] == ONPREM_PRIMARY
+    assert groups["ipg-onprem-secondary"] == ONPREM_SECONDARY
 
 
 @pytest.mark.parametrize("env_site", ENVS)

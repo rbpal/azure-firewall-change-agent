@@ -113,6 +113,16 @@ BAD = {
     "change_sites names an extra environment": lambda t: (t["environments"].remove("lab"), t["dr_site_built"].pop("lab")),
     "dr_site_built misses an environment": lambda t: t["dr_site_built"].pop("lab"),
     "DR change where DR is not built": lambda t: t["dr_site_built"].update(prod=False),
+    "IP group at another site than its name": lambda t: t["sources"].__setitem__(
+        0, {"environment": "lab", "site": "primary", "ip_group": "ipg-sett-lab-dr"}),
+    "IP group in another environment": lambda t: t["sources"].__setitem__(
+        0, {"environment": "lab", "site": "primary", "ip_group": "ipg-sett-dev"}),
+    "internal IP group with no env-site": lambda t: t["destination"].append({"ip_group": "ipg-sett-prod"}),
+    "partner IP group given an env-site": lambda t: t["destination"].__setitem__(
+        0, {"environment": "prod", "site": "primary", "ip_group": "ipg-partner-northwind"}),
+    "on-prem IP group tied to an Azure site": lambda t: t["sources"].__setitem__(
+        0, {"environment": "lab", "site": "primary", "ip_group": "ipg-onprem-primary"}),
+    "unknown on-prem site": lambda t: t["sources"].__setitem__(0, {"ip_group": "ipg-onprem-tertiary"}),
 }
 
 
@@ -156,3 +166,19 @@ def test_unquoted_yaml_timestamp_is_refused(tmp_path):
     path = tmp_path / "t.yaml"
     path.write_text(text)
     assert any(e.startswith("opened") for e in ticket_errors(load_ticket(path)))
+
+
+def test_ip_groups_at_their_own_env_site_are_valid(ticket):
+    """An internal group at the site its name says, and a partner group with no env-site, both pass."""
+    first = ticket["sources"][0]
+    env, site = first["environment"], first["site"]
+    ticket["sources"][0] = {"environment": env, "site": site, "ip_group": f"ipg-sett-{env}{'-dr' if site == 'dr' else ''}"}
+    ticket["destination"] = [{"ip_group": "ipg-partner-northwind"}]
+    assert ticket_errors(ticket) == []
+
+
+@pytest.mark.parametrize("side", ["sources", "destination"])
+def test_both_on_prem_groups_may_be_named_on_either_side(ticket, side):
+    """Either on-prem group, or both, as source or destination, with no Azure site attached."""
+    ticket[side] = [{"ip_group": "ipg-onprem-primary"}, {"ip_group": "ipg-onprem-secondary"}]
+    assert ticket_errors(ticket) == []

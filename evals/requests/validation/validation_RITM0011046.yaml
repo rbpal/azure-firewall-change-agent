@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Prod primary only. Rule 008-smtp-sett-to-wingtipSmtp matches the flow exactly in prod-eastus2 and is removed. The prod-centralus copy is outside the scope and stays. Rule 007-https-sett-to-wingtipFs reaches Wingtip Toys on 443 and stays.
   outcome: draft

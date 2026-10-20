@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Lab primary only. Rule 008-smtp-sett-to-wingtipSmtp matches the flow exactly in lab-eastus2 and is removed; code renumbers the rules after it. The same rule in lab-centralus is outside the scope and stays. That is not a reason to stop.
   outcome: draft

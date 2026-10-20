@@ -112,7 +112,7 @@
     "environment": { "enum": ["lab", "dev", "stage", "prod"] },
     "site": { "enum": ["primary", "dr"] },
     "address": {
-      "description": "Exactly one of cidr, ip_group, fqdn or url. environment and site appear together, on the internal side of the flow. url is for a destination only: the address a requester pasted, with scheme, optional port and path. The rule uses its hostname and port; the path stays on the ticket, but no rule matches on it.",
+      "description": "Exactly one of cidr, ip_group, fqdn or url. The type is part of the approval: a cidr approves that CIDR, an ip_group approves that named group, and one is never swapped for the other, even when the group holds the same addresses (STD-COLL-03). environment and site appear together, on the internal side of the flow. url is for a destination only: the address a requester pasted, with scheme, optional port and path. The rule uses its hostname and port; the path stays on the ticket, but no rule matches on it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -120,7 +120,7 @@
           "type": "string",
           "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])/(3[0-2]|[12]?[0-9])$"
         },
-        "ip_group": { "type": "string", "pattern": "^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|partner-[a-z]+)$" },
+        "ip_group": { "type": "string", "pattern": "^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|partner-[a-z]+|onprem-(primary|secondary))$" },
         "fqdn": {
           "type": "string",
           "pattern": "^(\\*|(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)*[a-z]{2,63})$"

@@ -1,14 +1,14 @@
 # Eval request. Synthetic; all names and addresses are fictional.
 # The ticket block is written by evals/make_requests.py; expected is written by hand.
-id: RITM0011047
-category: removal-dr-only
-why: Remove amqps-ledg-to-northwindMq in prod DR only; the primary copy stays.
+id: RITM0011049
+category: removal-cidr-source
+why: Remove amqps-ledg-to-prosewareMq in prod DR only; its source is an address, not an IP group.
 ticket:
-  number: RITM0011047
+  number: RITM0011049
   item: Firewall Rule Removal
   state: approved
-  requested_for: Priya Shah (Contoso app owner)
-  opened: '2026-10-05T11:20:00-04:00'
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-05T09:50:00-04:00'
   environments: [prod]
   dr_site_built: {prod: true}
   change_sites:
@@ -16,31 +16,30 @@ ticket:
   sources:
   - {environment: prod, site: dr, cidr: 10.101.16.0/24}
   destination:
-  - {cidr: 203.0.113.16/28}
+  - {cidr: 198.51.100.32/28}
   protocol: TCP
   ports: ['5671']
-  partner: Northwind Traders
-  justification: The prod DR site no longer sends to Northwind Traders.
+  partner: Proseware
+  justification: The prod DR site no longer sends to Proseware.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
-  existing_rule: amqps-ledg-to-northwindMq
+  existing_rule: amqps-ledg-to-prosewareMq
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
-    Prod DR only. The ticket names the rule. In prod-centralus its source is IP group ipg-ledg-prod-dr, which holds exactly 10.101.16.0/24, so it matches the flow exactly and is removed. The prod-eastus2 copy stays.
+    Prod DR only. The ticket names the rule. In prod-centralus rule 005-amqps-ledg-to-prosewareMq has source_addresses = ["10.101.16.0/24"], written as an address, so the label keeps the address; it matches the flow exactly and is removed. The prod-eastus2 copy (source 10.100.16.0/24) stays. RITM0011050 is its IP-group twin: each label keeps the form its rule and ticket use.
   outcome: draft
   action: remove
   rules:
   - env_site: prod-centralus
     spoke: ledg
     collection: allow-ledg-network-rules
-    name: amqps-ledg-to-northwindMq
-    sources: [ipg-ledg-prod-dr]
-    destinations: [203.0.113.16/28]
+    name: amqps-ledg-to-prosewareMq
+    sources: [10.101.16.0/24]
+    destinations: [198.51.100.32/28]
     ports: ['5671']
     protocol: TCP
   tools:

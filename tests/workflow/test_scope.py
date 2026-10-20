@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from workflow.scope import BACKUP, PartialWriteError, ScopeError, apply_reply, selected_env_sites
+from workflow.scope import BACKUP, ApprovalError, PartialWriteError, ScopeError, apply_reply, selected_env_sites
 from workflow.tfvars_writer import DraftError, parse_rules
 from workflow.tickets import load_ticket, ticket_errors
 
@@ -243,3 +243,147 @@ def test_every_labelled_answer_changes_only_its_selected_files(repo, request_):
             for r in expected["rules"]}
     assert changed(before, repo) == want
     assert {Path(w).parts[2] for w in want} == selected
+
+
+def _label(number):
+    """One validation request's ticket and labelled answer."""
+    data = yaml.safe_load((REPO / "evals/requests/validation" / f"validation_{number}.yaml").read_text())
+    return data["ticket"], data["expected"]
+
+
+@pytest.mark.parametrize("number, wrong", [("RITM0011049", "ipg-ledg-prod-dr"), ("RITM0011050", "10.101.16.0/24")],
+                         ids=["CIDR ticket answered with the group", "group ticket answered with the CIDR"])
+def test_a_removal_in_the_other_source_type_is_refused(repo, number, wrong):
+    """ipg-ledg-prod-dr holds exactly 10.101.16.0/24, yet each ticket approves only its own type."""
+    t, reply_ = _label(number)
+    reply_["rules"][0]["sources"] = [wrong]
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="a type the ticket does not approve"):
+        apply_reply(repo, t, reply_)
+    assert changed(before, repo) == set()
+
+
+def typed_ticket(side, kind):
+    """A prod primary-only sett add ticket whose source or destination is given as a CIDR or an IP group."""
+    t = ticket("primary")
+    if side == "source" and kind == "ip_group":
+        t["sources"] = [{"environment": "prod", "site": "primary", "ip_group": "ipg-sett-prod"}]
+    if side == "destination" and kind == "ip_group":
+        t["destination"] = [{"ip_group": "ipg-partner-northwind"}]
+    assert ticket_errors(t) == []
+    return t
+
+
+SWAPS = {  # (side, ticket type, value the reply uses instead)
+    "source: CIDR approved, group used": ("source", "cidr", "ipg-sett-prod"),
+    "source: group approved, CIDR used": ("source", "ip_group", SOURCE[PRIMARY]),
+    "destination: CIDR approved, group used": ("destination", "cidr", "ipg-partner-northwind"),
+    "destination: group approved, CIDR used": ("destination", "ip_group", NORTHWIND["destinations"][0]),
+}
+
+
+@pytest.mark.parametrize("side, kind, value", SWAPS.values(), ids=SWAPS.keys())
+def test_an_unapproved_type_swap_is_refused(repo, side, kind, value):
+    r = reply([PRIMARY])
+    r["rules"][0]["sources" if side == "source" else "destinations"] = [value]
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="a type the ticket does not approve"):
+        apply_reply(repo, typed_ticket(side, kind), r)
+    assert changed(before, repo) == set()
+
+
+@pytest.mark.parametrize("side, field, group", [("source", "source_ip_groups", "ipg-sett-prod"),
+                                                ("destination", "destination_ip_groups", "ipg-partner-northwind")])
+def test_a_group_the_ticket_names_is_written_as_a_group(repo, side, field, group):
+    """The positive case: the ticket names the group, the reply uses it, and the file gets it as an IP group."""
+    r = reply([PRIMARY])
+    r["rules"][0]["sources" if side == "source" else "destinations"] = [group]
+    apply_reply(repo, typed_ticket(side, "ip_group"), r)
+    text = (repo / SPOKE_FILE.format(PRIMARY)).read_text()
+    block = text[text.index('"024-https-sett-to-northwindFs"'):]
+    assert f'{field}' in block.split("}")[0] and group in block.split("}")[0]
+
+
+@pytest.mark.parametrize("value, ok", [("10.100.14.0/25", True), ("10.100.0.0/16", False), ("10.100.15.0/24", False)],
+                         ids=["narrower CIDR", "wider CIDR", "other CIDR"])
+def test_a_cidr_must_sit_inside_the_approved_cidr(repo, value, ok):
+    r = reply([PRIMARY])
+    r["rules"][0]["sources"] = [value]
+    if ok:
+        apply_reply(repo, ticket("primary"), r)
+    else:
+        with pytest.raises(ApprovalError, match="is not on the ticket"):
+            apply_reply(repo, ticket("primary"), r)
+
+
+def test_a_source_from_the_other_site_is_refused(repo):
+    """Each env-site may use only its own approved source: the DR CIDR is not approved in a primary rule."""
+    r = reply([PRIMARY, DR])
+    r["rules"][0]["sources"] = [SOURCE[DR]]
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="is not on the ticket"):
+        apply_reply(repo, ticket("both"), r)
+    assert changed(before, repo) == set()
+
+
+def test_a_dnat_rule_must_translate_to_the_tickets_host(repo):
+    """For DNAT the rule's destination is the firewall; the approved internal host is the translated address."""
+    t, e = _label("RITM0011020")
+    e["rules"][0]["translated_address"] = "10.102.20.99"
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="translated address 10.102.20.99 is not on the ticket"):
+        apply_reply(repo, t, e)
+    assert changed(before, repo) == set()
+
+
+ONPREM_BOTH = [{"ip_group": "ipg-onprem-primary"}, {"ip_group": "ipg-onprem-secondary"}]
+
+
+def onprem_ticket(scope, side, entries):
+    """A prod sett add ticket whose sources or destination are the given on-prem entries, at the chosen Azure sites."""
+    t = ticket(scope)
+    if side == "source":
+        t["sources"] = entries
+    else:
+        t["destination"] = entries
+    assert ticket_errors(t) == []
+    return t
+
+
+@pytest.mark.parametrize("scope", SCOPES)
+@pytest.mark.parametrize("side", ["source", "destination"])
+def test_both_on_prem_groups_are_usable_at_any_selected_azure_site(repo, scope, side):
+    """On-prem primary and secondary groups are not tied to Azure primary or DR: both go into every selected file."""
+    sites = [SITE[s] for s in SCOPES[scope]]
+    r = reply(sites)
+    field = "sources" if side == "source" else "destinations"
+    for rule in r["rules"]:
+        rule[field] = ["ipg-onprem-primary", "ipg-onprem-secondary"]
+    before = snapshot(repo)
+    apply_reply(repo, onprem_ticket(scope, side, ONPREM_BOTH), r)
+    assert changed(before, repo) == {SPOKE_FILE.format(e) for e in sites}
+    for e in sites:
+        text = (repo / SPOKE_FILE.format(e)).read_text()
+        block = text[text.index('"024-https-sett-to-northwindFs"'):].split("}")[0]
+        assert f'{side}_ip_groups' in block and "ipg-onprem-primary" in block and "ipg-onprem-secondary" in block
+
+
+ONPREM_SWAPS = {  # (side, what the ticket names, what the reply uses)
+    "source: group named, user CIDR used": ("source", [{"ip_group": "ipg-onprem-primary"}], "172.20.64.0/22"),
+    "source: user CIDR named, group used": ("source", [{"cidr": "172.20.64.0/22"}], "ipg-onprem-primary"),
+    "source: primary named, secondary used": ("source", [{"ip_group": "ipg-onprem-primary"}], "ipg-onprem-secondary"),
+    "destination: group named, user CIDR used": ("destination", [{"ip_group": "ipg-onprem-secondary"}], "172.24.64.0/22"),
+    "destination: user CIDR named, group used": ("destination", [{"cidr": "172.24.64.0/22"}], "ipg-onprem-secondary"),
+    "destination: secondary named, primary used": ("destination", [{"ip_group": "ipg-onprem-secondary"}], "ipg-onprem-primary"),
+}
+
+
+@pytest.mark.parametrize("side, entries, value", ONPREM_SWAPS.values(), ids=ONPREM_SWAPS.keys())
+def test_an_on_prem_group_is_never_inferred_or_swapped(repo, side, entries, value):
+    """172.20.64.0/22 is in ipg-onprem-primary and 172.24.64.0/22 in ipg-onprem-secondary; neither stands in for the other."""
+    r = reply([PRIMARY])
+    r["rules"][0]["sources" if side == "source" else "destinations"] = [value]
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError):
+        apply_reply(repo, onprem_ticket("primary", side, entries), r)
+    assert changed(before, repo) == set()

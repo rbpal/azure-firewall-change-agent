@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 6110060
-  review: pending
   note: >-
     Prod DR only; prod-eastus2 gets nothing. prod-centralus sett has three rules to Fabrikam (203.0.113.32/28) on ports 587, 443 and 22, none on 5671, so the flow is new there.
   outcome: draft

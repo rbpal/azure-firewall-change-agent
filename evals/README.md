@@ -27,7 +27,7 @@ Scores from different versions are not comparable. Each version is fixed by a co
 | v1 | 2026-10-13 | 60 (40 validation, 20 test) | 13 | tickets `8958eb5`, labels `bd8588b` |
 | v2 | 2026-10-18 | 72 (48 validation, 24 test) | 17 | `be7d135` |
 | v3 | 2026-10-18 | 71 (47 validation, 24 test) | 19 | `cdd8f71` |
-| v4 | 2026-10-20 | 80 (50 validation, 30 test) | 28 | the commit that adds RITM0011051 and RITM0012025 |
+| v4 | 2026-10-20 | 80 (50 validation, 30 test) | 28 | `51df5fd` |
 
 v1 stays readable in git, for example `git show bd8588b:evals/requests/test/test_RITM0012015.yaml`.
 

@@ -27,6 +27,8 @@ The agent never creates, changes or deletes an IP group. Once the rules are gone
 
 ## RB-04-5 — Escalate instead of drafting when
 
-- the partner is not in the partner list
-- a rule names this partner together with another partner, so deleting it would cut off the other one too
-- a rule for the partner is in the `hub` group
+Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
+
+- the partner is not in the partner list: *no code yet*
+- a rule names this partner together with another partner, so deleting it would cut off the other one too: *no code yet*
+- a rule for the partner is in the `hub` group: *no code yet*

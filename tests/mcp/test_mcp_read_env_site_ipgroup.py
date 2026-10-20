@@ -104,9 +104,17 @@ ONPREM_SECONDARY = ["172.24.10.0/23", "172.24.12.0/24", "172.24.14.0/24", "172.2
 
 
 def test_ip_groups_map_names_to_cidrs():
-    """A spoke group holds its own subnet first, then every on-prem user subnet; it is a pool, not one CIDR."""
+    """A spoke group holds only its own subnet; on-prem users are only in the two on-prem groups (2026-10-20)."""
     groups = read_ip_groups(REAL, "dev-eastus2")
-    assert groups["ipg-port-dev"] == ["10.104.17.0/24"] + ONPREM_PRIMARY + ONPREM_SECONDARY
+    assert groups["ipg-port-dev"] == ["10.104.17.0/24"]
+
+
+@pytest.mark.parametrize("env_site", ENVS)
+def test_no_spoke_group_holds_an_on_prem_subnet(env_site):
+    """A spoke-group rule must never also open the flow to every on-prem user."""
+    onprem = set(ONPREM_PRIMARY + ONPREM_SECONDARY)
+    spoke_groups = {k: v for k, v in read_ip_groups(REAL, env_site).items() if not k.startswith("ipg-onprem-")}
+    assert spoke_groups and all(not onprem & set(v) for v in spoke_groups.values())
 
 
 @pytest.mark.parametrize("env_site", ENVS)

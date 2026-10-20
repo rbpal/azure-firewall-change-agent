@@ -20,9 +20,9 @@ Enforced: Tier 1
 Map key: `<index>-<service>-<source>-to-<destination>`. The rule's `name` is the key without the index.
 
 - `<service>` is the lower-case service or protocol, such as `https`, `ssh` or `sftp`.
-- `<source>` and `<destination>` are lowerCamelCase: a spoke code, a spoke plus a role, or a partner plus a system. Hub rules use `spokes` as the source.
+- `<source>` and `<destination>` are lowerCamelCase: a spoke code, a spoke plus a role, or a partner plus a system. Hub rules use `spokes` as the source. On-prem users are `onpremPrimary` or `onpremSecondary`, after the data centre, or `onprem` when the rule names both.
 
-Examples: `024-https-sett-to-northwindFs`, `001-https-sett-to-northwindApi`, `001-sftp-northwind-to-xferSftp`
+Examples: `024-https-sett-to-northwindFs`, `001-https-sett-to-northwindApi`, `001-sftp-northwind-to-xferSftp`, `005-https-onpremPrimary-to-portFs`
 
 The index is three digits, zero-padded, and unique within its collection. Each collection in a group, DNAT, network and application, counts on its own from `001`. The numbers run from `001` with no gaps. A new rule takes the next number after the last one. When a rule is removed, every rule after it in the same collection moves down one number, in the same order (STD-COLL-08).
 

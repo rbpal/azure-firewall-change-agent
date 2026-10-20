@@ -200,6 +200,17 @@ def test_rule_key_must_follow_the_pattern(plan):
     assert ("caution", "STD-NAME-03") in found(plan)
 
 
+@pytest.mark.parametrize("key, ok", [
+    ("005-https-onpremPrimary-to-portFs", True),
+    ("001-https-sett-to-northwindFs", True),
+    ("001-https-Onprem-to-portFs", False),
+    ("001-https-on_prem-to-portFs", False),
+])
+def test_rule_key_allows_a_lower_camel_case_source(key, ok):
+    """STD-NAME-03 names on-prem sources like onpremPrimary; a capital first letter or an underscore still fails."""
+    assert bool(tier1.RULE_KEY.match(key)) is ok
+
+
 def test_rule_indexes_must_run_without_gaps(plan):
     rules = plan["variables"]["ledg"]["value"]["network_rule_collections"]["allow-ledg-network-rules"]["rules"]
     last = sorted(rules)[-1]

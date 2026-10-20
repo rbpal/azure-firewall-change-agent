@@ -294,3 +294,47 @@ env_sites:
         for:
         - internet
         - private
+onprem:
+  onprem-primary:
+    connection: erc-onprem-primary
+    kind: expressroute
+    connected_hubs:
+    - vhub-prod-eastus2
+    - vhub-prod-centralus
+    - vhub-stage-eastus2
+    - vhub-stage-centralus
+    - vhub-dev-eastus2
+    - vhub-dev-centralus
+    - vhub-lab-eastus2
+    - vhub-lab-centralus
+    prefixes:
+    - 172.20.10.0/23
+    - 172.20.12.0/23
+    - 172.20.14.0/24
+    - 172.20.16.0/24
+    - 172.20.20.0/24
+    - 172.20.64.0/22
+    - 172.20.68.0/23
+    - 172.20.96.0/24
+    ip_group: ipg-onprem-primary
+    inspection: 'assumed, not verified: only the hub firewall of the Azure end of the flow inspects it'
+  onprem-secondary:
+    connection: erc-onprem-secondary
+    kind: expressroute
+    connected_hubs:
+    - vhub-prod-eastus2
+    - vhub-prod-centralus
+    - vhub-stage-eastus2
+    - vhub-stage-centralus
+    - vhub-dev-eastus2
+    - vhub-dev-centralus
+    - vhub-lab-eastus2
+    - vhub-lab-centralus
+    prefixes:
+    - 172.24.10.0/23
+    - 172.24.12.0/24
+    - 172.24.14.0/24
+    - 172.24.64.0/22
+    - 172.24.96.0/24
+    ip_group: ipg-onprem-secondary
+    inspection: 'assumed, not verified: only the hub firewall of the Azure end of the flow inspects it'

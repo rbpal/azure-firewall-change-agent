@@ -29,7 +29,10 @@ Delete the rule's entry. The workflow code then renumbers the rules after it in 
 
 ## RB-03-5 — Escalate instead of drafting when
 
-- a matching rule also allows other traffic the ticket does not mention
-- the rule is in the `hub` group, which serves every spoke
-- the ticket asks to delete or change an IP group; IP groups have their own approval process
-- a selected site has no exact match while another selected site does; a rule at a site the ticket does not select is not a reason to escalate
+Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
+
+- a matching rule also allows other traffic the ticket does not mention: *no code yet*
+- the rule is in the `hub` group, which serves every spoke: *no code yet*
+- the ticket asks to delete or change an IP group; IP groups have their own approval process: *no code yet*
+- a selected site has no exact match while another selected site does; a rule at a site the ticket does not select is not a reason to escalate: *no code yet*
+- any address check in RB-01-6 fails: the code given there

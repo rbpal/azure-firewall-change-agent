@@ -37,7 +37,7 @@ from data_readers.read_env_site_ipgroup import RULES_FILE, parse_rules  # noqa: 
 from policy.tier1 import KINDS, VAR_KEY  # noqa: E402
 from workflow.rule_index import collection_name, next_index  # noqa: E402
 
-NAME = re.compile(r"^[a-z0-9]+-[a-z]+-to-[a-z][a-zA-Z0-9]+$")  # STD-NAME-03, without the index
+NAME = re.compile(r"^[a-z0-9]+-[a-z][a-zA-Z0-9]*-to-[a-z][a-zA-Z0-9]+$")  # STD-NAME-03, without the index
 SAFE = re.compile(r"^[A-Za-z0-9.:/*_-]+$")  # no quotes, spaces, braces, $ or backslashes
 FQDN = re.compile(r"^(\*\.)?([a-z0-9-]+\.)+[a-z]{2,}$")
 APP_PROTOCOLS = {"HTTP": "Http", "HTTPS": "Https"}

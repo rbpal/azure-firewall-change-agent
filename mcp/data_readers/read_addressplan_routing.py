@@ -87,6 +87,43 @@ def load_ranges(source: Source) -> list[Range]:
 
 
 @dataclass(frozen=True)
+class OnPremRange:
+    """One on-prem user subnet: which data centre it is at, and how that site reaches Azure."""
+
+    network: ipaddress.IPv4Network
+    kind: str
+    location: str
+    holds: str | None = None
+    ip_group: str | None = None
+    connection: str | None = None
+
+
+def load_onprem(source: Source) -> list[OnPremRange]:
+    """Read the on-prem user subnets from the address plan, with each site's connection from routing."""
+    plan = yaml.safe_load(source.read(ADDRESS_PLAN))
+    links = (yaml.safe_load(source.read(ROUTING)) or {}).get("onprem") or {}
+    rows = (plan.get("onprem") if isinstance(plan, dict) else None) or []
+    out, seen = [], set()
+    for row in rows:
+        try:
+            net = ipaddress.IPv4Network(row["cidr"])
+            location = row["location"]
+            if location not in links:
+                raise NetworkDataError(f"on-prem site {location!r} for {net} has no connection in routing")
+            if not row["kind"].startswith("users-"):
+                raise NetworkDataError(f"unknown on-prem kind {row['kind']!r} for {net}")
+            r = OnPremRange(network=net, kind=row["kind"], location=location, holds=row.get("holds"),
+                            ip_group=row.get("ip_group"), connection=links[location].get("connection"))
+        except (KeyError, ValueError, TypeError) as exc:
+            raise NetworkDataError(f"bad on-prem row {row!r}: {exc}") from exc
+        if net in seen:
+            raise NetworkDataError(f"duplicate on-prem range {net}")
+        seen.add(net)
+        out.append(r)
+    return out
+
+
+@dataclass(frozen=True)
 class Hub:
     """One env-site's secured hub: its firewall, its policy and the spokes routed through it."""
 

@@ -96,13 +96,15 @@ def test_an_unknown_env_site_or_spoke_is_refused(env_site, spoke, error):
     ({"collection": "allow-sett-app-rules"}, "goes in allow-sett-network-rules"),
     ({"name": "024-https-sett-to-northwindFs"}, "STD-NAME-03"),
     ({"name": "Https Sett"}, "STD-NAME-03"),
+    ({"name": "https-Onprem-to-portFs"}, "STD-NAME-03"),
+    ({"name": "https-on_prem-to-portFs"}, "STD-NAME-03"),
     ({"sources": ['10.0.0.0/8"] }']}, "characters"),
     ({"destinations": ["${var.x}"]}, "characters"),
     ({"sources": ["10.100.14.1/24"]}, "not an address"),
     ({"sources": []}, "non-empty"),
     ({"protocol": "GRE"}, "not TCP"),
     ({"name": "amqps-sett-to-northwindMq"}, "already has a rule named"),
-], ids=["wrong-collection", "index-in-name", "bad-name", "quote-breakout", "interpolation",
+], ids=["wrong-collection", "index-in-name", "bad-name", "capital-source", "underscore-source", "quote-breakout", "interpolation",
         "host-bits", "no-sources", "bad-protocol", "name-exists"])
 def test_a_bad_draft_is_refused(change, error):
     """Each of these drafts stops the writer before any text changes."""

@@ -13,7 +13,7 @@ Each environment and site has its own firewall policy. It holds one rule collect
 | Network collection | `allow-<spoke>-network-rules` | 2000 |
 | Application collection | `allow-<spoke>-app-rules` | 3000 |
 
-A rule goes in the group of the spoke that owns its source. A DNAT rule goes in the group of the spoke that owns its translated address. A group leaves out any collection it has no rules for.
+A rule goes in the group of the spoke that owns its source. A DNAT rule goes in the group of the spoke that owns its translated address. A rule whose source is on-prem goes in the group of the spoke that owns its destination, at the destination's env-site (RB-05-4). A group leaves out any collection it has no rules for.
 
 Network and application collections use the action `Allow`. DNAT collections use `Dnat`. No collection uses `Deny`. With Allow only, the order of the groups that share priority 200 cannot change which traffic passes. A Deny rule would make that order matter, so it fails this check.
 

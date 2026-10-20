@@ -123,6 +123,14 @@ BAD = {
     "on-prem IP group tied to an Azure site": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-onprem-primary"}),
     "unknown on-prem site": lambda t: t["sources"].__setitem__(0, {"ip_group": "ipg-onprem-tertiary"}),
+    "on-prem CIDR at an unknown location": lambda t: t["sources"].__setitem__(
+        0, {"location": "onprem-tertiary", "cidr": "172.20.20.0/24"}),
+    "on-prem CIDR also given an Azure site": lambda t: t["sources"].__setitem__(
+        0, {"location": "onprem-primary", "environment": "prod", "site": "primary", "cidr": "172.20.20.0/24"}),
+    "location on an IP group": lambda t: t["sources"].__setitem__(
+        0, {"location": "onprem-primary", "ip_group": "ipg-onprem-primary"}),
+    "location on a hostname": lambda t: t["destination"].__setitem__(
+        0, {"location": "onprem-primary", "fqdn": "intranet.contoso.example"}),
 }
 
 
@@ -182,3 +190,25 @@ def test_both_on_prem_groups_may_be_named_on_either_side(ticket, side):
     """Either on-prem group, or both, as source or destination, with no Azure site attached."""
     ticket[side] = [{"ip_group": "ipg-onprem-primary"}, {"ip_group": "ipg-onprem-secondary"}]
     assert ticket_errors(ticket) == []
+
+
+def onprem_to_azure(ticket, source):
+    """Turn the sample into on-prem users reaching an Azure spoke on HTTPS."""
+    ticket["sources"] = [source]
+    ticket["destination"] = [{"environment": "prod", "site": "primary", "cidr": "10.100.17.0/24"}]
+    ticket["environments"], ticket["dr_site_built"], ticket["change_sites"] = ["prod"], {"prod": True}, {"prod": ["primary"]}
+    ticket["protocol"], ticket["ports"], ticket["partner"] = "HTTPS", ["443"], None
+    return ticket
+
+
+@pytest.mark.parametrize("source", [{"location": "onprem-primary", "cidr": "172.20.20.0/24"},
+                                    {"location": "onprem-secondary", "cidr": "172.24.96.0/24"},
+                                    {"ip_group": "ipg-onprem-primary"}], ids=["primary CIDR", "secondary CIDR", "group"])
+def test_onprem_source_is_internal_not_inbound(ticket, source):
+    """An on-prem source is internal, so HTTPS is allowed; only a fully external source is inbound DNAT."""
+    assert ticket_errors(onprem_to_azure(ticket, source)) == []
+
+
+def test_external_source_with_https_is_still_inbound_and_refused(ticket):
+    """The same ticket from a partner range is inbound DNAT, which takes TCP or UDP only."""
+    assert ticket_errors(onprem_to_azure(ticket, {"cidr": "203.0.113.16/28"})) != []

@@ -87,10 +87,14 @@
   },
   "allOf": [
     {
-      "$comment": "Inbound: no source is internal (none has environment). DNAT takes TCP or UDP only.",
+      "$comment": "Inbound: no source is internal. Internal means an Azure address (environment), an on-prem CIDR (location) or an on-prem IP group. DNAT takes TCP or UDP only.",
       "if": {
         "properties": {
-          "sources": { "not": { "contains": { "required": ["environment"] } } }
+          "sources": { "not": { "contains": { "anyOf": [
+            { "required": ["environment"] },
+            { "required": ["location"] },
+            { "required": ["ip_group"], "properties": { "ip_group": { "pattern": "^ipg-onprem-" } } }
+          ] } } }
         }
       },
       "then": { "properties": { "protocol": { "enum": ["TCP", "UDP"] } } }
@@ -112,7 +116,7 @@
     "environment": { "enum": ["lab", "dev", "stage", "prod"] },
     "site": { "enum": ["primary", "dr"] },
     "address": {
-      "description": "Exactly one of cidr, ip_group, fqdn or url. The type is part of the approval: a cidr approves that CIDR, an ip_group approves that named group, and one is never swapped for the other, even when the group holds the same addresses (STD-COLL-03). environment and site appear together, on the internal side of the flow. url is for a destination only: the address a requester pasted, with scheme, optional port and path. The rule uses its hostname and port; the path stays on the ticket, but no rule matches on it.",
+      "description": "Exactly one of cidr, ip_group, fqdn or url. The type is part of the approval: a cidr approves that CIDR, an ip_group approves that named group, and one is never swapped for the other, even when the group holds the same addresses (STD-COLL-03). environment and site appear together, on the internal Azure side of the flow. location (onprem-primary or onprem-secondary) marks an on-prem CIDR, and never appears with environment or site; an on-prem IP group names its data centre itself and takes no location. url is for a destination only: the address a requester pasted, with scheme, optional port and path. The rule uses its hostname and port; the path stays on the ticket, but no rule matches on it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -130,8 +134,11 @@
           "pattern": "^https?://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(/[^\\s]*)?$"
         },
         "environment": { "$ref": "#/$defs/environment" },
-        "site": { "$ref": "#/$defs/site" }
+        "site": { "$ref": "#/$defs/site" },
+        "location": { "enum": ["onprem-primary", "onprem-secondary"] }
       },
+      "if": { "required": ["location"] },
+      "then": { "required": ["cidr"], "not": { "anyOf": [{ "required": ["environment"] }, { "required": ["site"] }] } },
       "oneOf": [
         { "required": ["cidr"] },
         { "required": ["ip_group"] },

@@ -35,7 +35,7 @@ VAR_KEY = {"nat_rule_collection": "nat_rule_collections", "network_rule_collecti
            "application_rule_collection": "application_rule_collections"}
 GROUP_PRIORITY = 200
 SPOKE = re.compile(r"^[a-z]{4}$")
-RULE_KEY = re.compile(r"^(\d{3})-([a-z]+)-([a-z]+)-to-([a-z][a-zA-Z]+)$")
+RULE_KEY = re.compile(r"^(\d{3})-([a-z]+)-([a-z][a-zA-Z]*)-to-([a-z][a-zA-Z]+)$")
 IP_GROUP = re.compile(r"^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|partner-[a-z]+|onprem-(primary|secondary))$")
 TICKET = re.compile(r"(RITM|REQ|CHG|INC)-?\d+|\d{4}-?\d{2}-?\d{2}", re.IGNORECASE)
 OPEN = {"*", "0.0.0.0/0", "any", "Any"}

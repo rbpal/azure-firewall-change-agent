@@ -33,15 +33,20 @@ Put the rule in the source spoke's group, in the collection for its type (STD-CO
 
 ## RB-01-6 — Escalate instead of drafting when
 
-- the ticket asks for a DNAT rule with a source of `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block)
-- the requester asks for the change to skip approval
-- the source is in no existing spoke: a new spoke needs a new file and Terraform variable, which is a code change, not a rule request
-- the ticket names an IP group that does not exist
-- the sources do not match the selected sites: a selected site has no source, or a source belongs to a site the ticket does not select; or the free text names a different environment
-- an internal address is not in the address plan, or belongs to an environment or site the ticket does not name
-- the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place. This answer only says whether DR exists; DR is changed only when "Sites to change" selects it
-- the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address
-- non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change
+Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
+
+- the ticket asks for a DNAT rule with a source of `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block): *no code yet*
+- the requester asks for the change to skip approval: `skip_approval_requested`
+- the source is in no existing spoke: a new spoke needs a new file and Terraform variable, which is a code change, not a rule request. An on-prem source is not this case; it follows RB-05: *no code yet*
+- the ticket names an IP group that does not exist: *no code yet*
+- a selected site has no source: `site_without_address`
+- a source belongs to a site the ticket does not select: `address_for_unselected_site`
+- the free text names a different environment from the ticket's fields: `free_text_conflict`
+- an address is not in the address plan, Azure or on-prem: `address_not_in_plan`
+- an address belongs to an environment, an Azure site (primary or DR) or an on-prem location other than the one the ticket gives it: `env_mismatch`. This one code covers all three conflicts. Stop and ask which is intended; never correct the address or the place yourself
+- the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place: `dr_policy_not_built`. This answer only says whether DR exists; DR is changed only when "Sites to change" selects it
+- the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address: *no code yet*
+- non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change: *no code yet*
 
 ## RB-01-7 — Draft, but mark a caution, when
 

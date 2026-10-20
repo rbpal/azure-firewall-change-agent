@@ -167,6 +167,60 @@ def test_routing_entry_without_a_policy_is_a_network_data_error():
     with pytest.raises(NetworkDataError, match="no firewall or policy"):
         call("10.100.14.20", TextSource(REAL.read(ADDRESS_PLAN), routing))
 
+# ---- on-prem user subnets (address plan `onprem:`, routing `onprem:`)
+
+def test_onprem_user_address_names_its_data_centre_and_connection():
+    out = call("172.20.20.15")
+    m = out["match"]
+    assert (m["cidr"], m["kind"], m["location"]) == ("172.20.20.0/24", "users-wired", "onprem-primary")
+    assert m["connection"] == "erc-onprem-primary" and m["ip_group"] == "ipg-onprem-primary"
+    assert "reason" not in out
+
+
+def test_onprem_secondary_is_its_own_site():
+    m = call("172.24.96.0/24")["match"]
+    assert (m["location"], m["kind"], m["connection"]) == ("onprem-secondary", "users-vpn", "erc-onprem-secondary")
+
+
+def test_onprem_address_has_no_env_site_or_firewall_of_its_own():
+    m = call("172.20.64.1")["match"]
+    assert m["env_site"] is None and m["firewall"] is None and m["firewall_policy"] is None
+    assert "environment" not in m and "site" not in m
+    assert m["inspection"].startswith("assumed, not verified:")
+
+
+def test_onprem_gap_is_not_in_the_plan():
+    out = call("172.20.200.0/24")
+    assert out["match"] is None and out["covers"] == []
+    assert out["reason"] == "not in the address plan (Azure or on-prem)"
+
+
+def test_wide_onprem_cidr_lists_the_user_subnets_it_covers():
+    out = call("172.24.0.0/16")
+    assert out["match"] is None and "wider than every range" in out["reason"]
+    assert [c["cidr"] for c in out["covers"]] == ["172.24.10.0/23", "172.24.12.0/24", "172.24.14.0/24",
+                                                  "172.24.64.0/22", "172.24.96.0/24"]
+
+
+def test_every_onprem_prefix_in_routing_is_in_the_address_plan():
+    import yaml
+    plan = {r["cidr"]: r["location"] for r in yaml.safe_load(REAL.read(ADDRESS_PLAN))["onprem"]}
+    routing = yaml.safe_load(REAL.read(ROUTING))["onprem"]
+    assert {c: site for site, link in routing.items() for c in link["prefixes"]} == plan
+
+
+def test_onprem_site_without_a_connection_is_a_network_data_error():
+    routing = REAL.read(ROUTING).split("\nonprem:")[0] + "\n"
+    with pytest.raises(NetworkDataError, match="has no connection in routing"):
+        call("172.20.20.15", TextSource(REAL.read(ADDRESS_PLAN), routing))
+
+
+def test_onprem_row_with_unknown_kind_is_a_network_data_error():
+    plan = REAL.read(ADDRESS_PLAN).replace("kind: users-vpn", "kind: servers", 1)
+    with pytest.raises(NetworkDataError, match="unknown on-prem kind"):
+        call("10.100.14.20", TextSource(plan))
+
+
 # ---- through the gateway
 
 def test_gateway_passes_arguments_to_the_tool(allowed_context):

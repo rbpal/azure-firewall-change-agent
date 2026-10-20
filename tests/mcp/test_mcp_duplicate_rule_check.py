@@ -75,10 +75,12 @@ def test_narrower_source_is_covered_not_duplicate():
 
 
 def test_ip_group_is_swapped_for_its_addresses():
-    """ipg-port-dev holds the port subnet and 13 on-prem user subnets, so the CIDR-only rule 001 does not cover it."""
+    """ipg-port-dev holds only 10.104.17.0/24, so the CIDR rule 001 matches it, but a group request
+    is never met by an address rule (STD-COLL-03): not like-for-like, not already allowed."""
     rule = {**AMQPS, "source_addresses": [], "source_ip_groups": ["ipg-port-dev"]}
     out = check(rule)
-    assert out["matches"] == [] and out["already_allowed"] is False
+    assert keys(out) == [("duplicate", "001-amqps-port-to-lamnaMq")]
+    assert out["matches"][0]["like_for_like"] is False and out["already_allowed"] is False
 
 
 def test_other_port_is_not_allowed():
@@ -103,12 +105,12 @@ def test_hub_file_is_checked():
 
 
 def test_a_cidr_request_inside_a_group_rule_is_covered_but_not_like_for_like():
-    """Rule 001 names ipg-port-dev, which holds 10.104.17.0/24 and more: the firewall allows the traffic,
+    """Rule 001 names ipg-port-dev, which holds exactly 10.104.17.0/24: the firewall allows the traffic,
     but a CIDR ticket is not met by a group rule (STD-COLL-03), so already_allowed is False."""
     rule = {"protocols": ["Https:443"], "source_addresses": ["10.104.17.0/24"],
             "destination_fqdns": ["api.fabrikam.example"]}
     out = check(rule, "application")
-    assert keys(out) == [("covers", "001-https-port-to-fabrikamApi")]
+    assert keys(out) == [("duplicate", "001-https-port-to-fabrikamApi")]
     assert out["matches"][0]["like_for_like"] is False and out["already_allowed"] is False
 
 

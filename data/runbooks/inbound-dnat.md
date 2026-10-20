@@ -32,11 +32,16 @@ Azure Firewall adds a matching allow rule for the translated traffic itself. Do 
 
 ## RB-02-5 — Escalate instead of drafting when
 
-- the source is `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block)
-- the destination is not a single internal host, or the host is not in the address plan
-- the port is already published on that firewall
-- a selected site has no internal host, or a host belongs to a site the ticket does not select
-- the protocol is anything other than TCP or UDP
+Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
+
+- the source is `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block): *no code yet*
+- the destination is not a single internal host: *no code yet*
+- the host is not in the address plan: `address_not_in_plan`
+- the host belongs to an environment or site other than the one the ticket gives it: `env_mismatch` (RB-01-6)
+- the port is already published on that firewall: `port_already_published`
+- a selected site has no internal host: `site_without_address`
+- a host belongs to a site the ticket does not select: `address_for_unselected_site`
+- the protocol is anything other than TCP or UDP: *no code yet*
 
 ## RB-02-6 — Draft, but mark a caution, when
 

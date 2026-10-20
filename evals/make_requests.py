@@ -4,9 +4,9 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 71 varied tickets, 47 for validation and 24 for test, spread
-over 19 kinds of request, including changes to the primary site only, the DR
-site only, or both. A script gives variety and the same output every run.
+Why: the eval needs 80 varied tickets, 50 for validation and 30 for test, spread
+over 28 kinds of request, including changes to the primary site only, the DR
+site only, or both, IP groups, and on-prem users. A script gives variety and the same output every run.
 
 Safety rule: this script writes tickets only. Every `expected:` block is written
 by hand. The script never imports the agent's tools, so a bug in a tool cannot
@@ -85,6 +85,18 @@ CATEGORIES = [
     ("removal-cidr-source", 1, 0),
     # Added 2026-10-18: the ticket names the IP group, so removing the group-sourced rule is approved.
     ("removal-ip-group-source", 1, 0),
+    # Added 2026-10-20: on-prem users (RB-05). A rule with an on-prem source goes in the
+    # destination spoke's group, at the destination's env-site.
+    ("onprem-group-source", 1, 0),
+    ("onprem-cidr-source", 1, 0),
+    ("onprem-address-not-in-plan", 1, 0),
+    ("onprem-both-groups-source", 0, 1),
+    ("onprem-destination", 0, 1),
+    ("onprem-location-mismatch", 0, 1),
+    # Added 2026-10-20: IP-group cases for the test split, none a copy of a validation case.
+    ("add-ip-group-source", 0, 1),
+    ("already-allowed-ip-group", 0, 1),
+    ("removal-ip-group-destination", 0, 1),
 ]
 
 
@@ -471,6 +483,113 @@ def build_removal_ip_group_source(rng, net, used):
         f"The {env} DR ledger servers in {fields['sources'][0]['ip_group']} no longer send to {net.partners[code]['name']}."
 
 
+def onprem_to_spoke(net, env, sites, spoke, sources, svc):
+    """Ticket fields for on-prem users reaching one spoke at the chosen sites of one environment."""
+    _, protocol, ports = SERVICES[svc]
+    return {
+        "environments": [env],
+        "dr_site_built": {env: net.has_dr(env, spoke)},
+        "change_sites": {env: sites},
+        "sources": sources,
+        "destination": [{"environment": env, "site": s, "cidr": net.spoke_cidr[(env, s, spoke)]} for s in sites],
+        "protocol": protocol,
+        "ports": ports,
+        "partner": None,
+    }
+
+
+def build_onprem_group_source(rng, net, used):
+    """On-prem primary users, by IP group, reach the prod client portal at the primary site."""
+    fields = onprem_to_spoke(net, "prod", ["primary"], "port", [{"ip_group": "ipg-onprem-primary"}], "Fs")
+    return "On-prem primary users (ipg-onprem-primary) to the prod portal, primary only.", fields, \
+        "Staff at the head office in ipg-onprem-primary need the prod client portal on HTTPS for support work."
+
+
+def build_onprem_cidr_source(rng, net, used):
+    """One on-prem secondary user subnet, by CIDR, reaches the stage settlement servers at both sites."""
+    fields = onprem_to_spoke(net, "stage", ["primary", "dr"], "sett",
+                             [{"location": "onprem-secondary", "cidr": "172.24.12.0/24"}], "Fs")
+    return "On-prem secondary contact centre subnet (CIDR) to stage settlement, both sites.", fields, \
+        "The contact centre at the on-prem secondary site tests settlement screens in stage, at both sites."
+
+
+def build_onprem_address_not_in_plan(rng, net, used):
+    """An on-prem CIDR that no on-prem site in the address plan holds."""
+    fields = onprem_to_spoke(net, "dev", ["primary"], "ledg",
+                             [{"location": "onprem-primary", "cidr": "172.20.200.0/24"}], "Mq")
+    return "On-prem source range is outside the address plan's on-prem list.", fields, \
+        "A new lab floor at the head office needs to send messages to the dev ledger."
+
+
+def build_onprem_both_groups_source(rng, net, used):
+    """Both on-prem user groups reach the lab file transfer servers at both sites."""
+    fields = onprem_to_spoke(net, "lab", ["primary", "dr"], "xfer",
+                             [{"ip_group": "ipg-onprem-secondary"}, {"ip_group": "ipg-onprem-primary"}], "Sftp")
+    return "Both on-prem user groups to lab xfer SFTP, both sites.", fields, \
+        "Users at both on-prem data centres upload test files to the lab SFTP servers."
+
+
+def build_onprem_destination(rng, net, used):
+    """A dev spoke reaches the on-prem secondary users: the rule goes in the source spoke's group."""
+    _, protocol, ports = SERVICES["Fs"]
+    fields = {
+        "environments": ["dev"], "dr_site_built": {"dev": net.has_dr("dev", "rprt")}, "change_sites": {"dev": ["primary"]},
+        "sources": [{"environment": "dev", "site": "primary", "cidr": net.spoke_cidr[("dev", "primary", "rprt")]}],
+        "destination": [{"ip_group": "ipg-onprem-secondary"}],
+        "protocol": protocol, "ports": ports, "partner": None,
+    }
+    return "Dev reporting (primary) to the on-prem secondary users; on-prem is the destination.", fields, \
+        "The dev reporting servers push report previews to staff desktops at the on-prem secondary site."
+
+
+def build_onprem_location_mismatch(rng, net, used):
+    """The ticket says on-prem primary, but the CIDR is a subnet of the on-prem secondary site."""
+    fields = onprem_to_spoke(net, "prod", ["primary"], "port",
+                             [{"location": "onprem-primary", "cidr": "172.24.64.0/22"}], "Fs")
+    return "On-prem CIDR belongs to the secondary site; the ticket says primary.", fields, \
+        "Head office Wi-Fi users need the prod client portal."
+
+
+def build_add_ip_group_source(rng, net, used):
+    """A new partner flow from the stage xfer IP groups, by name, at both sites."""
+    env, spoke, code, svc = "stage", "xfer", "tailspin", "Sftp"
+    assert not net.exists_anywhere(f"{SERVICES[svc][0]}-{spoke}-to-{code}{svc}", [env], spoke)
+    used.update({(spoke, code), (spoke, code, svc)})
+    fields = egress(net, [env], spoke, code, svc)
+    fields["sources"] = [{"environment": env, "site": s, "ip_group": f"ipg-{spoke}-{env}{'-dr' if s == 'dr' else ''}"}
+                         for s in net.sites(env, spoke)]
+    return f"New flow from the {env} {spoke} IP groups to {code}, both sites.", fields, \
+        f"The {env} file transfer servers in the xfer IP groups send files to {net.partners[code]['name']}."
+
+
+def build_already_allowed_ip_group(rng, net, used):
+    """The ticket names the lab sett IP groups; an existing rule uses exactly those groups at both sites."""
+    env, spoke, code, svc = "lab", "sett", "fabrikam", "Fs"
+    name = f"{SERVICES[svc][0]}-{spoke}-to-{code}{svc}"
+    assert all(name in net.rules.get((env, s, spoke), {}) for s in net.sites(env, spoke)), name
+    fields = egress(net, [env], spoke, code, svc)
+    fields["sources"] = [{"environment": env, "site": s, "ip_group": f"ipg-{spoke}-{env}{'-dr' if s == 'dr' else ''}"}
+                         for s in net.sites(env, spoke)]
+    return f"Asks for a flow {name} already allows with the same IP groups in {env}.", fields, \
+        f"The {env} settlement servers in the sett IP groups need {net.partners[code]['name']} on HTTPS."
+
+
+def build_removal_ip_group_destination(rng, net, used):
+    """Remove the dev rule whose source and destination are both IP groups, at both sites."""
+    env, name = "dev", "sftp-rprt-to-xferSftp"
+    assert all(name in net.rules.get((env, s, "rprt"), {}) for s in net.sites(env, "rprt")), name
+    dr = {"primary": "", "dr": "-dr"}
+    fields = {
+        "environments": [env], "dr_site_built": {env: net.has_dr(env, "rprt")},
+        "change_sites": {env: net.sites(env, "rprt")},
+        "sources": [{"environment": env, "site": s, "ip_group": f"ipg-rprt-{env}{dr[s]}"} for s in net.sites(env, "rprt")],
+        "destination": [{"environment": env, "site": s, "ip_group": f"ipg-xfer-{env}{dr[s]}"} for s in net.sites(env, "xfer")],
+        "protocol": "TCP", "ports": ["22"], "partner": None, "existing_rule": name,
+    }
+    return f"Remove {name} in {env}, both sites; source and destination are IP groups.", fields, \
+        "The dev reporting servers no longer upload to the dev file transfer servers."
+
+
 BUILDERS = {name: globals()["build_" + name.replace("-", "_")] for name, _, _ in CATEGORIES}
 
 
@@ -541,10 +660,9 @@ def render(number, name, why, body):
 
 
 # Retired 2026-10-18. Each gave CIDRs but pointed at a rule written with an IP group that
-# holds exactly that one CIDR. That only happens because the synthetic groups hold one
-# CIDR each; real groups hold many prefixes, and a ticket asks for either a group or
-# CIDRs, never one standing in for the other. plan() still builds them, so every other
-# number keeps its ticket; write() skips them.
+# holds exactly that one CIDR. A ticket asks for either a group or CIDRs, never one
+# standing in for the other, so the case does not occur. plan() still builds them, so
+# every other number keeps its ticket; write() skips them.
 RETIRED = {"RITM0011022", "RITM0011024", "RITM0011047"}
 
 # Revised justifications, 2026-10-18. The builder text named the spoke's role ("SFTP and

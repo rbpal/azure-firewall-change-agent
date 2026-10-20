@@ -1,0 +1,45 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011051
+category: onprem-group-source
+why: On-prem primary users (ipg-onprem-primary) to the prod portal, primary only.
+ticket:
+  number: RITM0011051
+  item: Firewall Change Request
+  state: approved
+  requested_for: Priya Shah (Contoso app owner)
+  opened: '2026-10-06T16:00:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  change_sites:
+    prod: [primary]
+  sources:
+  - {ip_group: ipg-onprem-primary}
+  destination:
+  - {environment: prod, site: primary, cidr: 10.100.17.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: Staff at the head office in ipg-onprem-primary need the prod client portal on HTTPS for support work.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    Prod primary only. On-prem source, so the rule goes in the port group, which owns the destination 10.100.17.0/24 (STD-COLL-01, RB-05-4). The ticket names ipg-onprem-primary, so the rule uses it by name. No rule in prod-eastus2 reaches the port spoke on 443 from on-prem.
+  outcome: draft
+  rules:
+  - env_site: prod-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: https-onpremPrimary-to-portFs
+    sources: [ipg-onprem-primary]
+    destinations: [10.100.17.0/24]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.17.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}

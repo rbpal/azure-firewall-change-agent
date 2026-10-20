@@ -1,0 +1,36 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011053
+category: onprem-address-not-in-plan
+why: On-prem source range is outside the address plan's on-prem list.
+ticket:
+  number: RITM0011053
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-07T15:10:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {location: onprem-primary, cidr: 172.20.200.0/24}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.16.0/24}
+  protocol: TCP
+  ports: ['5671']
+  partner: null
+  justification: A new lab floor at the head office needs to send messages to the dev ledger.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    The onprem-primary site exists in routing.yaml, but 172.20.200.0/24 is not registered in address-plan.yaml, so the locate tool answers "not in the address plan (Azure or on-prem)". Stop and ask (RB-05-5); no rule is drafted.
+  outcome: stop_and_ask
+  reason: address_not_in_plan
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.200.0/24}

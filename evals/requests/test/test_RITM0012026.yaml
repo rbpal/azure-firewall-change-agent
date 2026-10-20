@@ -1,0 +1,45 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012026
+category: onprem-destination
+why: Dev reporting (primary) to the on-prem secondary users; on-prem is the destination.
+ticket:
+  number: RITM0012026
+  item: Firewall Change Request
+  state: approved
+  requested_for: Priya Shah (Contoso app owner)
+  opened: '2026-10-09T09:50:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.15.0/24}
+  destination:
+  - {ip_group: ipg-onprem-secondary}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: The dev reporting servers push report previews to staff desktops at the on-prem secondary site.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    Dev primary only. The source is the dev rprt spoke, so the rule goes in the rprt group as usual; the destination is the on-prem group named on the ticket. No rule in dev-eastus2 reaches it.
+  outcome: draft
+  rules:
+  - env_site: dev-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-rprt-to-onpremSecondary
+    sources: [10.104.15.0/24]
+    destinations: [ipg-onprem-secondary]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.15.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}

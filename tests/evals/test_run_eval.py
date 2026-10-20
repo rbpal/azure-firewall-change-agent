@@ -1,4 +1,4 @@
-"""The Tier 2 runner, checked with stand-in agents on the 47 validation tickets. Every check here must be able to fail."""
+"""The Tier 2 runner, checked with stand-in agents on the 50 validation tickets. Every check here must be able to fail."""
 
 import copy
 
@@ -29,19 +29,19 @@ def result_for(results, number):
 
 
 def test_the_perfect_agent_passes_every_ticket_complete():
-    """47 of 47 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
+    """50 of 50 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
     s = summarise(run(perfect(KEYS)))
-    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (47, 47, 47, 0)
+    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (50, 50, 50, 0)
     assert all(count == 0 for count in s["mistakes"].values())
 
 
 def test_the_always_stop_agent_gives_the_known_baseline():
-    """Always-stop passes 3 stops, gives the wrong reason on 9, and over-abstains on all 35 non-stops."""
+    """Always-stop passes 3 stops, gives the wrong reason on 10, and over-abstains on all 37 non-stops."""
     s = summarise(run(always_stop))
-    assert (s["passed"], s["stops"]) == (3, 12)
-    assert s["mistakes"]["wrong_reason"] == 9
-    assert s["mistakes"]["over_abstain"] == 35
-    assert s["mistakes"]["wrong_outcome"] == 35
+    assert (s["passed"], s["stops"]) == (3, 13)
+    assert s["mistakes"]["wrong_reason"] == 10
+    assert s["mistakes"]["over_abstain"] == 37
+    assert s["mistakes"]["wrong_outcome"] == 37
     assert s["mistakes"]["missed_stop"] == 0
 
 
@@ -58,7 +58,7 @@ def test_the_agent_sees_a_copy_of_the_ticket_and_never_the_answer_key():
 
     # Check outside the agent: the runner turns anything raised inside it into agent_error.
     results = run(spy)
-    assert len(seen) == 47
+    assert len(seen) == 50
     assert seen == [set(r.ticket) for r in REQUESTS]
     assert not any("agent_error" in r.verdict.mistakes for r in results)
     assert {r.number: r.expected for r in load_requests("validation")} == before
@@ -77,7 +77,7 @@ def test_a_missing_site_rule_passes_but_is_reported_incomplete():
     assert r.verdict.passed and not r.verdict.complete
     assert r.verdict.incomplete == ["prod-centralus/ledg/allow-ledg-network-rules: rule missing"]
     s = summarise(results)
-    assert (s["passed"], s["complete"], s["incomplete"]) == (47, 46, 1)
+    assert (s["passed"], s["complete"], s["incomplete"]) == (50, 49, 1)
 
 
 def test_a_wider_port_fails_as_too_wide():
@@ -120,17 +120,17 @@ def test_drafting_an_already_allowed_ticket_fails_as_wrong_outcome():
 
 
 def test_a_crash_fails_one_ticket_and_the_run_goes_on():
-    """An exception on one ticket is agent_error there; the other 46 are still scored."""
+    """An exception on one ticket is agent_error there; the other 49 are still scored."""
     def crash(reply):
         """Fail the way a broken agent would."""
         raise RuntimeError("model timed out")
 
     results = run(perfect_except("RITM0011010", crash))
-    assert len(results) == 47
+    assert len(results) == 50
     r = result_for(results, "RITM0011010")
     assert r.verdict.mistakes == ["agent_error"] and r.reply_outcome == "?"
     assert "RuntimeError: model timed out" in r.verdict.detail
-    assert summarise(results)["complete"] == 46
+    assert summarise(results)["complete"] == 49
 
 
 def test_the_test_split_is_sealed(capsys):
@@ -148,7 +148,7 @@ def test_category_rows_add_up_to_the_totals(agent):
     """The by-category table counts every ticket once and matches the headline."""
     s = summarise(run(agent))
     rows = s["by_category"].values()
-    assert sum(total for _, total in rows) == s["tickets"] == 47
+    assert sum(total for _, total in rows) == s["tickets"] == 50
     assert sum(done for done, _ in rows) == s["complete"]
 
 

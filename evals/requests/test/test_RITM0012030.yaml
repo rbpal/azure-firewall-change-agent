@@ -1,0 +1,57 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012030
+category: removal-ip-group-destination
+why: Remove sftp-rprt-to-xferSftp in dev, both sites; source and destination are IP groups.
+ticket:
+  number: RITM0012030
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-08T10:50:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary, dr]
+  sources:
+  - {environment: dev, site: primary, ip_group: ipg-rprt-dev}
+  - {environment: dev, site: dr, ip_group: ipg-rprt-dev-dr}
+  destination:
+  - {environment: dev, site: primary, ip_group: ipg-xfer-dev}
+  - {environment: dev, site: dr, ip_group: ipg-xfer-dev-dr}
+  protocol: TCP
+  ports: ['22']
+  partner: null
+  justification: The dev reporting servers no longer upload to the dev file transfer servers.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+  existing_rule: sftp-rprt-to-xferSftp
+expected:
+  labelled_against: 209ac63
+  note: >-
+    Dev, both sites. The ticket names the rule and both groups at each site. Rule 007-sftp-rprt-to-xferSftp has source_ip_groups and destination_ip_groups matching the ticket exactly at each site, so it is removed there; nothing else changes.
+  outcome: draft
+  action: remove
+  rules:
+  - env_site: dev-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-xferSftp
+    sources: [ipg-rprt-dev]
+    destinations: [ipg-xfer-dev]
+    ports: ['22']
+    protocol: TCP
+  - env_site: dev-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: sftp-rprt-to-xferSftp
+    sources: [ipg-rprt-dev-dr]
+    destinations: [ipg-xfer-dev-dr]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: dev-centralus}

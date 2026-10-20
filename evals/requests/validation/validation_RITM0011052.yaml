@@ -1,0 +1,57 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011052
+category: onprem-cidr-source
+why: On-prem secondary contact centre subnet (CIDR) to stage settlement, both sites.
+ticket:
+  number: RITM0011052
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-05T09:00:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary, dr]
+  sources:
+  - {location: onprem-secondary, cidr: 172.24.12.0/24}
+  destination:
+  - {environment: stage, site: primary, cidr: 10.102.14.0/24}
+  - {environment: stage, site: dr, cidr: 10.103.14.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: The contact centre at the on-prem secondary site tests settlement screens in stage, at both sites.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    Stage, both sites. 172.24.12.0/24 is the on-prem secondary contact centre, so each rule goes in the sett group at the site of its destination. At each site the only rules to the sett subnet on 443 come from the port subnet and from ipg-xfer-stage or ipg-xfer-stage-dr, which hold only the xfer subnet; none covers this source, so the rule is new.
+  outcome: draft
+  rules:
+  - env_site: stage-eastus2
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: https-onpremSecondary-to-settFs
+    sources: [172.24.12.0/24]
+    destinations: [10.102.14.0/24]
+    ports: ['443']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: https-onpremSecondary-to-settFs
+    sources: [172.24.12.0/24]
+    destinations: [10.103.14.0/24]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.24.12.0/24}
+  - {tool: locate_address_for_env_site, address: 10.102.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.14.0/24}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

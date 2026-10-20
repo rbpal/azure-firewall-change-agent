@@ -1,0 +1,54 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012029
+category: already-allowed-ip-group
+why: Asks for a flow https-sett-to-fabrikamFs already allows with the same IP groups in lab.
+ticket:
+  number: RITM0012029
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-06T14:40:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  change_sites:
+    lab: [primary, dr]
+  sources:
+  - {environment: lab, site: primary, ip_group: ipg-sett-lab}
+  - {environment: lab, site: dr, ip_group: ipg-sett-lab-dr}
+  destination:
+  - {cidr: 203.0.113.32/28}
+  protocol: TCP
+  ports: ['443']
+  partner: Fabrikam
+  justification: The lab settlement servers in the sett IP groups need Fabrikam on HTTPS.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    Rule 009-https-sett-to-fabrikamFs uses exactly the IP group the ticket names at each lab site, to the same range and port: like-for-like, so already allowed.
+  outcome: already_allowed
+  rules:
+  - env_site: lab-eastus2
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: https-sett-to-fabrikamFs
+    sources: [ipg-sett-lab]
+    destinations: [203.0.113.32/28]
+    ports: ['443']
+    protocol: TCP
+  - env_site: lab-centralus
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: https-sett-to-fabrikamFs
+    sources: [ipg-sett-lab-dr]
+    destinations: [203.0.113.32/28]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}

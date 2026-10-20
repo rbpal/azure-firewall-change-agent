@@ -15,6 +15,7 @@ COMMITTED = sorted(REQUESTS.glob("*/*.yaml"))
 STOP_CATEGORIES = {
     "sites-contradict-addresses", "address-environment-contradicts-ticket",
     "address-not-in-plan", "free-text-names-another-environment",
+    "onprem-address-not-in-plan", "onprem-location-mismatch",
 }
 OUTCOMES = {"draft", "stop_and_ask", "already_allowed"}
 STOP_REASONS = {
@@ -23,6 +24,7 @@ STOP_REASONS = {
     "skip_approval_requested",  # RB-01-6
     "port_already_published",  # RB-02-5
 }
+RUNBOOKS = make_requests.REPO / "data" / "runbooks"
 RULE_FIELDS = {"env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"}
 DNAT_FIELDS = RULE_FIELDS | {"translated_address", "translated_port"}  # inbound rules also name the internal host
 
@@ -46,8 +48,8 @@ def test_script_writes_the_planned_mix(generated):
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation - retired[name], name
         assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 47
-    assert sum(v for (split, _), v in counts.items() if split == "test") == 24
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 50
+    assert sum(v for (split, _), v in counts.items() if split == "test") == 30
 
 
 def test_every_generated_ticket_passes_the_schema(generated):
@@ -71,7 +73,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 71
+    assert written == [] and len(kept) == 80
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -87,6 +89,9 @@ def test_draft_requests_never_share_a_spoke_and_partner_across_splits(generated)
         internal = t["destination"] if request["category"] == "inbound-dnat" else t["sources"]
         first = internal[0]
         key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"], t["partner"])
+        if t["partner"] is None:  # on-prem and spoke-to-spoke flows: the destination tells them apart
+            dest = t["destination"][0]
+            key += (dest.get("cidr") or dest.get("ip_group"),)
         split = path.parent.name
         assert seen.get(key, (split,))[0] == split, f"{path.name} repeats {seen[key][1]} from the other split"
         seen.setdefault(key, (split, path.name))
@@ -109,8 +114,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_71_committed_requests():
-    assert len(COMMITTED) == 71
+def test_there_are_80_committed_requests():
+    assert len(COMMITTED) == 80
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -202,3 +207,33 @@ def test_validation_removals_cover_ip_group_and_address_sources():
 def test_retired_numbers_are_never_written(generated):
     names = {p.stem.split("_")[1] for p in generated.glob("*/*.yaml")}
     assert make_requests.RETIRED and not names & make_requests.RETIRED
+
+
+def documented_codes():
+    """The stop-reason codes the runbooks' escalation lists give, from lines ending ": `code`"."""
+    import re
+    codes = set()
+    for page in sorted(RUNBOOKS.glob("*.md")):
+        for section in re.split(r"^(?=## )", page.read_text(), flags=re.M):
+            if "Escalate instead of drafting when" in section.splitlines()[0]:
+                codes |= set(re.findall(r"^- .*?: `([a-z_]+)`", section, re.M))
+    return codes
+
+
+def test_every_stop_reason_is_documented_in_a_runbook_and_no_other():
+    # The agent learns the codes from the runbooks; a label must never use one they do not give.
+    assert documented_codes() == STOP_REASONS
+
+
+def test_every_label_reason_is_documented():
+    reasons = {(load(p)["expected"] or {}).get("reason") for p in COMMITTED} - {None}
+    assert reasons <= documented_codes()
+
+
+UNCODED_ESCALATIONS = 16  # 2026-10-20; lower it as each escalation gets a code, never raise it
+
+
+def test_uncoded_escalations_only_shrink():
+    # Each must get a code before the agent's reply contract is final (Step 04 Task 03).
+    count = sum(page.read_text().count(": *no code yet*") for page in RUNBOOKS.glob("*.md"))
+    assert count <= UNCODED_ESCALATIONS

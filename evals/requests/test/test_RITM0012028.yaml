@@ -1,0 +1,54 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012028
+category: add-ip-group-source
+why: New flow from the stage xfer IP groups to tailspin, both sites.
+ticket:
+  number: RITM0012028
+  item: Firewall Change Request
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-05T12:00:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary, dr]
+  sources:
+  - {environment: stage, site: primary, ip_group: ipg-xfer-stage}
+  - {environment: stage, site: dr, ip_group: ipg-xfer-stage-dr}
+  destination:
+  - {cidr: 198.51.100.16/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Tailspin
+  justification: The stage file transfer servers in the xfer IP groups send files to Tailspin.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    Stage, both sites. The ticket names the xfer IP group at each site, so each rule uses that group by name. No rule at either site reaches Tailspin on 22.
+  outcome: draft
+  rules:
+  - env_site: stage-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-tailspinSftp
+    sources: [ipg-xfer-stage]
+    destinations: [198.51.100.16/28]
+    ports: ['22']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-xfer-to-tailspinSftp
+    sources: [ipg-xfer-stage-dr]
+    destinations: [198.51.100.16/28]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

@@ -1,0 +1,36 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012027
+category: onprem-location-mismatch
+why: On-prem CIDR belongs to the secondary site; the ticket says primary.
+ticket:
+  number: RITM0012027
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-05T08:30:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  change_sites:
+    prod: [primary]
+  sources:
+  - {location: onprem-primary, cidr: 172.24.64.0/22}
+  destination:
+  - {environment: prod, site: primary, cidr: 10.100.17.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: Head office Wi-Fi users need the prod client portal.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    172.24.64.0/22 is in address-plan.yaml under onprem-secondary (Wi-Fi), but the ticket says onprem-primary. Stop and ask which source is intended (RB-05-5); draft no rule, and never correct the CIDR or the location.
+  outcome: stop_and_ask
+  reason: env_mismatch
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.24.64.0/22}

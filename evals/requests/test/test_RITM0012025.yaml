@@ -1,0 +1,57 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012025
+category: onprem-both-groups-source
+why: Both on-prem user groups to lab xfer SFTP, both sites.
+ticket:
+  number: RITM0012025
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-09T16:40:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  change_sites:
+    lab: [primary, dr]
+  sources:
+  - {ip_group: ipg-onprem-secondary}
+  - {ip_group: ipg-onprem-primary}
+  destination:
+  - {environment: lab, site: primary, cidr: 10.106.20.0/24}
+  - {environment: lab, site: dr, cidr: 10.107.20.0/24}
+  protocol: TCP
+  ports: ['22']
+  partner: null
+  justification: Users at both on-prem data centres upload test files to the lab SFTP servers.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 209ac63
+  note: >-
+    Lab, both sites. Both on-prem groups by name, as the ticket gives them; each rule goes in the xfer group at the site of its destination. At each site the only rule to the xfer subnet on 22 is 002-sftp-sett-to-xferSftp, from ipg-sett-lab or ipg-sett-lab-dr, which hold only the sett subnet; none covers the on-prem users, so the rule is new.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-onprem-to-xferSftp
+    sources: [ipg-onprem-secondary, ipg-onprem-primary]
+    destinations: [10.106.20.0/24]
+    ports: ['22']
+    protocol: TCP
+  - env_site: lab-centralus
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-onprem-to-xferSftp
+    sources: [ipg-onprem-secondary, ipg-onprem-primary]
+    destinations: [10.107.20.0/24]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
+  - {tool: locate_address_for_env_site, address: 10.107.20.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}
+  - {tool: duplicate_rule_check, env_site: lab-centralus}

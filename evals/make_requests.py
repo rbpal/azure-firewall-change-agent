@@ -4,10 +4,11 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 89 varied tickets, 55 for validation and 34 for test, spread
-over 32 kinds of request, including changes to the primary site only, the DR
+Why: the eval needs 99 varied tickets, 65 for validation and 34 for test, spread
+over 42 kinds of request, including changes to the primary site only, the DR
 site only, or both, IP groups, on-prem users, addresses wider or narrower than
-the plan, planned spokes, and requests that resume after an engineer's review.
+the plan, planned spokes, requests that resume after an engineer's review, and
+one validation case for each runbook escalation that has its own stop code.
 A script gives variety and the same output every run.
 
 Safety rule: this script writes tickets, and for the resume cases the engineer's
@@ -107,6 +108,18 @@ CATEGORIES = [
     ("narrower-onprem-source", 1, 1),
     ("planned-spoke", 1, 1),
     ("accepted-after-review", 2, 1),
+    # Added 2026-10-21: one validation case per escalation that got its stop code that day.
+    # Validation only, appended, so every earlier ticket and the whole test split stay as they were.
+    ("dnat-open-source", 1, 0),
+    ("dnat-destination-not-one-host", 1, 0),
+    ("onprem-to-onprem", 1, 0),
+    ("ip-group-not-found", 1, 0),
+    ("url-not-valid", 1, 0),
+    ("non-http-to-hostname", 1, 0),
+    ("removal-rule-allows-more", 1, 0),
+    ("removal-hub-rule", 1, 0),
+    ("removal-asks-ip-group-change", 1, 0),
+    ("removal-one-site-matches", 1, 0),
 ]
 
 ENGINEER = "Jordan Patel"
@@ -687,6 +700,137 @@ def build_accepted_after_review(rng, net, used):
     role = net.holds[placement][0].lower() + net.holds[placement][1:]
     return f"{env} {placement} to a planned payments subnet; the engineer accepted it with a planned record.", fields, \
         f"The {env} {role} will call the new payments servers in {dest} once they are built."
+
+
+def _xfer_host(net, env, site):
+    """The xfer SFTP host at one site, the same /32 the inbound-dnat cases use."""
+    return {"environment": env, "site": site, "cidr": net.spoke_cidr[(env, site, "xfer")].replace(".0/24", ".14/32")}
+
+
+def build_dnat_open_source(rng, net, used):
+    """An inbound SFTP request from every address (RB-02-5, STD-COLL-04): open_dnat_source."""
+    fields = {
+        "environments": ["stage"], "dr_site_built": dr_answers(net, ["stage"], "xfer"), "change_sites": {"stage": ["primary"]},
+        "sources": [{"cidr": "0.0.0.0/0"}], "destination": [_xfer_host(net, "stage", "primary")],
+        "protocol": "TCP", "ports": ["22"], "partner": "Tailspin",
+    }
+    return "Inbound SFTP from 0.0.0.0/0 to the stage xfer host: open DNAT is never drafted.", fields, \
+        "Tailspin connects from changing cloud addresses, so please allow SFTP from any address."
+
+
+def build_dnat_destination_not_one_host(rng, net, used):
+    """An inbound SFTP request whose internal side is a whole subnet, not one host (RB-02-5): dnat_destination_not_host."""
+    fields = {
+        "environments": ["lab"], "dr_site_built": dr_answers(net, ["lab"], "xfer"), "change_sites": {"lab": ["primary"]},
+        "sources": [{"cidr": net.partners["proseware"]["cidr"]}],
+        "destination": [{"environment": "lab", "site": "primary", "cidr": net.spoke_cidr[("lab", "primary", "xfer")]}],
+        "protocol": "TCP", "ports": ["22"], "partner": net.partners["proseware"]["name"],
+    }
+    return "Inbound SFTP from Proseware to the whole lab xfer /24: a DNAT rule translates to one host.", fields, \
+        "Proseware pushes test files to the lab file transfer servers."
+
+
+def build_onprem_to_onprem(rng, net, used):
+    """On-prem primary users to an on-prem secondary subnet; no Azure firewall is on that path (RB-05-5): both_ends_onprem."""
+    fields = {
+        "environments": ["prod"], "dr_site_built": {"prod": net.has_dr("prod", "sett")}, "change_sites": {"prod": ["primary"]},
+        "sources": [{"location": "onprem-primary", "cidr": "172.20.20.0/24"}],
+        "destination": [{"location": "onprem-secondary", "cidr": "172.24.12.0/24"}],
+        "protocol": "TCP", "ports": ["443"], "partner": None,
+    }
+    return "Both ends are on-prem subnets: the traffic never crosses an Azure firewall.", fields, \
+        "Head office wired users need the contact centre's web console at the secondary data centre."
+
+
+def build_ip_group_not_found(rng, net, used):
+    """Dev ledger to a partner IP group that does not exist (RB-01-6): ip_group_not_found."""
+    group = "ipg-partner-woodgrove"
+    assert not any(group in p.read_text() for p in ENVS_DIR.glob("*/ip-groups.tfvars")), group
+    assert not net.exists_anywhere("smtp-ledg-to-woodgroveSmtp", ["dev"], "ledg")
+    fields = egress(net, ["dev"], "ledg", "woodgrove", "Smtp")
+    fields["destination"] = [{"ip_group": group}]
+    return f"Destination is {group}, an IP group no env-site has; groups are created through their own process.", fields, \
+        "The dev ledger servers send settlement notices to Woodgrove Bank by mail."
+
+
+def build_url_not_valid(rng, net, used):
+    """HTTPS to a pasted URL whose hostname is longer than DNS allows (RB-01-6): dns_lookup_failed.
+
+    The ticket schema accepts each label up to 63 characters but sets no total length;
+    dns_lookup_for_fqdn refuses a hostname over 253 characters.
+    """
+    label = ("files-" * 11)[:63]
+    host = ".".join([label] * 4 + ["northwind", "example"])
+    assert len(host) > 253, len(host)
+    fields = egress(net, ["lab"], "sett", "northwind", "Fs")
+    fields.update(destination=[{"url": f"https://{host}/v1/upload"}], protocol="HTTPS")
+    return f"Pasted URL's hostname is {len(host)} characters; a DNS name stops at 253, so the lookup tool refuses it.", \
+        fields, "The lab settlement servers upload files to Northwind's exchange. URL copied from the partner portal."
+
+
+def build_non_http_to_hostname(rng, net, used):
+    """AMQPS to a partner hostname: non-HTTP traffic to a name (RB-01-6): non_http_to_hostname."""
+    assert not net.exists_anywhere("amqps-rprt-to-tailspinMq", ["stage"], "rprt")
+    fields = egress(net, ["stage"], "rprt", "tailspin", "Mq")
+    fields["destination"] = [{"fqdn": net.partners["tailspin"]["fqdn"]}]
+    return "AMQPS (TCP 5671) to a hostname: a network rule would pin addresses that can change.", fields, \
+        "The stage reporting servers publish report events to Tailspin's message broker."
+
+
+def build_removal_rule_allows_more(rng, net, used):
+    """Remove a /25's access when the rule allows the whole /24 (RB-03-5): rule_allows_more."""
+    env, spoke, code, svc = "prod", "sett", "woodgrove", "Sftp"
+    name = f"{SERVICES[svc][0]}-{spoke}-to-{code}{svc}"
+    assert net.rules[(env, "primary", spoke)][name]["source_addresses"] == [net.spoke_cidr[(env, "primary", spoke)]], name
+    fields = only_site(egress(net, [env], spoke, code, svc), env, "primary")
+    fields["sources"] = [{"environment": env, "site": "primary", "cidr": net.spoke_cidr[(env, "primary", spoke)].replace(".0/24", ".0/25")}]
+    fields["existing_rule"] = name
+    return f"Ticket removes the {env} primary sett /25's SFTP to {code}; {name} allows the whole /24, and trimming it was not approved.", \
+        fields, "The first half of the prod settlement subnet no longer sends files to Woodgrove Bank."
+
+
+def build_removal_hub_rule(rng, net, used):
+    """Remove the stage primary hub NTP rule; the hub group serves every spoke (RB-03-5): hub_rule."""
+    env, name = "stage", "ntp-spokes-to-hubNtp"
+    rule = net.rules[(env, "primary", "hub")][name]
+    assert rule["protocols"] == ["UDP"] and rule["destination_ports"] == ["123"], rule
+    fields = {
+        "environments": [env], "dr_site_built": {env: True}, "change_sites": {env: ["primary"]},
+        "sources": [{"environment": env, "site": "primary", "cidr": c} for c in rule["source_addresses"]],
+        "destination": [{"environment": env, "site": "primary", "cidr": a} for a in rule["destination_addresses"]],
+        "protocol": "UDP", "ports": ["123"], "partner": None, "existing_rule": name,
+    }
+    return f"Removes {name}, which is in the stage primary hub group, matched exactly.", fields, \
+        "The stage spokes now take time from the platform time service, so the hub NTP rule is no longer needed."
+
+
+def build_removal_asks_ip_group_change(rng, net, used):
+    """Remove a rule, and the free text asks to change an IP group (RB-03-5): ip_group_change_requested."""
+    env, spoke, code, svc = "dev", "sett", "lamna", "Smtp"
+    name = f"{SERVICES[svc][0]}-{spoke}-to-{code}{svc}"
+    assert all(name in net.rules[(env, s, spoke)] for s in net.sites(env, spoke)), name
+    fields = egress(net, [env], spoke, code, svc)
+    fields["existing_rule"] = name
+    return f"Removes {name} in {env}; the justification also asks to change ipg-sett-dev.", fields, \
+        "The dev settlement servers no longer send mail to Lamna Healthcare. Please also take 10.104.14.0/24 out of " \
+        "ipg-sett-dev, because those servers are being retired."
+
+
+def build_removal_one_site_matches(rng, net, used):
+    """Remove a dev rule at both sites when only the primary copy exists (RB-03-5): partial_site_match.
+
+    The dev-eastus2 rprt rule https-rprt-to-settApi has no copy in dev-centralus: primary and DR have drifted.
+    """
+    env, name = "dev", "https-rprt-to-settApi"
+    assert name in net.rules[(env, "primary", "rprt")] and name not in net.rules[(env, "dr", "rprt")], name
+    fields = {
+        "environments": [env], "dr_site_built": {env: True}, "change_sites": {env: ["primary", "dr"]},
+        "sources": [{"environment": env, "site": s, "cidr": net.spoke_cidr[(env, s, "rprt")]} for s in ("primary", "dr")],
+        "destination": [{"environment": env, "site": s, "cidr": net.spoke_cidr[(env, s, "sett")]} for s in ("primary", "dr")],
+        "protocol": "TCP", "ports": ["443"], "partner": None, "existing_rule": name,
+    }
+    return f"Removes {name} at both dev sites; only dev primary has the rule.", fields, \
+        "The dev reporting servers no longer call the settlement API, at either site."
 
 
 BUILDERS = {name: globals()["build_" + name.replace("-", "_")] for name, _, _ in CATEGORIES}

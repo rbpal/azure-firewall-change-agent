@@ -5,7 +5,7 @@ The eval harness. Tier 2 scores the agent on the labelled requests in `requests/
 - `requests/validation/`: labelled requests that prompts and thresholds are tuned against.
 - `requests/test/`: labelled requests kept back for the final score. Nothing is tuned against them.
 
-Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. `make_requests.py` writes the tickets: 89 requests across 32 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
+Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. `make_requests.py` writes the tickets: 99 requests across 42 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
 
 Two scorers read an agent reply shaped like `expected:` and need no model:
 
@@ -29,6 +29,7 @@ Scores from different versions are not comparable. Each version is fixed by a co
 | v3 | 2026-10-18 | 71 (47 validation, 24 test) | 19 | `cdd8f71` |
 | v4 | 2026-10-20 | 80 (50 validation, 30 test) | 28 | `51df5fd` |
 | v5 | 2026-10-20 | 89 (55 validation, 34 test) | 32 | labels against `73f4792`; requests in the commit after it |
+| v6 | 2026-10-21 | 99 (65 validation, 34 test) | 42 | labels against `91d3e04`; requests, labels and one drift rule in the commit after it |
 
 v1 stays readable in git, for example `git show bd8588b:evals/requests/test/test_RITM0012015.yaml`.
 
@@ -59,13 +60,21 @@ What changed in v5 (2026-10-20):
 3. **Resume after review.** RITM0011057, RITM0011058 and RITM0012034 carry an `engineer_review:` block, the engineer's recorded acceptance. In the workflow every agent call follows an engineer's acceptance of the exact ticket version; for a ticket with no findings that acceptance adds nothing for the agent to read, so first-pass requests carry no block. The block carries `ticket_version`, the SHA-256 of the ticket's fields, so the acceptance covers that exact ticket; the runner refuses a block whose version does not match. The runner hands the block to the agent with the ticket, never the answer, and the score sheet reports these tickets on their own line, apart from first-pass tickets. The labels draft within the ticket's own values: the accepted `/23` as written, or a rule to a planned subnet placed in the existing source spoke. A request awaiting review (a stop) never carries an acceptance, and an accepted request always drafts.
 4. **Not in the eval.** Malformed tickets (a `/33` prefix, host bits set, a VNet named without an address) never reach the agent; intake saves them for review in code. Their tests are software tests in `tests/workflow/test_review.py`.
 
-The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). No agent, real or stand-in, has been scored on the test split under any version, so no result was tuned against it.
+What changed in v6 (2026-10-21):
+
+1. **Every escalation an agent can meet has a stop code.** Ten runbook escalations said *no code yet*. Each now has a code and one validation request: `open_dnat_source` (RITM0011059), `dnat_destination_not_host` (RITM0011060), `both_ends_onprem` (RITM0011061), `ip_group_not_found` (RITM0011062), `dns_lookup_failed` (RITM0011063), `non_http_to_hostname` (RITM0011064), `rule_allows_more` (RITM0011065), `hub_rule` (RITM0011066), `ip_group_change_requested` (RITM0011067) and `partial_site_match` (RITM0011068). Each ticket passes the schema and intake, so only the agent's stop catches it. The ten labels carry `review: pending` until a person checks them.
+2. **One duplicate removed.** RB-01-6 repeated RB-02-5's open-DNAT line; it is now listed once, in RB-02-5.
+3. **Four stay uncoded, on purpose.** A DNAT protocol other than TCP or UDP and a partner outside the list never reach the agent: the ticket schema sends them to engineer review. Two offboarding cases wait for an offboarding ticket type.
+4. **One drift rule.** RITM0011068 needs a rule at one selected site only. `008-https-rprt-to-settApi` was added to dev-eastus2 rprt with no dev-centralus copy. It is a spoke-to-spoke rule, so no partner request can match it, and every earlier ticket is unchanged.
+5. **No old ticket changed, no test request added.** The new categories come last and are validation only. The ten new codes are therefore not measured on the test split.
+
+The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). v6 did not change it. No agent, real or stand-in, has been scored on the test split under any version, so no result was tuned against it.
 
 ## What has been measured
 
 No real model has been scored yet. The two stand-in agents in `stand_in_agents.py` check the scoring code only:
 
-- `perfect` replays the labels. It passes 55 of 55 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
-- `always_stop` stops on every request. It passes 3 of 55. That is a baseline, not a floor.
+- `perfect` replays the labels. It passes 65 of 65 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
+- `always_stop` stops on every request. It passes 3 of 65. That is a baseline, not a floor.
 
 The first real score comes after the agent and its model are configured.

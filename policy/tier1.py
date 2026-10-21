@@ -4,8 +4,10 @@ Example: `python -m policy.tier1 plan.json` prints one line per finding, such as
 "caution STD-COLL-02 sett/allow-sett-app-rules/https-sett-to-googleAll: wildcard FQDN *.google.com",
 and exits 2 if any finding blocks.
 
-The workflow runs these on every draft, and CI runs them on every PR, so the
-same plan always gets the same answer. No model is involved.
+When it runs: CI (tier1-gate.yml) runs it on every pull request from this
+repository, on the plan of each dev env-site, dev-eastus2 and dev-centralus. The
+fwagent workflow does not run it on a draft yet; its draft note says so (Step 04
+Task 06). No model is involved, so the same plan always gets the same answer.
 
 Safety rule: STD-COLL-04 (open DNAT) is the only check that blocks. Every other
 finding is a caution the engineer approves past with a reason. STD-COLL-07 calls

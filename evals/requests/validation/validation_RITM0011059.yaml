@@ -1,0 +1,38 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011059
+category: dnat-open-source
+why: 'Inbound SFTP from 0.0.0.0/0 to the stage xfer host: open DNAT is never drafted.'
+ticket:
+  number: RITM0011059
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-05T10:30:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary]
+  sources:
+  - {cidr: 0.0.0.0/0}
+  destination:
+  - {environment: stage, site: primary, cidr: 10.102.20.14/32}
+  protocol: TCP
+  ports: ['22']
+  partner: Tailspin
+  justification: Tailspin connects from changing cloud addresses, so please allow SFTP from any address.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 91d3e04
+  review: pending
+  note: >-
+    Inbound SFTP with a source of 0.0.0.0/0. RB-02-2 never widens the source, and RB-02-5 stops on 0.0.0.0/0 or * (STD-COLL-04, the only hard block). Intake passes the ticket: 0.0.0.0/0 is a valid CIDR, so only the agent's stop catches it before Tier 1.
+  outcome: stop_and_ask
+  reason: open_dnat_source
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.20.14/32}

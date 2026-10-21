@@ -97,7 +97,7 @@ def test_dev_eastus2_has_only_the_two_wildcard_cautions(plan):
 def test_model_reads_every_rule_with_its_key(plan):
     m = tier1.model(plan)
     rules = [r for g in m["groups"] for c in g["collections"] for r in c["rules"]]
-    assert len(rules) == 61 and all(r["key"] for r in rules)
+    assert len(rules) == 62 and all(r["key"] for r in rules)  # 62 since the 2026-10-21 drift rule in rprt
     assert m["policy"] == "afwp-hub-dev-eastus2" and "ipg-xfer-dev" in m["ip_groups"]
 
 

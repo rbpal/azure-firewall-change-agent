@@ -1,7 +1,7 @@
 """Tier 2 runner: give each labelled ticket to an agent, score the reply, print a score sheet.
 
 Example: `uv run --python 3.11 python -m evals.run_eval --agent perfect` reads the
-47 validation files, hands each `ticket:` block to the perfect stand-in agent,
+65 validation files, hands each `ticket:` block to the perfect stand-in agent,
 scores every reply against its `expected:` block and prints the sheet. A ticket
 passes when the outcome word matches, Least-Privilege is pass or not_scored, and
 Abstention is pass. A pass is "complete" only if the draft is not narrower than

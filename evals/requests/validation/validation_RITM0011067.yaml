@@ -1,0 +1,44 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011067
+category: removal-asks-ip-group-change
+why: Removes smtp-sett-to-lamnaSmtp in dev; the justification also asks to change ipg-sett-dev.
+ticket:
+  number: RITM0011067
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-05T13:00:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary, dr]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.14.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.14.0/24}
+  destination:
+  - {cidr: 198.51.100.48/28}
+  protocol: TCP
+  ports: ['587']
+  partner: Lamna Healthcare
+  justification: The dev settlement servers no longer send mail to Lamna Healthcare. Please also take 10.104.14.0/24 out of
+    ipg-sett-dev, because those servers are being retired.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+  existing_rule: smtp-sett-to-lamnaSmtp
+expected:
+  labelled_against: 91d3e04
+  review: pending
+  note: >-
+    The flow matches 011-smtp-sett-to-lamnaSmtp exactly at both dev sites, but the justification also asks to take 10.104.14.0/24 out of ipg-sett-dev. The agent never changes an IP group; they have their own approval process (RB-03-5). Stop for the whole ticket; do not draft the removal alone.
+  outcome: stop_and_ask
+  reason: ip_group_change_requested
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.14.0/24}
+  - {tool: locate_address_for_env_site, address: 10.105.14.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: dev-centralus}

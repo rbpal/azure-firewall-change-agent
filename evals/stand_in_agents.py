@@ -5,7 +5,7 @@ two labelled sftp rules, copied from the answer key. `always_stop` answers every
 ticket with stop_and_ask, reason free_text_conflict.
 
 Why: the runner must be checked before a real agent exists. The perfect agent
-must score 40 of 40 passed and complete, so any shortfall is a runner or scorer
+must score every validation ticket passed and complete, so any shortfall is a runner or scorer
 bug. The always-stop agent gives the always-stop baseline, a reference point and
 not a floor.
 

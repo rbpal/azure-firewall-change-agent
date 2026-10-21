@@ -31,8 +31,8 @@ Delete the rule's entry. The workflow code then renumbers the rules after it in 
 
 Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
 
-- a matching rule also allows other traffic the ticket does not mention: *no code yet*
-- the rule is in the `hub` group, which serves every spoke: *no code yet*
-- the ticket asks to delete or change an IP group; IP groups have their own approval process: *no code yet*
-- a selected site has no exact match while another selected site does; a rule at a site the ticket does not select is not a reason to escalate: *no code yet*
+- a matching rule also allows other traffic the ticket does not mention (`duplicate_rule_check` says `covers`): `rule_allows_more`
+- the rule is in the `hub` group, which serves every spoke: `hub_rule`
+- the ticket asks to delete or change an IP group; IP groups have their own approval process: `ip_group_change_requested`
+- a selected site has no exact match while another selected site does; a rule at a site the ticket does not select is not a reason to escalate: `partial_site_match`
 - any address check in RB-01-6 fails: the code given there

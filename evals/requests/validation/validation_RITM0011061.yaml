@@ -1,0 +1,39 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011061
+category: onprem-to-onprem
+why: 'Both ends are on-prem subnets: the traffic never crosses an Azure firewall.'
+ticket:
+  number: RITM0011061
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-08T08:40:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  change_sites:
+    prod: [primary]
+  sources:
+  - {location: onprem-primary, cidr: 172.20.20.0/24}
+  destination:
+  - {location: onprem-secondary, cidr: 172.24.12.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: Head office wired users need the contact centre's web console at the secondary data centre.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 91d3e04
+  review: pending
+  note: >-
+    Source 172.20.20.0/24 is an on-prem primary user subnet and destination 172.24.12.0/24 an on-prem secondary one. That traffic never reaches an Azure firewall (RB-05-5), so no rule anywhere would allow or block it.
+  outcome: stop_and_ask
+  reason: both_ends_onprem
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.20.0/24}
+  - {tool: locate_address_for_env_site, address: 172.24.12.0/24}

@@ -1,0 +1,42 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011068
+category: removal-one-site-matches
+why: Removes https-rprt-to-settApi at both dev sites; only dev primary has the rule.
+ticket:
+  number: RITM0011068
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-05T12:00:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary, dr]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.15.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.15.0/24}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.14.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.14.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: The dev reporting servers no longer call the settlement API, at either site.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+  existing_rule: https-rprt-to-settApi
+expected:
+  labelled_against: 91d3e04
+  review: pending
+  note: >-
+    Both dev sites are selected. 008-https-rprt-to-settApi matches exactly in dev-eastus2, and dev-centralus has no copy: primary and DR have drifted. RB-03-5 stops when one selected site has an exact match and another has none.
+  outcome: stop_and_ask
+  reason: partial_site_match
+  rules: []
+  tools:
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: dev-centralus}

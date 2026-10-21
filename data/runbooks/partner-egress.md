@@ -37,19 +37,18 @@ Escalating means the reply's outcome is `stop_and_ask`: the request waits for th
 
 Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
 
-- the ticket asks for a DNAT rule with a source of `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block): *no code yet*
 - the requester asks for the change to skip approval: `skip_approval_requested`
 - an Azure address sits inside an env-site, but no spoke or shared range owns it (`locate_address_for_env_site` answers `no_owner`), as with a spoke that is planned but not built: `planned_address`. Preparing policy before a spoke exists can be valid. Ask the engineer to confirm the CIDR, environment, site, firewall policy and rule placement; never pick a spoke yourself. An on-prem source is not this case; it follows RB-05
 - an address is wider than the plan range it belongs to, or spans several (`locate_address_for_env_site` answers `wider_than_plan`): `wider_than_plan`. Name the plan ranges and the extra blocks the tool lists, with their address count; never narrow the address yourself. An address narrower than its range, inside one owner's range, is not a reason to stop
-- the ticket names an IP group that does not exist: *no code yet*
+- the ticket names an IP group that does not exist: `ip_group_not_found`
 - a selected site has no source: `site_without_address`
 - a source belongs to a site the ticket does not select: `address_for_unselected_site`
 - the free text names a different environment from the ticket's fields: `free_text_conflict`
 - an address is not in the address plan, Azure or on-prem: `address_not_in_plan`
 - an address belongs to an environment, an Azure site (primary or DR) or an on-prem location other than the one the ticket gives it: `env_mismatch`. This one code covers all three conflicts. Stop and ask which is intended; never correct the address or the place yourself
 - the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place: `dr_policy_not_built`. This answer only says whether DR exists; DR is changed only when "Sites to change" selects it
-- the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address: *no code yet*
-- non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change: *no code yet*
+- the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address: `dns_lookup_failed`
+- non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change: `non_http_to_hostname`
 
 ## RB-01-7 — Draft, but mark a caution, when
 

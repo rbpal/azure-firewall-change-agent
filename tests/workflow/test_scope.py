@@ -387,3 +387,147 @@ def test_an_on_prem_group_is_never_inferred_or_swapped(repo, side, entries, valu
     with pytest.raises(ApprovalError):
         apply_reply(repo, onprem_ticket("primary", side, entries), r)
     assert changed(before, repo) == set()
+
+
+# Ports and protocol (security register 50.20): the draft must keep the ticket's flow, not only its addresses.
+
+def flow_ticket(protocol="TCP", ports=("443",), destination=None, removal=False):
+    """A prod primary-only sett ticket with the given protocol, ports and destination."""
+    t = ticket("primary", removal)
+    t.update(protocol=protocol, ports=list(ports))
+    if destination:
+        t["destination"] = [destination]
+    assert ticket_errors(t) == []
+    return t
+
+
+def flow_reply(protocol="TCP", ports=("443",), destination=None, removal=False):
+    """The primary-only draft, with its protocol, ports and destination replaced."""
+    r = reply([PRIMARY], removal)
+    r["rules"][0].update(protocol=protocol, ports=list(ports))
+    if str(protocol).upper() in ("HTTP", "HTTPS"):
+        r["rules"][0]["collection"] = "allow-sett-app-rules"
+    if destination:
+        r["rules"][0]["destinations"] = [destination]
+    return r
+
+
+ADD_REFUSED = {  # (ticket protocol, ticket ports, reply protocol, reply ports, the refusal names)
+    "extra port 3389": ("TCP", ["443"], "TCP", ["443", "3389"], "port 3389 is not within"),
+    "wildcard port": ("TCP", ["443"], "TCP", ["*"], r"port \* is not within"),
+    "every port as a range": ("TCP", ["443"], "TCP", ["1-65535"], "port 1-65535 is not within"),
+    "range one wider": ("TCP", ["443"], "TCP", ["443-444"], "port 443-444 is not within"),
+    "range past the ticket's range": ("TCP", ["1000-2000"], "TCP", ["999-1500"], "port 999-1500 is not within"),
+    "port beside two ticket ports": ("TCP", ["22", "23"], "TCP", ["22-24"], "port 22-24 is not within"),
+    "UDP for TCP": ("TCP", ["443"], "UDP", ["443"], "protocol UDP is not the ticket's TCP"),
+    "Any for TCP": ("TCP", ["443"], "Any", ["443"], "protocol Any is not the ticket's TCP"),
+    "TCP for Any": ("Any", ["443"], "TCP", ["443"], "protocol TCP is not the ticket's Any"),
+    "HTTPS for TCP": ("TCP", ["443"], "HTTPS", ["443"], "protocol HTTPS is not the ticket's TCP"),
+    "HTTP for HTTPS": ("HTTPS", ["443"], "HTTP", ["443"], "protocol HTTP is not the ticket's HTTPS"),
+    "TCP for HTTP": ("HTTP", ["80"], "TCP", ["80"], "protocol TCP is not the ticket's HTTP"),
+    "no protocol": ("TCP", ["443"], "", ["443"], r"protocol \(none\) is not"),
+}
+
+
+@pytest.mark.parametrize("t_proto, t_ports, r_proto, r_ports, why", ADD_REFUSED.values(), ids=ADD_REFUSED.keys())
+def test_an_add_wider_than_the_tickets_ports_or_another_protocol_is_refused(repo, t_proto, t_ports, r_proto, r_ports, why):
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match=why):
+        apply_reply(repo, flow_ticket(t_proto, t_ports), flow_reply(r_proto, r_ports))
+    assert changed(before, repo) == set()
+
+
+MALFORMED_PORTS = {
+    "leading zero": ["0443"], "leading space": [" 443"], "trailing newline": ["443\n"], "decimal": ["443.0"],
+    "zero": ["0"], "above 65535": ["70000"], "high to low": ["444-443"], "words": ["https"],
+    "true": [True], "a JSON float": [443.0], "empty list": [], "not a list": "443", "missing": None,
+}
+
+
+@pytest.mark.parametrize("ports", MALFORMED_PORTS.values(), ids=MALFORMED_PORTS.keys())
+def test_a_malformed_reply_port_is_refused_never_read_as_a_port(repo, ports):
+    r = flow_reply()
+    if ports is None:
+        del r["rules"][0]["ports"]
+    else:
+        r["rules"][0]["ports"] = ports
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="are not written as a ticket writes ports"):
+        apply_reply(repo, flow_ticket(), r)
+    assert changed(before, repo) == set()
+
+
+ADD_ALLOWED = {  # (ticket protocol, ticket ports, reply protocol, reply ports, destination for both)
+    "same port": ("TCP", ["443"], "TCP", ["443"], None),
+    "port as a JSON number": ("TCP", ["443"], "TCP", [443], None),
+    "protocol in lower case": ("TCP", ["443"], "tcp", ["443"], None),
+    "ticket * kept as *": ("TCP", ["*"], "TCP", ["*"], None),
+    "ticket * written as 1-65535": ("TCP", ["*"], "TCP", ["1-65535"], None),
+    "narrower port inside a ticket range": ("TCP", ["1000-2000"], "TCP", ["1500"], None),
+    "two ticket ports as one range": ("TCP", ["22", "23"], "TCP", ["22-23"], None),
+    "UDP kept": ("UDP", ["53"], "UDP", ["53"], None),
+    "Any kept, any case": ("Any", ["443"], "ANY", ["443"], None),
+    "ICMP kept": ("ICMP", ["*"], "ICMP", ["*"], None),
+    "HTTPS to an address as a TCP network rule (RB-01-4)": ("HTTPS", ["443"], "TCP", ["443"], None),
+    "HTTPS to a hostname kept as HTTPS": ("HTTPS", ["443"], "HTTPS", ["443"], "files.northwind.example"),
+}
+
+
+@pytest.mark.parametrize("t_proto, t_ports, r_proto, r_ports, host", ADD_ALLOWED.values(), ids=ADD_ALLOWED.keys())
+def test_an_add_inside_the_tickets_flow_is_written(repo, t_proto, t_ports, r_proto, r_ports, host):
+    before = snapshot(repo)
+    apply_reply(repo, flow_ticket(t_proto, t_ports, host and {"fqdn": host}), flow_reply(r_proto, r_ports, host))
+    assert changed(before, repo) == {SPOKE_FILE.format(PRIMARY)}
+
+
+def test_https_to_a_hostname_as_a_tcp_rule_is_refused(repo):
+    """RB-01-4 allows TCP only for HTTPS to an address; to a hostname it would be non-HTTP traffic to a name."""
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="protocol TCP is not the ticket's HTTPS"):
+        apply_reply(repo, flow_ticket("HTTPS", destination={"fqdn": "files.northwind.example"}),
+                    flow_reply("TCP", destination="files.northwind.example"))
+    assert changed(before, repo) == set()
+
+
+REMOVAL_REFUSED = {  # (ticket protocol, ticket ports) for a reply that deletes the TCP 587 rule, and the refusal
+    "ticket asks for 443": ("TCP", ["443"], r"ports \['587'\] are not exactly the ticket's \['443'\]"),
+    "ticket asks for a wider set": ("TCP", ["587", "588"], "are not exactly the ticket's"),
+    "ticket asks for every port": ("TCP", ["*"], "are not exactly the ticket's"),
+    "ticket asks for UDP": ("UDP", ["587"], "protocol TCP is not the ticket's UDP"),
+    "ticket asks for Any": ("Any", ["587"], "protocol TCP is not the ticket's Any"),
+}
+
+
+@pytest.mark.parametrize("t_proto, t_ports, why", REMOVAL_REFUSED.values(), ids=REMOVAL_REFUSED.keys())
+def test_a_removal_of_a_rule_for_other_ports_or_protocol_is_refused(repo, t_proto, t_ports, why):
+    """The file's rule allows TCP 587; deleting it is approved only by a ticket for exactly that flow."""
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match=why):
+        apply_reply(repo, flow_ticket(t_proto, t_ports, removal=True), flow_reply("TCP", ["587"], removal=True))
+    assert changed(before, repo) == set()
+
+
+def test_a_removal_with_the_tickets_ports_in_another_form_is_written(repo):
+    """Ticket 587-587 and rule 587 name the same single port, so the rule is deleted."""
+    before = snapshot(repo)
+    apply_reply(repo, flow_ticket("TCP", ["587-587"], removal=True), flow_reply("TCP", ["587"], removal=True))
+    assert changed(before, repo) == {SPOKE_FILE.format(PRIMARY)}
+
+
+DNAT_REFUSED = {  # one field of the labelled DNAT rule changed, and the refusal
+    "extra public port": ({"ports": ["22", "2222"]}, "port 2222 is not within"),
+    "wildcard public port": ({"ports": ["*"]}, r"port \* is not within"),
+    "translated to another port": ({"translated_port": "2222"}, "translated port '2222' is not the one port"),
+    "translated to every port": ({"translated_port": "*"}, r"translated port '\*' is not the one port"),
+    "UDP for TCP": ({"protocol": "UDP"}, "protocol UDP is not the ticket's TCP"),
+}
+
+
+@pytest.mark.parametrize("change, why", DNAT_REFUSED.values(), ids=DNAT_REFUSED.keys())
+def test_a_dnat_rule_publishes_and_translates_only_the_tickets_port(repo, change, why):
+    t, e = _label("RITM0011020")
+    e["rules"][0].update(change)
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match=why):
+        apply_reply(repo, t, e)
+    assert changed(before, repo) == set()

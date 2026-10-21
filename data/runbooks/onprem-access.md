@@ -33,7 +33,7 @@ Each item gives the reason code the reply carries when it stops. An item marked 
 - an on-prem CIDR is not in the address plan's on-prem list: `address_not_in_plan`
 - an on-prem CIDR is wider than its user subnet, such as a `/23` where the plan lists a `/24`: `wider_than_plan` (RB-01-6). A narrower CIDR inside one subnet, such as a `/25` or a single host `/32`, is drafted as given
 - an on-prem CIDR belongs to the other data centre than its `location` says: `env_mismatch` (RB-01-6). Stop and ask which source is intended; never change the CIDR or the location yourself
-- both ends are on-prem: that traffic never reaches an Azure firewall: *no code yet*
+- both ends are on-prem: that traffic never reaches an Azure firewall: `both_ends_onprem`
 - the Azure address is at a site the ticket does not select: `address_for_unselected_site`
 - a selected site has no Azure address: `site_without_address`
 - any reason in RB-01-6 that applies, with the code given there: a skip-approval request, free text naming another environment, or an IP group that does not exist

@@ -1,4 +1,4 @@
-"""The Tier 2 runner, checked with stand-in agents on the 55 validation tickets. Every check here must be able to fail."""
+"""The Tier 2 runner, checked with stand-in agents on the 65 validation tickets. Every check here must be able to fail."""
 
 import copy
 
@@ -29,17 +29,17 @@ def result_for(results, number):
 
 
 def test_the_perfect_agent_passes_every_ticket_complete():
-    """55 of 55 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
+    """65 of 65 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
     s = summarise(run(perfect(KEYS)))
-    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (55, 55, 55, 0)
+    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (65, 65, 65, 0)
     assert all(count == 0 for count in s["mistakes"].values())
 
 
 def test_the_always_stop_agent_gives_the_known_baseline():
-    """Always-stop passes 3 stops, gives the wrong reason on 12, and over-abstains on all 40 non-stops."""
+    """Always-stop passes 3 stops, gives the wrong reason on 22, and over-abstains on all 40 non-stops."""
     s = summarise(run(always_stop))
-    assert (s["passed"], s["stops"]) == (3, 15)
-    assert s["mistakes"]["wrong_reason"] == 12
+    assert (s["passed"], s["stops"]) == (3, 25)
+    assert s["mistakes"]["wrong_reason"] == 22
     assert s["mistakes"]["over_abstain"] == 40
     assert s["mistakes"]["wrong_outcome"] == 40
     assert s["mistakes"]["missed_stop"] == 0
@@ -61,7 +61,7 @@ def test_the_agent_sees_a_copy_of_the_ticket_and_never_the_answer_key():
 
     # Check outside the agent: the runner turns anything raised inside it into agent_error.
     results = run(spy)
-    assert len(seen) == 55
+    assert len(seen) == 65
     assert seen == [set(r.ticket) for r in REQUESTS]
     assert reviews == [r.engineer_review for r in REQUESTS]  # the engineer's decision, when there is one
     assert any(reviews), "no request carries an engineer_review block, so this check proves nothing"
@@ -84,7 +84,7 @@ def test_a_missing_site_rule_passes_but_is_reported_incomplete():
     assert r.verdict.passed and not r.verdict.complete
     assert r.verdict.incomplete == ["prod-centralus/ledg/allow-ledg-network-rules: rule missing"]
     s = summarise(results)
-    assert (s["passed"], s["complete"], s["incomplete"]) == (55, 54, 1)
+    assert (s["passed"], s["complete"], s["incomplete"]) == (65, 64, 1)
 
 
 def test_a_wider_port_fails_as_too_wide():
@@ -127,17 +127,17 @@ def test_drafting_an_already_allowed_ticket_fails_as_wrong_outcome():
 
 
 def test_a_crash_fails_one_ticket_and_the_run_goes_on():
-    """An exception on one ticket is agent_error there; the other 54 are still scored."""
+    """An exception on one ticket is agent_error there; the other 64 are still scored."""
     def crash(reply):
         """Fail the way a broken agent would."""
         raise RuntimeError("model timed out")
 
     results = run(perfect_except("RITM0011010", crash))
-    assert len(results) == 55
+    assert len(results) == 65
     r = result_for(results, "RITM0011010")
     assert r.verdict.mistakes == ["agent_error"] and r.reply_outcome == "?"
     assert "RuntimeError: model timed out" in r.verdict.detail
-    assert summarise(results)["complete"] == 54
+    assert summarise(results)["complete"] == 64
 
 
 def test_the_test_split_is_sealed(capsys):
@@ -155,7 +155,7 @@ def test_category_rows_add_up_to_the_totals(agent):
     """The by-category table counts every ticket once and matches the headline."""
     s = summarise(run(agent))
     rows = s["by_category"].values()
-    assert sum(total for _, total in rows) == s["tickets"] == 55
+    assert sum(total for _, total in rows) == s["tickets"] == 65
     assert sum(done for done, _ in rows) == s["complete"]
 
 
@@ -181,7 +181,7 @@ def test_first_pass_and_after_review_tickets_are_counted_apart():
     s = summarise(results)
     assert s["after_review"] == (2, 2)
     report = format_report(results, "validation", "perfect")
-    assert "First pass, passed and complete    53 / 53" in report
+    assert "First pass, passed and complete    63 / 63" in report
     assert "After engineer review, passed       2 / 2" in report
 
 

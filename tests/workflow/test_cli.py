@@ -295,3 +295,46 @@ def test_draft_records_live_outside_the_repo(monkeypatch):
     monkeypatch.delenv("FWAGENT_STATE_DIR", raising=False)
     where = cli.state_dir(REPO)
     assert REPO not in where.parents and Path.home() in where.parents
+
+
+def _flow(number, ticket_change, rule_change):
+    """The labelled ticket and reply with one change to each; the reply still names its file's real rule."""
+    t, e = copy.deepcopy(request(number))
+    t.update(ticket_change)
+    e["rules"][0].update(rule_change)
+    return t, e
+
+
+OUT_OF_FLOW = {  # (request, ticket change, reply change, what the refusal says)
+    "add: extra port 3389": (ADD, {}, {"ports": ["443", "3389"]}, "port 3389 is not within the ticket's ['443']"),
+    "add: wildcard port": (ADD, {}, {"ports": ["*"]}, "port * is not within the ticket's ['443']"),
+    "removal: ticket asks for 443, rule is 587": (REMOVE, {"ports": ["443"]}, {},
+                                                  "ports ['587'] are not exactly the ticket's ['443']"),
+    "removal: ticket asks for UDP, rule is TCP": (REMOVE, {"protocol": "UDP"}, {}, "protocol TCP is not the ticket's UDP"),
+}
+
+
+@pytest.mark.parametrize("number, t_change, r_change, why", OUT_OF_FLOW.values(), ids=OUT_OF_FLOW.keys())
+def test_an_accepted_ticket_with_a_draft_outside_its_ports_or_protocol_writes_nothing(
+        repo, tmp_path, capsys, number, t_change, r_change, why):
+    """Security register 50.20: the engineer accepted the ticket, but the draft must still match its flow."""
+    t, e = _flow(number, t_change, r_change)
+    ticket, reply = files(tmp_path, number, reply=e, ticket=t)
+    before = snapshot(repo)
+    assert draft(repo, ticket, reply) == cli.REFUSED
+    assert why in capsys.readouterr().out
+    assert changed(before, repo) == set()
+    record = cli.load_record(repo, number)
+    assert record["status"] == "awaiting_review" and record["files"] == {}
+    assert [h["action"] for h in record["history"]] == ["submit"]  # the refused accept is not recorded
+
+
+@pytest.mark.parametrize("number, file, r_change", [(ADD, ADD_FILE, {"ports": [443], "protocol": "tcp"}),
+                                                    (REMOVE, REMOVE_FILE, {})], ids=["add, equal forms", "removal"])
+def test_a_draft_inside_the_tickets_flow_still_writes(repo, tmp_path, number, file, r_change):
+    """The same tickets still draft, including port 443 as a JSON number and tcp in lower case."""
+    t, e = _flow(number, {}, r_change)
+    ticket, reply = files(tmp_path, number, reply=e, ticket=t)
+    before = snapshot(repo)
+    assert draft(repo, ticket, reply) == cli.DONE
+    assert changed(before, repo) == {file}

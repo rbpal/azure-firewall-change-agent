@@ -1,0 +1,41 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011064
+category: non-http-to-hostname
+why: 'AMQPS (TCP 5671) to a hostname: a network rule would pin addresses that can change.'
+ticket:
+  number: RITM0011064
+  item: Firewall Change Request
+  state: approved
+  requested_for: Priya Shah (Contoso app owner)
+  opened: '2026-10-07T09:10:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary, dr]
+  sources:
+  - {environment: stage, site: primary, cidr: 10.102.15.0/24}
+  - {environment: stage, site: dr, cidr: 10.103.15.0/24}
+  destination:
+  - {fqdn: api.tailspin.example}
+  protocol: TCP
+  ports: ['5671']
+  partner: Tailspin
+  justification: The stage reporting servers publish report events to Tailspin's message broker.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 91d3e04
+  review: pending
+  note: >-
+    AMQPS (TCP 5671) to api.tailspin.example. Only HTTP(S) to a name gets an application rule; a network rule to a hostname on the Basic SKU pins addresses that can change (RB-01-6).
+  outcome: stop_and_ask
+  reason: non_http_to_hostname
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
+  - {tool: dns_lookup_for_fqdn, target: api.tailspin.example}

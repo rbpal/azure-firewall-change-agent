@@ -1,0 +1,41 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011062
+category: ip-group-not-found
+why: Destination is ipg-partner-woodgrove, an IP group no env-site has; groups are created through their own process.
+ticket:
+  number: RITM0011062
+  item: Firewall Change Request
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-05T16:20:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary, dr]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.16.0/24}
+  - {environment: dev, site: dr, cidr: 10.105.16.0/24}
+  destination:
+  - {ip_group: ipg-partner-woodgrove}
+  protocol: TCP
+  ports: ['587']
+  partner: Woodgrove Bank
+  justification: The dev ledger servers send settlement notices to Woodgrove Bank by mail.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 91d3e04
+  review: pending
+  note: >-
+    The ticket names ipg-partner-woodgrove, which no env-site's ip-groups.tfvars holds; duplicate_rule_check refuses it as a group that does not exist in dev-eastus2. RB-01-2: escalate rather than create the group, and never put Woodgrove's CIDR in its place (STD-COLL-03).
+  outcome: stop_and_ask
+  reason: ip_group_not_found
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.16.0/24}
+  - {tool: locate_address_for_env_site, address: 10.105.16.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}

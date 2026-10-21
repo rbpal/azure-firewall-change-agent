@@ -16,6 +16,12 @@ Every source and destination must be one the ticket approves for that env-site,
 in the ticket's type: a CIDR within an approved CIDR, or an IP group or hostname
 the ticket names. A group is never accepted for a CIDR or a CIDR for a group,
 even when they hold the same addresses (STD-COLL-03).
+Every rule must use the ticket's protocol, and its ports must sit inside the
+ticket's ports. A removal must name exactly the ticket's ports, because deleting
+a rule for other traffic was never approved (RB-03-2). A DNAT rule translates to
+the same port it publishes (RB-02-2). The one documented substitute is HTTPS to
+addresses written as a TCP network rule (RB-01-4). Ports are read the way the
+ticket schema writes them, so a malformed port is refused, never corrected.
 Otherwise nothing is written. All files are worked out in memory first and written
 only when every one succeeds, so a refusal leaves every file byte for byte as it was.
 Disk failures: before anything is replaced, each original's exact bytes are saved
@@ -34,7 +40,9 @@ rename, so a rename or a backup may not have reached the disk.
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -43,8 +51,11 @@ import yaml
 
 from workflow.rule_index import next_index
 from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_type, spoke_path
+from workflow.tickets import SCHEMA_PATH
 
 from data_readers.read_addressplan_routing import ROUTING  # noqa: E402  (tfvars_writer puts mcp/ on the path)
+from errors import BadArguments  # noqa: E402
+from tools.duplicate_rule_check import _ports, _ports_within  # noqa: E402  (the agent tool's port maths, so the two agree)
 
 REMOVAL_ITEM = "Firewall Rule Removal"
 
@@ -54,10 +65,11 @@ class ScopeError(DraftError):
 
 
 class ApprovalError(ScopeError):
-    """A reply rule uses an address, or an address type, the ticket does not approve; nothing is written."""
+    """A reply rule uses an address, address type, protocol or port the ticket does not approve; nothing is written."""
 
 
 KINDS = {"cidr": "a CIDR", "ip_group": "an IP group", "fqdn": "a hostname"}
+PORT = re.compile(json.loads(SCHEMA_PATH.read_text())["$defs"]["port"]["pattern"])  # a ticket port: 22, 1000-2000 or *
 
 
 def _kind(value: str) -> str:
@@ -97,9 +109,53 @@ def _not_approved(value: str, approved: list[tuple[str, str]]) -> str:
     return f"{value} {why}; the ticket approves {given} (STD-COLL-03)"
 
 
+def _port_spans(values) -> list[tuple[int, int]] | None:
+    """Read reply ports written as a ticket writes them ("22", "1000-2000", "*") as ranges, or None if any is not."""
+    if not isinstance(values, list) or not values:
+        return None
+    if not all(isinstance(v, (str, int)) and not isinstance(v, bool) and PORT.fullmatch(str(v)) for v in values):
+        return None  # " 22", "022" and "22.0" are refused, never read as 22
+    try:
+        return _ports([str(v) for v in values])
+    except BadArguments:  # above 65535 or high to low
+        return None
+
+
+def _same_ports(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> bool:
+    """True when two port lists allow exactly the same ports, such as ["22", "23"] and ["22-23"]."""
+    return _ports_within(a, b) and _ports_within(b, a)
+
+
+def flow_errors(ticket: dict, rule: dict, removal: bool) -> list[str]:
+    """Every way one reply rule's protocol or ports differ from the ticket's."""
+    errors = []
+    want, protocol = ticket["protocol"], str(rule.get("protocol") or "")
+    https_as_network = (want.upper() == "HTTPS" and protocol.upper() == "TCP" and "translated_address" not in rule
+                        and all(_kind(str(d)) != "fqdn" for d in rule.get("destinations") or []))
+    if protocol.upper() != want.upper() and not https_as_network:  # RB-01-4: HTTPS to an address is a TCP network rule
+        errors.append(f"protocol {protocol or '(none)'} is not the ticket's {want}")
+    approved, ports = _ports(ticket["ports"]), _port_spans(rule.get("ports"))
+    if ports is None:
+        errors.append(f"ports {rule.get('ports')!r} are not written as a ticket writes ports (22, 1000-2000 or *)")
+    elif removal:
+        if not _same_ports(ports, approved):
+            errors.append(f"ports {rule['ports']} are not exactly the ticket's {ticket['ports']}; "
+                          "a removal deletes only the ticket's flow (RB-03-2)")
+    else:
+        errors += [f"port {v} is not within the ticket's {ticket['ports']}"
+                   for v, span in zip(rule["ports"], ports) if not _ports_within([span], approved)]
+    if "translated_address" in rule:
+        translated = _port_spans([rule.get("translated_port")])
+        if translated is None or translated[0][0] != translated[0][1] or not _same_ports(ports or [], translated):
+            errors.append(f"translated port {rule.get('translated_port')!r} is not the one port the rule publishes, "
+                          f"{rule.get('ports')}; DNAT translates to the same port (RB-02-2)")
+    return errors
+
+
 def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
-    """Every reply address whose value or type the ticket does not approve at that rule's env-site."""
+    """Every reply address, protocol or port the ticket does not approve at that rule's env-site."""
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
+    removal = reply.get("action") == "remove"
     errors = []
     for rule in reply.get("rules") or []:
         where = sites[rule["env_site"]]
@@ -113,6 +169,7 @@ def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
             approved = _approved(entries, env, site)
             errors += [f"{rule['env_site']} {rule['name']}: {side} {why}"
                        for v in values if (why := _not_approved(str(v), approved))]
+        errors += [f"{rule['env_site']} {rule['name']}: {why}" for why in flow_errors(ticket, rule, removal)]
     return errors
 
 
@@ -138,7 +195,7 @@ def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | N
         raise ScopeError(f"ticket selects {sorted(scope - named)}, but the reply has no rule there")
     errors = approval_errors(repo, ticket, reply)
     if errors:
-        raise ApprovalError("reply uses addresses the ticket does not approve:\n  " + "\n  ".join(errors))
+        raise ApprovalError("reply uses addresses, a protocol or ports the ticket does not approve:\n  " + "\n  ".join(errors))
 
     texts: dict[Path, str] = dict(base or {})  # fix plans the new draft on the text from before the old one
     out = []

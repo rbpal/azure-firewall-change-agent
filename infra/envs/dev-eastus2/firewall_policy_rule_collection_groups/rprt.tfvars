@@ -59,6 +59,13 @@ rprt = {
           destination_ip_groups = ["ipg-xfer-dev"]
           destination_ports     = ["22"]
         }
+        "008-https-rprt-to-settApi" = {
+          name                  = "https-rprt-to-settApi"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.104.15.0/24"]
+          destination_addresses = ["10.104.14.0/24"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

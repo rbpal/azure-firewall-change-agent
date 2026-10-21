@@ -16,6 +16,9 @@ STOP_CATEGORIES = {
     "sites-contradict-addresses", "address-environment-contradicts-ticket",
     "address-not-in-plan", "free-text-names-another-environment",
     "onprem-address-not-in-plan", "onprem-location-mismatch", "wider-than-plan", "planned-spoke",
+    "dnat-open-source", "dnat-destination-not-one-host", "onprem-to-onprem", "ip-group-not-found", "url-not-valid",
+    "non-http-to-hostname", "removal-rule-allows-more", "removal-hub-rule", "removal-asks-ip-group-change",
+    "removal-one-site-matches",
 }
 OUTCOMES = {"draft", "stop_and_ask", "already_allowed"}
 STOP_REASONS = {
@@ -25,6 +28,13 @@ STOP_REASONS = {
     "port_already_published",  # RB-02-5
     "wider_than_plan", "planned_address",  # RB-01-6, decided 2026-10-20
 }
+CODED_2026_10_21 = {  # the escalations that had no code, each with a validation case
+    "open_dnat_source", "dnat_destination_not_host",  # RB-02-5
+    "both_ends_onprem",  # RB-05-5
+    "ip_group_not_found", "dns_lookup_failed", "non_http_to_hostname",  # RB-01-6
+    "rule_allows_more", "hub_rule", "ip_group_change_requested", "partial_site_match",  # RB-03-5
+}
+STOP_REASONS |= CODED_2026_10_21
 RUNBOOKS = make_requests.REPO / "data" / "runbooks"
 RULE_FIELDS = {"env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"}
 DNAT_FIELDS = RULE_FIELDS | {"translated_address", "translated_port"}  # inbound rules also name the internal host
@@ -49,7 +59,7 @@ def test_script_writes_the_planned_mix(generated):
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation - retired[name], name
         assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 55
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 65
     assert sum(v for (split, _), v in counts.items() if split == "test") == 34
 
 
@@ -74,7 +84,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 89
+    assert written == [] and len(kept) == 99
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -115,8 +125,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_89_committed_requests():
-    assert len(COMMITTED) == 89
+def test_there_are_99_committed_requests():
+    assert len(COMMITTED) == 99
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -231,13 +241,30 @@ def test_every_label_reason_is_documented():
     assert reasons <= documented_codes()
 
 
-UNCODED_ESCALATIONS = 15  # 2026-10-20; lower it as each escalation gets a code, never raise it
+UNCODED_ESCALATIONS = 4  # 2026-10-21, was 15; lower it as each escalation gets a code, never raise it
 
 
 def test_uncoded_escalations_only_shrink():
     # Each must get a code before the agent's reply contract is final (Step 04 Task 03).
     count = sum(page.read_text().count(": *no code yet*") for page in RUNBOOKS.glob("*.md"))
     assert count <= UNCODED_ESCALATIONS
+
+
+def test_every_code_added_on_2026_10_21_has_a_validation_case_and_no_test_case():
+    # The test split is held out and was not touched: these codes are measured on validation only.
+    reasons = {(p.parent.name, (load(p)["expected"] or {}).get("reason")) for p in COMMITTED}
+    assert {code for split, code in reasons if split == "validation"} >= CODED_2026_10_21
+    assert not {code for split, code in reasons if split == "test"} & CODED_2026_10_21
+
+
+def test_open_dnat_is_one_escalation_in_the_dnat_runbook():
+    # RB-01-6 once repeated RB-02-5's open-DNAT line, so one condition was counted twice.
+    import re
+    pages = [page.name for page in sorted(RUNBOOKS.glob("*.md"))
+             for section in re.split(r"^(?=## )", page.read_text(), flags=re.M)
+             if "Escalate instead of drafting when" in section.splitlines()[0]
+             for line in section.splitlines() if line.startswith("- ") and "STD-COLL-04" in line]
+    assert pages == ["inbound-dnat.md"]
 
 
 REVIEW_KEYS = {"decision", "engineer", "reason", "ticket_version", "accepted", "planned"}

@@ -1,0 +1,43 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011066
+category: removal-hub-rule
+why: Removes ntp-spokes-to-hubNtp, which is in the stage primary hub group, matched exactly.
+ticket:
+  number: RITM0011066
+  item: Firewall Rule Removal
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-09T08:10:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary]
+  sources:
+  - {environment: stage, site: primary, cidr: 10.102.14.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.15.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.16.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.17.0/24}
+  - {environment: stage, site: primary, cidr: 10.102.20.0/24}
+  destination:
+  - {environment: stage, site: primary, cidr: 10.102.1.6/32}
+  protocol: UDP
+  ports: ['123']
+  partner: null
+  justification: The stage spokes now take time from the platform time service, so the hub NTP rule is no longer needed.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+  existing_rule: ntp-spokes-to-hubNtp
+expected:
+  labelled_against: 91d3e04
+  review: pending
+  note: >-
+    The flow matches 002-ntp-spokes-to-hubNtp in stage-eastus2 exactly (duplicate), but that rule is in the hub group, which serves every spoke (RB-03-5).
+  outcome: stop_and_ask
+  reason: hub_rule
+  rules: []
+  tools:
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}

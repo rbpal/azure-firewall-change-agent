@@ -1,4 +1,6 @@
-"""fwagent submit, fix, reject and approve, on a copy of the env-site files. Every check here must be able to fail."""
+"""fwagent submit, fix, reject and approve, on a copy of the env-site files. Every check here must be able to fail.
+
+Engineer review (edit, accept, reject while awaiting review) is in test_review.py."""
 
 import copy
 import json
@@ -84,19 +86,26 @@ def test_without_a_reply_submit_says_no_model_is_configured(repo, tmp_path, caps
     assert changed(before, repo) == set()
 
 
-@pytest.mark.parametrize("edit, says", [
-    (lambda t: t.pop("change_sites"), "fails its checks"),
-    (lambda t: t.update(state="pending"), "only approved tickets"),
-])
-def test_a_bad_or_unapproved_ticket_writes_nothing(repo, tmp_path, capsys, edit, says):
-    t, _ = request(ADD)
-    t = copy.deepcopy(t)
-    edit(t)
+def test_an_unapproved_ticket_is_out_of_scope_and_writes_nothing(repo, tmp_path, capsys):
+    # Every ticket is assumed approved in ServiceNow before it arrives; anything else is refused at the door.
+    t = copy.deepcopy(request(ADD)[0])
+    t.update(state="pending")
     ticket, reply = files(tmp_path, ADD, ticket=t)
     before = snapshot(repo)
     assert run(repo, "submit", ticket, "--reply", reply) == cli.REFUSED
-    assert says in capsys.readouterr().out
+    assert "only approved tickets" in capsys.readouterr().out
     assert changed(before, repo) == set()
+
+
+def test_a_ticket_failing_its_checks_waits_for_the_engineer_and_writes_nothing(repo, tmp_path, capsys):
+    t = copy.deepcopy(request(ADD)[0])
+    t.pop("change_sites")
+    ticket, reply = files(tmp_path, ADD, ticket=t)
+    before = snapshot(repo)
+    assert run(repo, "submit", ticket, "--reply", reply) == cli.REVIEW
+    assert "invalid_ticket" in capsys.readouterr().out
+    assert changed(before, repo) == set()
+    assert cli.load_record(repo, ADD)["status"] == "awaiting_review"
 
 
 def test_a_reply_outside_the_ticket_scope_writes_nothing(repo, tmp_path, capsys):
@@ -110,12 +119,12 @@ def test_a_reply_outside_the_ticket_scope_writes_nothing(repo, tmp_path, capsys)
     assert changed(before, repo) == set()
 
 
-def test_a_stop_reply_records_the_stop_and_writes_nothing(repo, tmp_path, capsys):
+def test_a_stop_reply_waits_for_review_and_writes_nothing(repo, tmp_path, capsys):
     ticket, reply = files(tmp_path, ADD, reply={"outcome": "stop_and_ask", "reason": "free_text_conflict", "rules": []})
     before = snapshot(repo)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.DONE
+    assert run(repo, "submit", ticket, "--reply", reply) == cli.REVIEW
     assert changed(before, repo) == set()
-    assert cli.load_record(repo, ADD)["status"] == "stop_and_ask"
+    assert cli.load_record(repo, ADD)["status"] == "awaiting_review"  # a stop waits for the engineer; never a rejection
 
 
 def test_submitting_twice_is_refused(repo, tmp_path, capsys):

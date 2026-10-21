@@ -15,10 +15,14 @@ A Python command-line tool, `fwagent`, run on the engineer's laptop.
 
 | Command | What it does |
 | --- | --- |
-| `fwagent submit <ticket.yaml>` | Checks the ticket against the schema, gets the agent's draft, writes it into the tfvars files and prints the draft note |
+| `fwagent submit <ticket.yaml>` | Checks the ticket. A ticket with a problem is saved as awaiting review and never reaches the agent. Otherwise it gets the agent's reply, writes a draft into the tfvars files and prints the draft note; a stop is saved as awaiting review |
 | `fwagent fix <ticket> "<correction>"` | Sends the engineer's correction to the agent and rewrites the draft |
-| `fwagent reject <ticket> "<reason>"` | Removes the draft from the files and closes the ticket with the reason |
+| `fwagent edit <ticket> <edited.yaml>` | Replaces a ticket awaiting review with the engineer's edit, records what changed, and runs every check again |
+| `fwagent accept <ticket>` | Records the engineer's acceptance and reason, then lets the agent draft within the ticket's own values; refused while any value is invalid or missing |
+| `fwagent reject <ticket> "<reason>"` | Removes any draft from the files and closes the ticket with the reason |
 | `fwagent approve <ticket>` | Hands the approved draft to the pull request step |
+
+Amended 2026-10-20: the workflow never rejects a ticket on its own. Problems wait for the engineer, who rejects, edits or accepts (`edit` and `accept` added; RB-01-8).
 
 The tool signs in with the engineer's own `az login`. The draft shows up as a normal diff in VS Code.
 

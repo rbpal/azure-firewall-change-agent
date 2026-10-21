@@ -33,11 +33,14 @@ Put the rule in the source spoke's group, in the collection for its type (STD-CO
 
 ## RB-01-6 — Escalate instead of drafting when
 
+Escalating means the reply's outcome is `stop_and_ask`: the request waits for the engineer's review. It is never a rejection; the engineer rejects, edits or accepts it (RB-01-8).
+
 Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
 
 - the ticket asks for a DNAT rule with a source of `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block): *no code yet*
 - the requester asks for the change to skip approval: `skip_approval_requested`
-- the source is in no existing spoke: a new spoke needs a new file and Terraform variable, which is a code change, not a rule request. An on-prem source is not this case; it follows RB-05: *no code yet*
+- an Azure address sits inside an env-site, but no spoke or shared range owns it (`locate_address_for_env_site` answers `no_owner`), as with a spoke that is planned but not built: `planned_address`. Preparing policy before a spoke exists can be valid. Ask the engineer to confirm the CIDR, environment, site, firewall policy and rule placement; never pick a spoke yourself. An on-prem source is not this case; it follows RB-05
+- an address is wider than the plan range it belongs to, or spans several (`locate_address_for_env_site` answers `wider_than_plan`): `wider_than_plan`. Name the plan ranges and the extra blocks the tool lists, with their address count; never narrow the address yourself. An address narrower than its range, inside one owner's range, is not a reason to stop
 - the ticket names an IP group that does not exist: *no code yet*
 - a selected site has no source: `site_without_address`
 - a source belongs to a site the ticket does not select: `address_for_unselected_site`
@@ -52,8 +55,27 @@ Each item gives the reason code the reply carries when it stops. An item marked 
 
 - the ticket's destination is `*`, `0.0.0.0/0` or a web category
 - the ticket's FQDN has a wildcard, such as `*.northwind.example` (STD-COLL-02)
-- the ticket's source range covers a whole environment, such as a `/16`, rather than one workload
 - any Tier 1 check does not pass
 - the hostname does not resolve (`dns_lookup_for_fqdn` answers `resolves: false`). The engineer has three choices: correct the URL on the ticket and run it again, reject the ticket because the URL may be wrong, or approve anyway with a reason, for example a DNS record the partner creates at go-live. An approval past this caution is written into the PR description
 
 The engineer sees the caution and approves or rejects. The agent does not decide.
+
+## RB-01-8 — Engineer review
+
+Every request that cannot be drafted waits for the engineer. Nothing is rejected without the engineer's decision.
+
+Code checks the ticket before the agent sees it. A malformed or incomplete ticket is saved for review and never reaches the agent:
+
+1. **Invalid ticket.** A field breaks the ticket schema, such as a missing `change_sites`.
+2. **Invalid address.** A CIDR that cannot exist, such as a `/33` prefix (IPv4 has 32 bits), or one with host bits set: an address that is not the first address of its prefix. That one has two readings, a single host (`/32`) or the whole subnet, and the workflow picks neither.
+3. **Missing address.** A VNet or subnet named with no CIDR or IP group. A VNet name found in the address plan is shown as a suggestion with its file, never applied.
+
+The engineer then decides:
+
+- **Reject.** The request closes and nothing is implemented.
+- **Edit.** The engineer supplies the corrected ticket. Every check runs again on it, and the draft uses only the confirmed values. The edit and its author are recorded. An edit never changes the ticket's state or approvals.
+- **Accept.** The engineer approves the request as it stands, with a reason; the name, time and reason are recorded. Accept is possible only for `wider_than_plan`, `planned_address`, `address_not_in_plan` and `skip_approval_requested`. An unknown or planned address also needs the engineer's record of its CIDR, environment, site, firewall policy and placement. The draft still passes every scope check, so acceptance never adds an address or a site.
+
+An invalid, missing or contradictory value can only be cleared by an edit with a valid value. Acceptance alone never makes it executable, and the agent never invents a correction.
+
+When a planned address is placed in a spoke that does not exist yet, the request waits for the platform change. The workflow lists what that spoke still needs at each site: its rules file, its Terraform variable and map entry, its IP group if the ticket names one, and its entries in the routing and address plan.

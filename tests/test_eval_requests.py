@@ -23,6 +23,7 @@ STOP_REASONS = {
     "address_not_in_plan", "dr_policy_not_built", "free_text_conflict",
     "skip_approval_requested",  # RB-01-6
     "port_already_published",  # RB-02-5
+    "wider_than_plan", "planned_address",  # RB-01-6, decided 2026-10-20
 }
 RUNBOOKS = make_requests.REPO / "data" / "runbooks"
 RULE_FIELDS = {"env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"}
@@ -230,7 +231,7 @@ def test_every_label_reason_is_documented():
     assert reasons <= documented_codes()
 
 
-UNCODED_ESCALATIONS = 16  # 2026-10-20; lower it as each escalation gets a code, never raise it
+UNCODED_ESCALATIONS = 15  # 2026-10-20; lower it as each escalation gets a code, never raise it
 
 
 def test_uncoded_escalations_only_shrink():

@@ -57,6 +57,13 @@ def test_destination_url_passes_the_schema(ticket, url):
     assert ticket_errors(ticket) == []
 
 
+@pytest.mark.parametrize("address", [{"vnet": "vnet-prod-app", "subnet": "snet-backend"}, {"vnet": "vnet-prod-data"}])
+def test_a_vnet_named_without_an_address_passes_the_schema(ticket, address):
+    # The shape is kept so intake can save the ticket for engineer review; intake, not the schema, blocks it.
+    ticket["destination"] = [address]
+    assert ticket_errors(ticket) == []
+
+
 @pytest.mark.parametrize("fqdn", ["*", "*.com", "*.northwind.example"])
 def test_wildcard_fqdns_pass_the_schema(ticket, fqdn):
     # STD-COLL-02 flags these as cautions; the schema must let them through.
@@ -96,6 +103,10 @@ BAD = {
     "bad ticket number": lambda t: t.update(number="REQ-0042"),
     "empty justification": lambda t: t.update(justification=""),
     "url as a source": lambda t: t["sources"].__setitem__(0, {"url": "https://www.cnn.com/"}),
+    "subnet without its vnet": lambda t: t["destination"].__setitem__(0, {"cidr": "10.100.16.0/24", "subnet": "snet-database"}),
+    "vnet name without vnet- prefix": lambda t: t["destination"].__setitem__(0, {"vnet": "prod-data"}),
+    "vnet and cidr together": lambda t: t["destination"].__setitem__(
+        0, {"vnet": "vnet-prod-data", "cidr": "10.100.16.0/24"}),
     "url and fqdn together": lambda t: t["destination"].__setitem__(
         0, {"url": "https://www.cnn.com/", "fqdn": "www.cnn.com"}),
     "url with ftp scheme": lambda t: t["destination"].__setitem__(0, {"url": "ftp://www.cnn.com/"}),

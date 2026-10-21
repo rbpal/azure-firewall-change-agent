@@ -14,6 +14,13 @@ An on-prem user subnet (address plan `onprem:`) answers with its data centre
 and ExpressRoute connection instead. It has no env-site and no firewall of its
 own. Which firewall inspects it is an assumption, carried in the answer as
 `inspection` and not verified on a live network (routing.yaml `onprem:`).
+
+Two facts the engineer reviews are named in the answer, never decided here:
+`wider_than_plan` when the input spans more than one plan range or holds
+addresses no range lists (with those extra blocks and their count), and
+`no_owner` when the input sits in an env-site but no spoke or shared range
+owns it, as with a planned or unknown subnet. A CIDR with host bits set is
+refused with both of its readings; the tool never picks one.
 """
 
 import ipaddress
@@ -55,10 +62,12 @@ def parse_address(text) -> ipaddress.IPv4Network:
     except ValueError as exc:
         if "/" in text:
             try:
-                ipaddress.IPv4Network(text, strict=False)
-                raise BadArguments(f"{text} has host bits set; did you mean {ipaddress.IPv4Network(text, strict=False)}?") from exc
+                net = ipaddress.IPv4Network(text, strict=False)
             except ValueError:
-                pass
+                net = None
+            if net is not None:
+                raise BadArguments(f"{text} has host bits set, so it has two readings: the host "
+                                   f"{text.split('/')[0]}/32 or the subnet {net}; the tool will not pick one") from exc
         raise BadArguments(f"{text!r} is not an IPv4 address or CIDR") from exc
 
 
@@ -79,6 +88,19 @@ def locate(net: ipaddress.IPv4Network, ranges: list[Range | OnPremRange], hubs: 
     if not containing:
         result["reason"] = ("wider than every range in the address plan" if covered
                             else "not in the address plan (Azure or on-prem)")
+    leaves = [r for r in covered if getattr(r, "kind", "") != "env-site"]
+    if leaves:
+        extra = [net]
+        for r in leaves:
+            extra = [piece for block in extra
+                     for piece in ([block] if not r.network.overlaps(block) else
+                                   [] if block.subnet_of(r.network) else block.address_exclude(r.network))]
+        result["wider_than_plan"] = {"plan_ranges": [str(r.network) for r in leaves],
+                                     "extra": [str(b) for b in sorted(extra)],
+                                     "extra_addresses": sum(b.num_addresses for b in extra)}
+    elif containing and getattr(containing[0], "kind", "") == "env-site":
+        result["no_owner"] = (f"inside {containing[0].env_site}, but no spoke or shared range in the plan owns it; "
+                              "a planned or unknown subnet")
     return result
 
 

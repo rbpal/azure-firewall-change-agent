@@ -104,9 +104,38 @@ def test_bad_addresses_are_refused(bad):
         call(bad)
 
 
-def test_host_bits_set_is_refused_with_a_hint():
-    with pytest.raises(BadArguments, match="did you mean 10.100.14.0/24"):
+def test_host_bits_set_is_refused_with_both_readings_and_no_choice():
+    with pytest.raises(BadArguments) as info:
         call("10.100.14.5/24")
+    assert "the host 10.100.14.5/32 or the subnet 10.100.14.0/24" in str(info.value)
+    assert "did you mean" not in str(info.value)
+
+
+# ---- facts the engineer reviews: wider than the plan, and no owner
+
+def test_onprem_cidr_wider_than_its_plan_range_names_the_extra_block():
+    out = call("172.20.20.0/23")
+    assert out["wider_than_plan"] == {"plan_ranges": ["172.20.20.0/24"], "extra": ["172.20.21.0/24"],
+                                      "extra_addresses": 256}
+
+
+def test_azure_cidr_spanning_two_spokes_is_wider_than_plan_with_no_extra_block():
+    out = call("10.104.14.0/23")
+    assert out["match"]["kind"] == "env-site"
+    assert out["wider_than_plan"] == {"plan_ranges": ["10.104.14.0/24", "10.104.15.0/24"], "extra": [],
+                                      "extra_addresses": 0}
+
+
+def test_address_in_an_env_site_that_no_spoke_owns_says_so():
+    out = call("10.104.40.0/24")
+    assert out["match"]["env_site"] == "dev-eastus2" and "wider_than_plan" not in out
+    assert out["no_owner"].startswith("inside dev-eastus2, but no spoke or shared range")
+
+
+@pytest.mark.parametrize("address", ["172.20.20.0/25", "172.20.20.15", "10.104.14.0/24", "10.104.14.0/25"])
+def test_a_narrower_or_exact_address_is_neither_wider_nor_unowned(address):
+    out = call(address)
+    assert out["match"] is not None and "wider_than_plan" not in out and "no_owner" not in out
 
 
 def test_unknown_argument_is_refused():

@@ -116,7 +116,7 @@
     "environment": { "enum": ["lab", "dev", "stage", "prod"] },
     "site": { "enum": ["primary", "dr"] },
     "address": {
-      "description": "Exactly one of cidr, ip_group, fqdn or url. The type is part of the approval: a cidr approves that CIDR, an ip_group approves that named group, and one is never swapped for the other, even when the group holds the same addresses (STD-COLL-03). environment and site appear together, on the internal Azure side of the flow. location (onprem-primary or onprem-secondary) marks an on-prem CIDR, and never appears with environment or site; an on-prem IP group names its data centre itself and takes no location. url is for a destination only: the address a requester pasted, with scheme, optional port and path. The rule uses its hostname and port; the path stays on the ticket, but no rule matches on it.",
+      "description": "Exactly one of cidr, ip_group, fqdn, url or vnet. The type is part of the approval: a cidr approves that CIDR, an ip_group approves that named group, and one is never swapped for the other, even when the group holds the same addresses (STD-COLL-03). environment and site appear together, on the internal Azure side of the flow. location (onprem-primary or onprem-secondary) marks an on-prem CIDR, and never appears with environment or site; an on-prem IP group names its data centre itself and takes no location. url is for a destination only: the address a requester pasted, with scheme, optional port and path. The rule uses its hostname and port; the path stays on the ticket, but no rule matches on it. vnet (with an optional subnet) records a network the requester named without an address; the ticket is kept, but intake sends it to engineer review, because no rule can be written until an edit gives the CIDR or IP group.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -135,7 +135,9 @@
         },
         "environment": { "$ref": "#/$defs/environment" },
         "site": { "$ref": "#/$defs/site" },
-        "location": { "enum": ["onprem-primary", "onprem-secondary"] }
+        "location": { "enum": ["onprem-primary", "onprem-secondary"] },
+        "vnet": { "type": "string", "pattern": "^vnet-[a-z0-9-]{1,60}$" },
+        "subnet": { "type": "string", "pattern": "^snet-[a-z0-9-]{1,60}$" }
       },
       "if": { "required": ["location"] },
       "then": { "required": ["cidr"], "not": { "anyOf": [{ "required": ["environment"] }, { "required": ["site"] }] } },
@@ -143,11 +145,13 @@
         { "required": ["cidr"] },
         { "required": ["ip_group"] },
         { "required": ["fqdn"] },
-        { "required": ["url"] }
+        { "required": ["url"] },
+        { "required": ["vnet"] }
       ],
       "dependentRequired": {
         "environment": ["site"],
-        "site": ["environment"]
+        "site": ["environment"],
+        "subnet": ["vnet"]
       }
     },
     "port": {

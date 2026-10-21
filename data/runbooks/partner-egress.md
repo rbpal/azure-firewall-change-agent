@@ -62,7 +62,7 @@ The engineer sees the caution and approves or rejects. The agent does not decide
 
 ## RB-01-8 — Engineer review
 
-Every request that cannot be drafted waits for the engineer. Nothing is rejected without the engineer's decision.
+Every request waits for the engineer before the agent sees it, even one with no findings. The engineer checks the ticket's details only: source, destination, protocol, ports, and URL or hostname where the ticket has one. The engineer then accepts that exact version of the ticket, and only then does the agent run. A request the agent cannot draft waits for the engineer again. Nothing is rejected without the engineer's decision. This review is separate from the engineer's final review of the draft.
 
 Code checks the ticket before the agent sees it. A malformed or incomplete ticket is saved for review and never reaches the agent:
 
@@ -73,7 +73,7 @@ Code checks the ticket before the agent sees it. A malformed or incomplete ticke
 The engineer then decides:
 
 - **Reject.** The request closes and nothing is implemented.
-- **Edit.** The engineer supplies the corrected ticket. Every check runs again on it, and the draft uses only the confirmed values. The edit and its author are recorded. An edit never changes the ticket's state or approvals.
+- **Edit.** The engineer supplies the corrected ticket. Every check runs again on it, and it waits for acceptance of the new version; the draft then uses only the confirmed values. The edit and its author are recorded. An edit never changes the ticket's state or approvals.
 - **Accept.** The engineer approves the request as it stands, with a reason; the name, time and reason are recorded. Accept is possible only for `wider_than_plan`, `planned_address`, `address_not_in_plan` and `skip_approval_requested`. An unknown or planned address also needs the engineer's record of its CIDR, environment, site, firewall policy and placement. The draft still passes every scope check, so acceptance never adds an address or a site.
 
 An invalid, missing or contradictory value can only be cleared by an edit with a valid value. Acceptance alone never makes it executable, and the agent never invents a correction.

@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 import workflow.cli as cli
-from tests.workflow.test_cli import ADD, ADD_FILE, changed, files, repo, request, run, snapshot  # noqa: F401  (repo is a fixture)
+from tests.workflow.test_cli import ADD, ADD_FILE, changed, draft, files, repo, request, run, snapshot  # noqa: F401  (repo is a fixture)
 
 ENGINEER = "Jordan Patel"
 
@@ -42,7 +42,7 @@ def label_reply(tmp_path):
 
 
 def stop(tmp_path, reason):
-    """Submit RITM0011041 with a stop reply giving `reason`; return the ticket path."""
+    """RITM0011041 and a stop reply giving `reason`; draft() submits, accepts and gets that stop."""
     ticket, _ = files(tmp_path, ADD)
     reply = reply_file(tmp_path, "stop", {"outcome": "stop_and_ask", "reason": reason, "rules": []})
     return ticket, reply
@@ -109,7 +109,7 @@ def test_accept_cannot_make_an_invalid_or_missing_address_executable(repo, tmp_p
 
 def test_accept_records_the_engineer_and_drafts_within_the_ticket(repo, tmp_path):
     ticket, reply = stop(tmp_path, "wider_than_plan")
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.REVIEW
+    assert draft(repo, ticket, reply) == cli.REVIEW
     before = snapshot(repo)
     code = run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "Owner confirmed the /24", "--reply",
                label_reply(tmp_path))
@@ -123,7 +123,7 @@ def test_accept_records_the_engineer_and_drafts_within_the_ticket(repo, tmp_path
 
 def test_accept_never_adds_a_site_the_ticket_does_not_select(repo, tmp_path, capsys):
     ticket, reply = stop(tmp_path, "wider_than_plan")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     wide = copy.deepcopy(request(ADD)[1])
     wide["rules"].append({**wide["rules"][0], "env_site": "stage-centralus", "sources": ["10.103.15.0/24"]})
     before = snapshot(repo)
@@ -136,7 +136,7 @@ def test_accept_never_adds_a_site_the_ticket_does_not_select(repo, tmp_path, cap
 @pytest.mark.parametrize("reason", ["env_mismatch", "free_text_conflict", "address_for_unselected_site"])
 def test_a_contradiction_needs_an_edit_not_an_accept(repo, tmp_path, reason):
     ticket, reply = stop(tmp_path, reason)
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "ok", "--reply", label_reply(tmp_path)) == cli.REFUSED
 
 
@@ -155,7 +155,7 @@ def planned_file(tmp_path, *entries):
 
 def test_accepting_a_planned_address_needs_the_planned_record(repo, tmp_path, capsys):
     ticket, reply = stop(tmp_path, "planned_address")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "ok", "--reply", label_reply(tmp_path)) == cli.REFUSED
     assert "--planned FILE" in capsys.readouterr().out
 
@@ -170,7 +170,7 @@ def test_accepting_a_planned_address_needs_the_planned_record(repo, tmp_path, ca
 ])
 def test_a_planned_record_that_does_not_fit_the_ticket_is_refused(repo, tmp_path, capsys, change, says):
     ticket, reply = stop(tmp_path, "planned_address")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     before = snapshot(repo)
     code = run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "ok",
                "--planned", planned_file(tmp_path, {**PLANNED, **change}), "--reply", label_reply(tmp_path))
@@ -180,7 +180,7 @@ def test_a_planned_record_that_does_not_fit_the_ticket_is_refused(repo, tmp_path
 
 def test_a_planned_address_placed_in_an_existing_spoke_drafts(repo, tmp_path):
     ticket, reply = stop(tmp_path, "planned_address")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     code = run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "Spoke built next sprint",
                "--planned", planned_file(tmp_path, PLANNED), "--reply", label_reply(tmp_path))
     assert code == cli.DONE
@@ -190,7 +190,7 @@ def test_a_planned_address_placed_in_an_existing_spoke_drafts(repo, tmp_path):
 
 def test_a_planned_new_spoke_lists_what_is_missing_and_writes_nothing(repo, tmp_path, capsys):
     ticket, reply = stop(tmp_path, "planned_address")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     before = snapshot(repo)
     code = run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "New payments spoke",
                "--planned", planned_file(tmp_path, {**PLANNED, "placement": "pymt"}))  # no --reply needed to wait
@@ -215,15 +215,18 @@ def test_an_edit_with_a_valid_cidr_reruns_the_checks_and_drafts(repo, tmp_path):
     bad, original = ticket_with(tmp_path, "bad", cidr="10.102.15.7/24")
     run(repo, "submit", bad)
     fixed, _ = ticket_with(tmp_path, "fixed", cidr="10.102.15.0/24")
-    code = run(repo, "edit", ADD, fixed, "--engineer", ENGINEER, "--note", "Requester confirmed the subnet",
-               "--reply", label_reply(tmp_path))
-    assert code == cli.DONE
+    code = run(repo, "edit", ADD, fixed, "--engineer", ENGINEER, "--note", "Requester confirmed the subnet")
+    assert code == cli.REVIEW  # checks pass, but the agent waits for acceptance of the edited version
     record = cli.load_record(repo, ADD)
-    assert record["status"] == "drafted" and record["original_ticket"] == original
+    assert record["status"] == "awaiting_review" and record["findings"] == [] and record["reply"] is None
     entry = record["history"][-1]
     assert entry["engineer"] == ENGINEER and entry["note"] == "Requester confirmed the subnet"
     assert entry["changes"]["sources"]["before"][0]["cidr"] == "10.102.15.7/24"
     assert entry["changes"]["sources"]["after"][0]["cidr"] == "10.102.15.0/24"
+    assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "confirmed",
+               "--reply", label_reply(tmp_path)) == cli.DONE
+    record = cli.load_record(repo, ADD)
+    assert record["status"] == "drafted" and record["original_ticket"] == original
 
 
 def test_an_edit_that_is_still_invalid_stays_in_review(repo, tmp_path):
@@ -245,17 +248,16 @@ def test_an_edit_cannot_change_approvals_state_or_number(repo, tmp_path, capsys,
     t.update(change)
     path = tmp_path / "edited.yaml"
     path.write_text(yaml.safe_dump(t))
-    assert run(repo, "edit", ADD, str(path), "--engineer", ENGINEER, "--note", "x", "--reply", label_reply(tmp_path)) \
-        == cli.REFUSED
+    assert run(repo, "edit", ADD, str(path), "--engineer", ENGINEER, "--note", "x") == cli.REFUSED
     assert cli.load_record(repo, ADD)["history"][-1]["action"] == "submit"
 
 
-def test_an_edit_without_an_agent_reply_saves_nothing(repo, tmp_path, capsys):
+def test_an_edit_is_saved_without_the_agent(repo, tmp_path):
     bad, _ = ticket_with(tmp_path, "bad", cidr="172.20.20.0/33")
     run(repo, "submit", bad)
     fixed, _ = ticket_with(tmp_path, "fixed", cidr="10.102.15.0/24")
-    assert run(repo, "edit", ADD, fixed, "--engineer", ENGINEER, "--note", "x") == cli.REFUSED
-    assert cli.load_record(repo, ADD)["ticket"]["sources"][0]["cidr"] == "172.20.20.0/33"
+    assert run(repo, "edit", ADD, fixed, "--engineer", ENGINEER, "--note", "x") == cli.REVIEW
+    assert cli.load_record(repo, ADD)["ticket"]["sources"][0]["cidr"] == "10.102.15.0/24"
 
 
 # Reject: closes the request without implementing it.
@@ -274,9 +276,10 @@ def test_reject_closes_a_ticket_awaiting_review_and_records_who(repo, tmp_path):
                                      ["edit", ADD, "TICKET", "--note", "x"]])
 def test_edit_and_accept_need_a_ticket_awaiting_review(repo, tmp_path, capsys, command):
     ticket, reply = files(tmp_path, ADD)
-    run(repo, "submit", ticket, "--reply", reply)  # drafted, not awaiting review
+    draft(repo, ticket, reply)  # drafted, not awaiting review
     capsys.readouterr()
-    argv = [ticket if a == "TICKET" else a for a in command] + ["--engineer", ENGINEER, "--reply", reply]
+    argv = [ticket if a == "TICKET" else a for a in command] + ["--engineer", ENGINEER]
+    argv += ["--reply", reply] if command[0] == "accept" else []
     assert run(repo, *argv) == cli.REFUSED
     assert "the ticket is drafted, not awaiting review" in capsys.readouterr().out
 
@@ -292,7 +295,7 @@ def test_a_ticket_awaiting_review_cannot_be_submitted_again(repo, tmp_path, caps
 
 def test_accept_names_the_version_on_the_review_note(repo, tmp_path, capsys):
     ticket, reply = stop(tmp_path, "wider_than_plan")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     assert f"--ticket-version {version(repo)}" in capsys.readouterr().out
     run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "ok",
         "--reply", label_reply(tmp_path))
@@ -303,7 +306,7 @@ def test_accept_names_the_version_on_the_review_note(repo, tmp_path, capsys):
 @pytest.mark.parametrize("given", ["0" * 12, "abc"])
 def test_accept_with_another_or_a_too_short_version_is_refused(repo, tmp_path, capsys, given):
     ticket, reply = stop(tmp_path, "wider_than_plan")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     if given == "abc":
         given = version(repo)[:3]  # a real prefix, but too short to identify a version
     before = snapshot(repo)
@@ -315,7 +318,7 @@ def test_accept_with_another_or_a_too_short_version_is_refused(repo, tmp_path, c
 
 def test_an_edit_makes_a_new_version_and_voids_an_earlier_acceptance(repo, tmp_path):
     ticket, reply = stop(tmp_path, "planned_address")
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     old = version(repo)
     run(repo, "accept", ADD, "--ticket-version", old, "--engineer", ENGINEER, "--reason", "New spoke",
         "--planned", planned_file(tmp_path, {**PLANNED, "placement": "pymt"}))
@@ -324,9 +327,48 @@ def test_an_edit_makes_a_new_version_and_voids_an_earlier_acceptance(repo, tmp_p
     t["justification"] += " Edited."
     path = tmp_path / "edited.yaml"
     path.write_text(yaml.safe_dump(t))
-    run(repo, "edit", ADD, str(path), "--engineer", ENGINEER, "--note", "wording", "--reply",
-        reply_file(tmp_path, "stop2", {"outcome": "stop_and_ask", "reason": "planned_address", "rules": []}))
+    run(repo, "edit", ADD, str(path), "--engineer", ENGINEER, "--note", "wording")
     record = cli.load_record(repo, ADD)
     assert record["ticket_version"][:12] != old and "review" not in record
     assert run(repo, "accept", ADD, "--ticket-version", old, "--engineer", ENGINEER, "--reason", "again",
                "--planned", planned_file(tmp_path, PLANNED), "--reply", label_reply(tmp_path)) == cli.REFUSED
+
+
+# The agent runs only after the engineer accepts the exact ticket version, even for a clean ticket.
+
+def test_a_clean_ticket_makes_zero_agent_calls_until_its_exact_version_is_accepted(repo, tmp_path, monkeypatch):
+    calls = []
+    real = cli.read_reply
+
+    def counted(path):
+        """The replay stand-in is the agent: count every call to it."""
+        calls.append(path)
+        return real(path)
+
+    monkeypatch.setattr(cli, "read_reply", counted)
+    ticket, reply = files(tmp_path, ADD)
+    before = snapshot(repo)
+
+    assert run(repo, "submit", ticket) == cli.REVIEW  # no findings, still waits
+    record = cli.load_record(repo, ADD)
+    assert record["findings"] == [] and record["status"] == "awaiting_review" and calls == []
+    first = version(repo)
+
+    t = copy.deepcopy(request(ADD)[0])
+    t["justification"] += " Confirmed with the requester."
+    edited = tmp_path / "edited.yaml"
+    edited.write_text(yaml.safe_dump(t))
+    assert run(repo, "edit", ADD, str(edited), "--engineer", ENGINEER, "--note", "wording") == cli.REVIEW
+    assert calls == [] and version(repo) != first  # an edit makes a new version and still no agent call
+
+    for wrong in (first, "0" * 12, version(repo)[:5]):  # the old version, another version, too short
+        assert run(repo, "accept", ADD, "--ticket-version", wrong, "--engineer", ENGINEER, "--reason", "ok",
+                   "--reply", reply) == cli.REFUSED
+    assert calls == [] and changed(before, repo) == set()
+
+    assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "ok",
+               "--reply", reply) == cli.DONE
+    assert calls == [reply]  # exactly one agent call, after acceptance of the exact version
+    record = cli.load_record(repo, ADD)
+    assert record["status"] == "drafted" and record["review"]["ticket_version"] == record["ticket_version"]
+    assert changed(before, repo) == {ADD_FILE}

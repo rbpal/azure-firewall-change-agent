@@ -1,14 +1,14 @@
 """fwagent: hand a ticket to the workflow, then approve, fix or reject the draft (ADR 0005).
 
-Example:
-    uv run --python 3.11 python -m workflow.cli submit data/tickets/RITM0010043.yaml --reply reply.json
+Example: every ticket waits for the engineer, even one with no findings.
+    uv run --python 3.11 python -m workflow.cli submit data/tickets/RITM0010043.yaml
+    uv run --python 3.11 python -m workflow.cli accept RITM0010043 --ticket-version 3f9a0c51d2e7 --engineer "Jordan Patel" --reason "Checked" --reply reply.json
     uv run --python 3.11 python -m workflow.cli fix RITM0010043 "Port should be 443" --reply fixed.json
-    uv run --python 3.11 python -m workflow.cli reject RITM0010043 "Requester withdrew it"
     uv run --python 3.11 python -m workflow.cli approve RITM0010043
 
-A ticket with a problem is never rejected by the workflow. It is saved as
-awaiting_review, and the engineer decides:
-    uv run --python 3.11 python -m workflow.cli edit RITM0010043 fixed-ticket.yaml --engineer "Jordan Patel" --note "CIDR from requester" --reply reply.json
+A ticket with a problem is never rejected by the workflow. It waits as
+awaiting_review, and the engineer edits, accepts or rejects it:
+    uv run --python 3.11 python -m workflow.cli edit RITM0010043 fixed-ticket.yaml --engineer "Jordan Patel" --note "CIDR from requester"
     uv run --python 3.11 python -m workflow.cli accept RITM0010043 --ticket-version 3f9a0c51d2e7 --engineer "Jordan Patel" --reason "Planned spoke" --planned planned.yaml --reply reply.json
     uv run --python 3.11 python -m workflow.cli reject RITM0010043 "Duplicate of RITM0010040" --engineer "Jordan Patel"
 
@@ -39,6 +39,11 @@ Safety rules:
 8. Accept is bound to one ticket version: the engineer quotes the version printed on
    the review note, and accept refuses if the ticket has changed since. An edit makes
    a new version and clears any earlier acceptance.
+9. The agent runs only after acceptance. submit and edit never call it, even for a
+   ticket with no findings. This review covers the ticket's details only (source,
+   destination, protocol, ports, URL or hostname); accept on the exact version is
+   the only way to the agent, and fix reruns it only on a draft acceptance produced.
+   The final review of the draft (approve) is a separate, later step.
 
 Not built here: Prompt Shields (Step 04 Task 07), Tier 1 and terraform plan on the
 draft note (Step 04 Task 06), the ticket adapter that writes work notes and closes
@@ -159,6 +164,8 @@ def review_note(record: dict) -> str:
         lines += [f"      suggestion, not applied: {s['cidr']} {s.get('vnet', '')} {s['environment']} {s['site']} "
                   f"(from {s['source']})" for s in f.get("suggestions", [])]
     lines += [f"  missing: {m}" for m in record.get("missing", [])]
+    if not record["findings"] and not record.get("missing"):
+        lines.append("  No findings. The agent has not run: accept this exact version to let it draft.")
     lines.append(f"Engineer: fwagent edit {record['number']} TICKET --engineer NAME --note TEXT, "
                  f"accept {record['number']} --ticket-version {record['ticket_version'][:12]} --engineer NAME "
                  f"--reason TEXT, or reject {record['number']} REASON.")
@@ -194,8 +201,8 @@ def _apply_reply(repo: Path, record: dict, reply: dict) -> None:
         record["status"] = reply["outcome"]
 
 
-def submit(repo: Path, ticket_path: str, reply_path: str | None) -> str:
-    """Check the ticket; park any problem for the engineer, else get the agent's reply and write it."""
+def submit(repo: Path, ticket_path: str) -> str:
+    """Check the ticket and save it for the engineer's review; the agent never runs here."""
     check_no_backups(repo)
     ticket = load_ticket(ticket_path)
     number = ticket.get("number") if isinstance(ticket, dict) else None
@@ -209,11 +216,7 @@ def submit(repo: Path, ticket_path: str, reply_path: str | None) -> str:
     record = {"number": number, "original_ticket": ticket, "ticket": ticket, "ticket_version": ticket_version(ticket),
               "status": "awaiting_review",
               "reply": None, "keys": [], "files": {}, "findings": intake_findings(repo, ticket),
-              "history": [{"at": _now(), "action": "submit"}]}
-    if not record["findings"]:
-        reply = read_reply(reply_path)
-        record["history"][0].update(agent="replay", reply_file=reply_path)
-        _apply_reply(repo, record, reply)
+              "history": [{"at": _now(), "action": "submit", "ticket_version": ticket_version(ticket)}]}
     save_record(repo, record)
     return draft_note(record)
 
@@ -224,8 +227,8 @@ def _open(record: dict) -> None:
         raise Refused(f"{record['number']}: the ticket is {record['status']}, not awaiting review")
 
 
-def edit(repo: Path, number: str, ticket_path: str, engineer: str, note: str, reply_path: str | None) -> str:
-    """Replace the ticket with the engineer's edit, record what changed, and run every check again."""
+def edit(repo: Path, number: str, ticket_path: str, engineer: str, note: str) -> str:
+    """Replace the ticket with the engineer's edit, record what changed, and run every check again; the agent waits."""
     check_no_backups(repo)
     record = load_record(repo, number)
     _open(record)
@@ -238,13 +241,11 @@ def edit(repo: Path, number: str, ticket_path: str, engineer: str, note: str, re
     old = record["ticket"]
     changes = {k: {"before": old.get(k), "after": new.get(k)} for k in sorted(set(old) | set(new)) if old.get(k) != new.get(k)}
     findings = intake_findings(repo, new)
-    reply = None if findings else read_reply(reply_path)  # refuse before saving anything if the agent cannot run
-    record.update(ticket=new, ticket_version=ticket_version(new), findings=findings, missing=[], status="awaiting_review")
+    record.update(ticket=new, ticket_version=ticket_version(new), findings=findings, missing=[], status="awaiting_review",
+                  reply=None)
     record.pop("review", None)  # an acceptance covers the version it was given for, never an edited one
     record["history"].append({"at": _now(), "action": "edit", "engineer": engineer, "note": note, "changes": changes,
                               "ticket_version": record["ticket_version"]})
-    if reply is not None:
-        _apply_reply(repo, record, reply)
     save_record(repo, record)
     return draft_note(record)
 
@@ -333,9 +334,8 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     """Parse the command line, run one command, print its result and return the exit code."""
     parser = argparse.ArgumentParser(prog="fwagent", description="Draft, fix, reject or approve a firewall change.")
     sub = parser.add_subparsers(dest="command", required=True)
-    s = sub.add_parser("submit", help="draft a ticket")
+    s = sub.add_parser("submit", help="check a ticket and save it for the engineer's review; the agent waits")
     s.add_argument("ticket")
-    s.add_argument("--reply", help="replay stand-in: JSON file with the agent's reply")
     f = sub.add_parser("fix", help="replace the draft with a fixed reply")
     f.add_argument("number")
     f.add_argument("note")
@@ -349,7 +349,6 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     e.add_argument("ticket")
     e.add_argument("--engineer", required=True)
     e.add_argument("--note", required=True)
-    e.add_argument("--reply", help="replay stand-in: JSON file with the agent's reply")
     c = sub.add_parser("accept", help="record the engineer's acceptance and let the agent draft")
     c.add_argument("number")
     c.add_argument("--ticket-version", required=True, help="the version on the review note (at least 12 characters)")
@@ -363,13 +362,13 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "submit":
-            out = submit(repo, args.ticket, args.reply)
+            out = submit(repo, args.ticket)
         elif args.command == "fix":
             out = fix(repo, args.number, args.note, args.reply)
         elif args.command == "reject":
             out = reject(repo, args.number, args.reason, args.engineer)
         elif args.command == "edit":
-            out = edit(repo, args.number, args.ticket, args.engineer, args.note, args.reply)
+            out = edit(repo, args.number, args.ticket, args.engineer, args.note)
         elif args.command == "accept":
             out = accept(repo, args.number, args.ticket_version, args.engineer, args.reason, args.planned, args.reply)
         else:

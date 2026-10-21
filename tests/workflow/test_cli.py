@@ -58,6 +58,17 @@ def run(repo, *argv):
     return cli.main(list(argv), repo=repo)
 
 
+def draft(repo, ticket, reply, engineer="Jordan Patel"):
+    """Submit a ticket, then accept its exact version so the agent runs; return the first exit code that is not REVIEW."""
+    code = run(repo, "submit", ticket)
+    if code != cli.REVIEW:
+        return code
+    number = yaml.safe_load(Path(ticket).read_text())["number"]
+    version = cli.load_record(repo, number)["ticket_version"][:12]
+    return run(repo, "accept", number, "--ticket-version", version, "--engineer", engineer, "--reason", "checked",
+               "--reply", reply)
+
+
 ADD = "RITM0011041"  # stage primary only, DR built: one new rule in stage-eastus2 rprt
 ADD_FILE = "infra/envs/stage-eastus2/firewall_policy_rule_collection_groups/rprt.tfvars"
 REMOVE = "RITM0011045"  # lab primary only: remove 008-smtp-sett-to-wingtipSmtp; lab DR keeps it
@@ -69,7 +80,7 @@ REMOVE_FILE = "infra/envs/lab-eastus2/firewall_policy_rule_collection_groups/set
 def test_submit_writes_only_the_selected_file_and_keeps_a_record(repo, tmp_path, capsys, number, file, key):
     ticket, reply = files(tmp_path, number)
     before = snapshot(repo)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.DONE
+    assert draft(repo, ticket, reply) == cli.DONE
     assert changed(before, repo) == {file}
     out = capsys.readouterr().out
     assert key in out and "Not run yet: Tier 1" in out
@@ -78,12 +89,14 @@ def test_submit_writes_only_the_selected_file_and_keeps_a_record(repo, tmp_path,
     assert record["files"][file]["before"].encode() == before[Path(file)]
 
 
-def test_without_a_reply_submit_says_no_model_is_configured(repo, tmp_path, capsys):
+def test_without_a_reply_accept_says_no_model_is_configured(repo, tmp_path, capsys):
     ticket, _ = files(tmp_path, ADD)
     before = snapshot(repo)
-    assert run(repo, "submit", ticket) == cli.REFUSED
+    assert run(repo, "submit", ticket) == cli.REVIEW
+    version = cli.load_record(repo, ADD)["ticket_version"][:12]
+    assert run(repo, "accept", ADD, "--ticket-version", version, "--engineer", "E", "--reason", "r") == cli.REFUSED
     assert "Step 04 Task 03" in capsys.readouterr().out
-    assert changed(before, repo) == set()
+    assert changed(before, repo) == set() and cli.load_record(repo, ADD)["status"] == "awaiting_review"
 
 
 def test_an_unapproved_ticket_is_out_of_scope_and_writes_nothing(repo, tmp_path, capsys):
@@ -92,7 +105,7 @@ def test_an_unapproved_ticket_is_out_of_scope_and_writes_nothing(repo, tmp_path,
     t.update(state="pending")
     ticket, reply = files(tmp_path, ADD, ticket=t)
     before = snapshot(repo)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.REFUSED
+    assert draft(repo, ticket, reply) == cli.REFUSED
     assert "only approved tickets" in capsys.readouterr().out
     assert changed(before, repo) == set()
 
@@ -102,7 +115,7 @@ def test_a_ticket_failing_its_checks_waits_for_the_engineer_and_writes_nothing(r
     t.pop("change_sites")
     ticket, reply = files(tmp_path, ADD, ticket=t)
     before = snapshot(repo)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.REVIEW
+    assert run(repo, "submit", ticket) == cli.REVIEW
     assert "invalid_ticket" in capsys.readouterr().out
     assert changed(before, repo) == set()
     assert cli.load_record(repo, ADD)["status"] == "awaiting_review"
@@ -114,7 +127,7 @@ def test_a_reply_outside_the_ticket_scope_writes_nothing(repo, tmp_path, capsys)
     wide["rules"].append({**wide["rules"][0], "env_site": "stage-centralus", "sources": ["10.103.15.0/24"]})
     ticket, reply = files(tmp_path, ADD, reply=wide)
     before = snapshot(repo)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.REFUSED
+    assert draft(repo, ticket, reply) == cli.REFUSED
     assert "does not select" in capsys.readouterr().out
     assert changed(before, repo) == set()
 
@@ -122,16 +135,16 @@ def test_a_reply_outside_the_ticket_scope_writes_nothing(repo, tmp_path, capsys)
 def test_a_stop_reply_waits_for_review_and_writes_nothing(repo, tmp_path, capsys):
     ticket, reply = files(tmp_path, ADD, reply={"outcome": "stop_and_ask", "reason": "free_text_conflict", "rules": []})
     before = snapshot(repo)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.REVIEW
+    assert draft(repo, ticket, reply) == cli.REVIEW
     assert changed(before, repo) == set()
     assert cli.load_record(repo, ADD)["status"] == "awaiting_review"  # a stop waits for the engineer; never a rejection
 
 
 def test_submitting_twice_is_refused(repo, tmp_path, capsys):
     ticket, reply = files(tmp_path, ADD)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.DONE
+    assert draft(repo, ticket, reply) == cli.DONE
     after_first = snapshot(repo)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.REFUSED
+    assert draft(repo, ticket, reply) == cli.REFUSED
     assert "already drafted" in capsys.readouterr().out
     assert changed(after_first, repo) == set()
 
@@ -140,12 +153,12 @@ def test_submitting_twice_is_refused(repo, tmp_path, capsys):
 def test_reject_puts_every_byte_back_and_records_the_reason(repo, tmp_path, number):
     ticket, reply = files(tmp_path, number)
     before = snapshot(repo)
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     assert run(repo, "reject", number, "Requester withdrew it") == cli.DONE
     assert changed(before, repo) == set()
     record = cli.load_record(repo, number)
     assert record["status"] == "rejected" and record["history"][-1]["reason"] == "Requester withdrew it"
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.DONE  # a rejected ticket can start again
+    assert draft(repo, ticket, reply) == cli.DONE  # a rejected ticket can start again
 
 
 def test_reject_keeps_an_edit_made_before_the_draft(repo, tmp_path):
@@ -154,7 +167,7 @@ def test_reject_keeps_an_edit_made_before_the_draft(repo, tmp_path):
     path.write_text(path.read_text() + "# an uncommitted edit by the engineer\n")
     ticket, reply = files(tmp_path, ADD)
     before = snapshot(repo)
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     run(repo, "reject", ADD, "wrong partner")
     assert changed(before, repo) == set()
     assert path.read_text().endswith("# an uncommitted edit by the engineer\n")
@@ -163,7 +176,7 @@ def test_reject_keeps_an_edit_made_before_the_draft(repo, tmp_path):
 @pytest.mark.parametrize("command", [("reject", ADD, "why"), ("approve", ADD), ("fix", ADD, "note", "--reply", "R")])
 def test_an_edit_after_the_draft_stops_the_command_and_survives(repo, tmp_path, capsys, command):
     ticket, reply = files(tmp_path, ADD)
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     path = repo / ADD_FILE
     path.write_text(path.read_text() + "# edited after the draft\n")
     after_edit = snapshot(repo)
@@ -178,7 +191,7 @@ def test_fix_replaces_the_draft_in_one_write(repo, tmp_path, capsys):
     _, e = request(ADD)
     ticket, reply = files(tmp_path, ADD)
     before = snapshot(repo)
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     fixed = copy.deepcopy(e)
     fixed["rules"][0]["name"] = "https-rprt-to-fourthcoffeeFiles"
     fixed_path = tmp_path / "fixed.json"
@@ -195,7 +208,7 @@ def test_fix_replaces_the_draft_in_one_write(repo, tmp_path, capsys):
 
 def test_a_fix_that_stops_is_refused(repo, tmp_path, capsys):
     ticket, reply = files(tmp_path, ADD)
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     after = snapshot(repo)
     stop = tmp_path / "stop.json"
     stop.write_text(json.dumps({"outcome": "stop_and_ask", "reason": "free_text_conflict", "rules": []}))
@@ -205,7 +218,7 @@ def test_a_fix_that_stops_is_refused(repo, tmp_path, capsys):
 
 def test_approve_marks_the_draft_and_ends_changes(repo, tmp_path, capsys):
     ticket, reply = files(tmp_path, ADD)
-    run(repo, "submit", ticket, "--reply", reply)
+    draft(repo, ticket, reply)
     after = snapshot(repo)
     assert run(repo, "approve", ADD) == cli.DONE
     assert "stage 4" in capsys.readouterr().out
@@ -230,10 +243,10 @@ def plant_backup(repo):
 def test_every_command_refuses_while_a_recovery_backup_remains(repo, tmp_path, capsys, command):
     ticket, reply = files(tmp_path, ADD)
     if command != "submit":
-        run(repo, "submit", ticket, "--reply", reply)
+        draft(repo, ticket, reply)
     backup = plant_backup(repo)
     before = snapshot(repo)
-    argv = {"submit": ["submit", ticket, "--reply", reply], "fix": ["fix", ADD, "n", "--reply", reply],
+    argv = {"submit": ["submit", ticket], "fix": ["fix", ADD, "n", "--reply", reply],
             "reject": ["reject", ADD, "why"], "approve": ["approve", ADD]}[command]
     capsys.readouterr()
     assert run(repo, *argv) == cli.BACKUPS
@@ -266,13 +279,16 @@ def test_a_failed_undo_leaves_a_backup_and_the_next_command_is_refused(repo, tmp
     t, e = request("RITM0011001")  # a draft at both sites of one environment
     assert len({r["env_site"] for r in e["rules"]}) >= 2
     ticket, reply = files(tmp_path, "RITM0011001")
+    assert run(repo, "submit", ticket) == cli.REVIEW  # saves the record before the faulty disk is simulated
+    version = cli.load_record(repo, "RITM0011001")["ticket_version"][:12]
     monkeypatch.setattr(scope.os, "replace", flaky)
-    assert run(repo, "submit", ticket, "--reply", reply) == cli.BACKUPS
+    assert run(repo, "accept", "RITM0011001", "--ticket-version", version, "--engineer", "E", "--reason", "r",
+               "--reply", reply) == cli.BACKUPS
     assert BACKUP in capsys.readouterr().out
     monkeypatch.undo()
     monkeypatch.setenv("FWAGENT_STATE_DIR", str(tmp_path / "state"))
     t2, r2 = files(tmp_path, ADD)
-    assert run(repo, "submit", t2, "--reply", r2) == cli.BACKUPS
+    assert draft(repo, t2, r2) == cli.BACKUPS
 
 
 def test_draft_records_live_outside_the_repo(monkeypatch):

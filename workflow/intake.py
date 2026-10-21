@@ -34,7 +34,9 @@ SIDES = ("sources", "destination")
 ACCEPTABLE = {"wider_than_plan", "planned_address", "address_not_in_plan", "skip_approval_requested"}
 NEEDS_PLANNED = {"planned_address", "address_not_in_plan"}  # accepting these needs the engineer's planned-address record
 
-_CIDR_SHAPE = re.compile(r"^(\d+)\.(\d+)\.(\d+)\.(\d+)/(\d+)$")
+# ASCII digits only, matched against the whole text: \d would accept other scripts' digits
+# and $ would accept a trailing newline.
+_CIDR_SHAPE = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/([0-9]+)")
 
 
 def ticket_version(ticket: dict) -> str:
@@ -51,9 +53,13 @@ def cidr_finding(where: str, text) -> dict | None:
     """Explain why a ticket CIDR cannot be used as written, or return None when it is a valid network."""
     if not isinstance(text, str):
         return finding("invalid_address", where, f"{text!r} is not an IPv4 CIDR")
-    m = _CIDR_SHAPE.match(text)
+    m = _CIDR_SHAPE.fullmatch(text)
     if not m:
-        return finding("invalid_address", where, f"{text} is not written as an IPv4 CIDR, such as 10.104.14.0/24")
+        return finding("invalid_address", where, f"{text!r} is not written as an IPv4 CIDR, such as 10.104.14.0/24")
+    if any(len(n) > 1 and n.startswith("0") for n in m.groups()):
+        return finding("invalid_address", where,
+                       f"{text}: a number has a leading zero, which some tools read as octal. "
+                       "The workflow will not drop it; edit the ticket with the intended value.")
     octets, prefix = [int(x) for x in m.groups()[:4]], int(m.group(5))
     if any(o > 255 for o in octets):
         return finding("invalid_address", where, f"{text}: each of the four numbers must be 0 to 255")
@@ -66,7 +72,10 @@ def cidr_finding(where: str, text) -> dict | None:
         return None
     except ValueError:
         host = text.split("/")[0]
-        net = ipaddress.IPv4Network(text, strict=False)
+        try:
+            net = ipaddress.IPv4Network(text, strict=False)
+        except ValueError as error:  # every known shape is caught above; never crash on one that is not
+            return finding("invalid_address", where, f"{text!r} is not a valid IPv4 CIDR ({error})")
         return finding("invalid_address", where,
                        f"{text} has host bits set, so it has two readings: the host {host}/32 (1 address) "
                        f"or the subnet {net} ({net.num_addresses} addresses). The workflow will not pick one; "

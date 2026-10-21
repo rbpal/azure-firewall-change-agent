@@ -4,13 +4,18 @@ Each test runs fwagent on a copy of the env-site files. Every check here must be
 """
 
 import copy
+import ipaddress
 import json
+import random
+import re
 
 import pytest
 import yaml
 
 import workflow.cli as cli
-from tests.workflow.test_cli import ADD, ADD_FILE, changed, draft, files, repo, request, run, snapshot  # noqa: F401  (repo is a fixture)
+from workflow import intake
+from workflow.tickets import SCHEMA_PATH as SCHEMA, ticket_errors
+from tests.workflow.test_cli import ADD, ADD_FILE, REPO, changed, draft, files, repo, request, run, snapshot  # noqa: F401  (repo is a fixture)
 
 ENGINEER = "Jordan Patel"
 
@@ -68,6 +73,114 @@ def test_an_invalid_cidr_is_kept_for_review_with_its_explanation(repo, tmp_path,
     if cidr == "172.20.20.15/24":
         assert record["findings"][0]["readings"] == ["172.20.20.15/32", "172.20.20.0/24"]  # both, neither chosen
     assert changed(before, repo) == set()
+
+
+def address_ticket(tmp_path, side, cidr):
+    """RITM0011041 with its one source, or its one destination, given `cidr`; written to YAML, path returned."""
+    t = copy.deepcopy(request(ADD)[0])
+    t[side] = [{"environment": "stage", "site": "primary", "cidr": cidr}] if side == "sources" else [{"cidr": cidr}]
+    path = tmp_path / f"{side}.yaml"
+    path.write_text(yaml.safe_dump(t))
+    return str(path), t
+
+
+NOT_A_CIDR = "is not written as an IPv4 CIDR"
+INVALID_CIDRS = [
+    ("256.1.2.3/32", "0 to 255"),  # each of the four octet positions
+    ("1.256.2.3/32", "0 to 255"),
+    ("1.2.256.3/32", "0 to 255"),
+    ("1.2.3.256/32", "0 to 255"),
+    ("1.2.3/24", NOT_A_CIDR),  # three octets
+    ("1.2.3.4.5/32", NOT_A_CIDR),  # five octets
+    ("1..3.4/32", NOT_A_CIDR),  # empty octet
+    ("1.-2.3.4/32", NOT_A_CIDR),  # negative
+    ("1.a.3.4/32", NOT_A_CIDR),  # not a number
+    ("10.1.2.3", NOT_A_CIDR),  # no prefix: a host is written /32
+    ("10.1.2.0/", NOT_A_CIDR),
+    ("10.1.2.0/-1", NOT_A_CIDR),
+    ("10.1.2.0/33", "at most /32"),
+    ("10.1.2.0/100", "at most /32"),
+    ("010.1.2.0/24", "leading zero"),
+    ("10.1.02.0/24", "leading zero"),
+    ("10.1.2.0/024", "leading zero"),  # Python's ipaddress would read this as /24 without a word
+    ("10.1.2.0/24\n", NOT_A_CIDR),  # trailing newline
+    (" 10.1.2.0/24", NOT_A_CIDR),  # leading space
+    ("10.1.2.\u0660/24", NOT_A_CIDR),  # Arabic-Indic zero: a digit, but not an ASCII one
+    ("172.20.20.15/24", "host bits set"),
+]
+
+
+@pytest.mark.parametrize("side", ["sources", "destination"])
+@pytest.mark.parametrize("cidr, says", INVALID_CIDRS)
+def test_a_malformed_address_waits_for_review_and_accept_never_reaches_the_agent(repo, tmp_path, monkeypatch, side, cidr, says):
+    calls = []
+    real = cli.read_reply
+    monkeypatch.setattr(cli, "read_reply", lambda path: calls.append(path) or real(path))
+    path, ticket = address_ticket(tmp_path, side, cidr)
+    before = snapshot(repo)
+
+    assert run(repo, "submit", path) == cli.REVIEW  # kept for the engineer, never a crash or a refusal
+    record = cli.load_record(repo, ADD)
+    assert record["status"] == "awaiting_review"
+    [f] = record["findings"]
+    assert (f["code"], f["where"], f["acceptable"]) == ("invalid_address", f"{side}/0/cidr", False)
+    assert says in f["message"]
+    assert record["ticket"] == record["original_ticket"] == ticket  # the address is never corrected
+
+    assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "looks fine",
+               "--reply", label_reply(tmp_path)) == cli.REFUSED  # the exact version, still refused
+    assert calls == [] and cli.load_record(repo, ADD)["status"] == "awaiting_review"
+    assert changed(before, repo) == set()
+
+
+@pytest.mark.parametrize("side", ["sources", "destination"])
+@pytest.mark.parametrize("cidr", ["0.0.0.0/0", "255.255.255.255/32", "10.255.0.0/16", "10.104.255.0/24",
+                                  "203.0.113.255/32", "10.0.0.0/32", "0.0.0.0/32", "10.0.0.0/8"])
+def test_octets_0_and_255_are_valid_syntax(tmp_path, side, cidr):
+    # Syntax only. How wide a range may be, and whether the plan knows it, are checked later, not here.
+    _, ticket = address_ticket(tmp_path, side, cidr)
+    assert intake.cidr_finding(f"{side}/0/cidr", cidr) is None
+    assert intake.intake_findings(REPO, ticket) == [] and ticket_errors(ticket) == []
+
+
+def test_no_address_text_crashes_intake_and_it_agrees_with_the_schema():
+    # 3,000 generated addresses mixing good and bad octets, prefixes, separators and characters.
+    pattern = next(v["properties"]["cidr"]["pattern"] for v in _schema_nodes(json.loads(SCHEMA.read_text()))
+                   if "cidr" in v.get("properties", {}))
+    good_octets, bad_octets = ["0", "9", "10", "99", "100", "199", "249", "255"], \
+        ["256", "300", "999", "00", "01", "010", "-1", "a", "", "\u0660"]
+    good_prefixes, bad_prefixes = ["0", "8", "24", "32", "32"], ["33", "99", "-1", "00", "024", "", "24\n", "24 "]
+    rng = random.Random(0)
+
+    def pick(good, bad):
+        """Mostly a well-formed part, so valid addresses are tested too, sometimes a malformed one."""
+        return rng.choice(good if rng.random() < 0.85 else bad)
+
+    valid_seen = 0
+    for _ in range(3000):
+        count = rng.choice([3, 4, 4, 4, 4, 4, 5])
+        text = ".".join(pick(good_octets, bad_octets) for _ in range(count)) + "/" + pick(good_prefixes, bad_prefixes)
+        found = intake.cidr_finding("sources/0/cidr", text)
+        try:
+            ipaddress.IPv4Network(text, strict=True)
+            valid = re.fullmatch(pattern, text) is not None
+        except ValueError:
+            valid = False
+        assert (found is None) == valid, text
+        assert found is None or found["code"] == "invalid_address"
+        valid_seen += valid
+    assert valid_seen > 300  # both sides of the comparison are exercised
+
+
+def _schema_nodes(node):
+    """Every object in the JSON Schema, depth first."""
+    if isinstance(node, dict):
+        yield node
+        for v in node.values():
+            yield from _schema_nodes(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _schema_nodes(v)
 
 
 def test_a_vnet_without_an_address_is_kept_and_gets_no_guessed_cidr(repo, tmp_path, capsys):

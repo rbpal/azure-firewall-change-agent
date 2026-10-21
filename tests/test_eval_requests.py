@@ -15,7 +15,7 @@ COMMITTED = sorted(REQUESTS.glob("*/*.yaml"))
 STOP_CATEGORIES = {
     "sites-contradict-addresses", "address-environment-contradicts-ticket",
     "address-not-in-plan", "free-text-names-another-environment",
-    "onprem-address-not-in-plan", "onprem-location-mismatch",
+    "onprem-address-not-in-plan", "onprem-location-mismatch", "wider-than-plan", "planned-spoke",
 }
 OUTCOMES = {"draft", "stop_and_ask", "already_allowed"}
 STOP_REASONS = {
@@ -45,12 +45,12 @@ def generated(tmp_path_factory):
 
 def test_script_writes_the_planned_mix(generated):
     counts = collections.Counter((p.parent.name, load(p)["category"]) for p in generated.glob("*/*.yaml"))
-    retired = collections.Counter(c for split, n, c, _, _ in make_requests.plan() if n in make_requests.RETIRED)
+    retired = collections.Counter(c for split, n, c, *_ in make_requests.plan() if n in make_requests.RETIRED)
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation - retired[name], name
         assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 50
-    assert sum(v for (split, _), v in counts.items() if split == "test") == 30
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 55
+    assert sum(v for (split, _), v in counts.items() if split == "test") == 34
 
 
 def test_every_generated_ticket_passes_the_schema(generated):
@@ -74,7 +74,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 80
+    assert written == [] and len(kept) == 89
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -115,8 +115,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_80_committed_requests():
-    assert len(COMMITTED) == 80
+def test_there_are_89_committed_requests():
+    assert len(COMMITTED) == 89
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -134,8 +134,8 @@ def test_committed_ticket_still_matches_the_script(path, generated):
     # changes under it; then the label must be checked again.
     fresh = load(generated / path.parent.name / path.name)
     committed = load(path)
-    for key in ("id", "category", "why", "ticket"):
-        assert committed[key] == fresh[key], key
+    for key in ("id", "category", "why", "ticket", "engineer_review"):
+        assert committed.get(key) == fresh.get(key), key
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -238,3 +238,42 @@ def test_uncoded_escalations_only_shrink():
     # Each must get a code before the agent's reply contract is final (Step 04 Task 03).
     count = sum(page.read_text().count(": *no code yet*") for page in RUNBOOKS.glob("*.md"))
     assert count <= UNCODED_ESCALATIONS
+
+
+REVIEW_KEYS = {"decision", "engineer", "reason", "ticket_version", "accepted", "planned"}
+
+
+@pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
+def test_an_engineer_review_block_holds_the_decision_and_never_the_answer(path):
+    # The runner hands this block to the agent, so it must carry the engineer's input only.
+    from workflow.intake import ACCEPTABLE, ticket_version
+    from workflow.planned import check_planned
+    request = load(path)
+    review = request.get("engineer_review")
+    if request["category"] != "accepted-after-review":
+        assert review is None
+        return
+    assert set(review) == REVIEW_KEYS and review["decision"] == "accept" and review["engineer"] and review["reason"]
+    assert review["accepted"] and set(review["accepted"]) <= ACCEPTABLE
+    assert review["ticket_version"] == ticket_version(request["ticket"])  # bound to this exact ticket
+    assert check_planned(make_requests.REPO, request["ticket"], review["planned"]) == []
+    assert ("planned_address" in review["accepted"]) == bool(review["planned"])
+    assert request["expected"]["outcome"] == "draft"  # accepted, so the agent drafts within the ticket
+
+
+@pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
+def test_every_eval_ticket_passes_intake(path):
+    # Intake cases (invalid prefix, host bits, missing address, schema errors) are software tests in
+    # tests/workflow/test_review.py; the agent never sees them, so no eval request may hold one.
+    from workflow.intake import intake_findings
+    assert intake_findings(make_requests.REPO, load(path)["ticket"]) == []
+
+
+def test_every_accepted_category_is_a_draft_and_every_review_stop_has_no_acceptance():
+    # Awaiting review (a stop, no engineer_review) and accepted for the agent (engineer_review, draft) never mix.
+    for path in COMMITTED:
+        request = load(path)
+        if request["expected"]["outcome"] == "stop_and_ask":
+            assert "engineer_review" not in request, path.name
+        if "engineer_review" in request:
+            assert request["expected"]["outcome"] == "draft", path.name

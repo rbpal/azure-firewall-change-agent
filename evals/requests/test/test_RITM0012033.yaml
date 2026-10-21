@@ -1,0 +1,37 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012033
+category: planned-spoke
+why: 'Stage destination in no spoke: a planned payments spoke.'
+ticket:
+  number: RITM0012033
+  item: Firewall Change Request
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-08T15:00:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary]
+  sources:
+  - {environment: stage, site: primary, cidr: 10.102.15.0/24}
+  destination:
+  - {environment: stage, site: primary, cidr: 10.102.40.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: The stage reporting servers will read payment summaries from the new payments servers in 10.102.40.0/24.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Stage primary only. The destination 10.102.40.0/24 is inside the stage-eastus2 range, but no spoke or shared range owns it; the justification calls it a new payments spoke. Stop for engineer review to confirm the CIDR, site, policy and placement.
+  outcome: stop_and_ask
+  reason: planned_address
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.40.0/24}

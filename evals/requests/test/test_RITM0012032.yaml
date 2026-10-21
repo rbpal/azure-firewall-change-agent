@@ -1,0 +1,46 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012032
+category: narrower-onprem-source
+why: One on-prem secondary host to prod settlement.
+ticket:
+  number: RITM0012032
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-09T12:50:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  change_sites:
+    prod: [primary]
+  sources:
+  - {location: onprem-secondary, cidr: 172.24.12.15/32}
+  destination:
+  - {environment: prod, site: primary, cidr: 10.100.14.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: One contact centre supervisor desktop needs the prod settlement screens.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Prod primary only. 172.24.12.15/32 is one host inside the on-prem secondary subnet 172.24.12.0/24, and the ticket's location matches. A single host is narrower than the plan, which is not an error, so draft it as given. An on-prem source goes in the destination spoke's group (RB-05): sett at prod-eastus2. No rule there has an on-prem source.
+  outcome: draft
+  rules:
+  - env_site: prod-eastus2
+    spoke: sett
+    collection: allow-sett-network-rules
+    name: https-onpremSecondary-to-settFs
+    sources: [172.24.12.15/32]
+    destinations: [10.100.14.0/24]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.24.12.15/32}
+  - {tool: locate_address_for_env_site, address: 10.100.14.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}

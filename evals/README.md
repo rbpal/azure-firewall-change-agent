@@ -5,7 +5,7 @@ The eval harness. Tier 2 scores the agent on the labelled requests in `requests/
 - `requests/validation/`: labelled requests that prompts and thresholds are tuned against.
 - `requests/test/`: labelled requests kept back for the final score. Nothing is tuned against them.
 
-Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. `make_requests.py` writes the tickets: 80 requests across 28 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
+Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. `make_requests.py` writes the tickets: 89 requests across 32 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
 
 Two scorers read an agent reply shaped like `expected:` and need no model:
 
@@ -28,6 +28,7 @@ Scores from different versions are not comparable. Each version is fixed by a co
 | v2 | 2026-10-18 | 72 (48 validation, 24 test) | 17 | `be7d135` |
 | v3 | 2026-10-18 | 71 (47 validation, 24 test) | 19 | `cdd8f71` |
 | v4 | 2026-10-20 | 80 (50 validation, 30 test) | 28 | `51df5fd` |
+| v5 | 2026-10-20 | 89 (55 validation, 34 test) | 32 | labels against `73f4792`; requests in the commit after it |
 
 v1 stays readable in git, for example `git show bd8588b:evals/requests/test/test_RITM0012015.yaml`.
 
@@ -51,13 +52,20 @@ What changed in v4 (2026-10-20):
 3. **Spoke IP groups hold only their spoke's subnet.** The on-prem user subnets were removed from them; they stay in `ipg-onprem-primary` and `ipg-onprem-secondary` only. A spoke-group rule therefore no longer opens a flow to every on-prem user. All 80 labels were rechecked against `duplicate_rule_check` afterwards: none changed outcome.
 4. **No old ticket changed.** The new categories come last, so every earlier number keeps its ticket.
 
-The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording) and in v4 (six new requests). No agent, real or stand-in, has been scored on the test split under any version, so no result was tuned against it.
+What changed in v5 (2026-10-20):
+
+1. **Stop means awaiting review.** A `stop_and_ask` answer pauses the request for the engineer, who rejects, edits or accepts it (RB-01-8). It is never a rejection.
+2. **Addresses against the plan.** RITM0011054 and RITM0012031 give a source wider than its plan range: stop with `wider_than_plan`. RITM0011055 and RITM0012032 give an on-prem source narrower than its subnet, a `/25` and a single host: narrower is not an error, so they draft. RITM0011056 and RITM0012033 name an address inside an env-site that no spoke owns, a planned spoke: stop with `planned_address`.
+3. **Resume after review.** RITM0011057, RITM0011058 and RITM0012034 carry an `engineer_review:` block, the engineer's recorded acceptance. The block carries `ticket_version`, the SHA-256 of the ticket's fields, so the acceptance covers that exact ticket; the runner refuses a block whose version does not match. The runner hands the block to the agent with the ticket, never the answer, and the score sheet reports these tickets on their own line, apart from first-pass tickets. The labels draft within the ticket's own values: the accepted `/23` as written, or a rule to a planned subnet placed in the existing source spoke. A request awaiting review (a stop) never carries an acceptance, and an accepted request always drafts.
+4. **Not in the eval.** Malformed tickets (a `/33` prefix, host bits set, a VNet named without an address) never reach the agent; intake saves them for review in code. Their tests are software tests in `tests/workflow/test_review.py`.
+
+The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). No agent, real or stand-in, has been scored on the test split under any version, so no result was tuned against it.
 
 ## What has been measured
 
 No real model has been scored yet. The two stand-in agents in `stand_in_agents.py` check the scoring code only:
 
-- `perfect` replays the labels. It passes 50 of 50 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
-- `always_stop` stops on every request. It passes 3 of 50. That is a baseline, not a floor.
+- `perfect` replays the labels. It passes 55 of 55 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
+- `always_stop` stops on every request. It passes 3 of 55. That is a baseline, not a floor.
 
 The first real score comes after the agent and its model are configured.

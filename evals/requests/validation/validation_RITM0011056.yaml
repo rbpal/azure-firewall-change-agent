@@ -1,0 +1,37 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011056
+category: planned-spoke
+why: 'Dev source in no spoke: a planned payments spoke.'
+ticket:
+  number: RITM0011056
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-08T10:00:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.40.0/24}
+  destination:
+  - {cidr: 198.51.100.64/28}
+  protocol: TCP
+  ports: ['5671']
+  partner: Adventure Works
+  justification: The new dev payments servers in 10.104.40.0/24 go live next sprint and send to Adventure Works.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Dev primary only. 10.104.40.0/24 is inside the dev-eastus2 range 10.104.0.0/16, but no spoke or shared range owns it; the justification calls it a planned payments spoke. Policy can be prepared ahead, but only the engineer can confirm the CIDR, site, policy and placement. Stop for engineer review.
+  outcome: stop_and_ask
+  reason: planned_address
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.40.0/24}

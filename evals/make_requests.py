@@ -4,11 +4,14 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 80 varied tickets, 50 for validation and 30 for test, spread
-over 28 kinds of request, including changes to the primary site only, the DR
-site only, or both, IP groups, and on-prem users. A script gives variety and the same output every run.
+Why: the eval needs 89 varied tickets, 55 for validation and 34 for test, spread
+over 32 kinds of request, including changes to the primary site only, the DR
+site only, or both, IP groups, on-prem users, addresses wider or narrower than
+the plan, planned spokes, and requests that resume after an engineer's review.
+A script gives variety and the same output every run.
 
-Safety rule: this script writes tickets only. Every `expected:` block is written
+Safety rule: this script writes tickets, and for the resume cases the engineer's
+recorded decision (`engineer_review:`), which is part of the question, not the answer. Every `expected:` block is written
 by hand. The script never imports the agent's tools, so a bug in a tool cannot
 reach a label, and it never overwrites a file that already exists, so a
 hand-written label is never lost.
@@ -17,6 +20,8 @@ hand-written label is never lost.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import random
 from pathlib import Path
 
@@ -97,7 +102,14 @@ CATEGORIES = [
     ("add-ip-group-source", 0, 1),
     ("already-allowed-ip-group", 0, 1),
     ("removal-ip-group-destination", 0, 1),
+    # Added 2026-10-20: engineer review. A stop means "awaiting engineer review", never a rejection.
+    ("wider-than-plan", 1, 1),
+    ("narrower-onprem-source", 1, 1),
+    ("planned-spoke", 1, 1),
+    ("accepted-after-review", 2, 1),
 ]
+
+ENGINEER = "Jordan Patel"
 
 
 def _s(value):
@@ -590,6 +602,93 @@ def build_removal_ip_group_destination(rng, net, used):
         "The dev reporting servers no longer upload to the dev file transfer servers."
 
 
+def _split(used):
+    """The split the current request belongs to."""
+    return next(u[1] for u in used if u[0] == "split")
+
+
+def build_wider_than_plan(rng, net, used):
+    """A source wider than its plan range: two dev spokes as one /23 (validation), or an on-prem /23 (test)."""
+    if _split(used) == "validation":
+        spoke, code, svc = new_flow(rng, net, used, ["dev"], spokes=["sett"], stop_case=True)
+        fields = egress(net, ["dev"], spoke, code, svc)
+        fields["change_sites"] = {"dev": ["primary"]}
+        fields["sources"] = [{"environment": "dev", "site": "primary", "cidr": "10.104.14.0/23"}]
+        return "Dev source /23 spans the sett and rprt spokes.", fields, \
+            f"The dev settlement and reporting servers send files to {net.partners[code]['name']}."
+    fields = onprem_to_spoke(net, "stage", ["primary"], "port", [{"location": "onprem-primary", "cidr": "172.20.20.0/23"}], "Fs")
+    return "On-prem primary /23 is wider than the one user subnet the plan lists.", fields, \
+        "Head office wired users need the stage client portal for acceptance testing."
+
+
+def build_narrower_onprem_source(rng, net, used):
+    """An on-prem source inside one user subnet: a /25 (validation) or a single host (test). Narrower is not an error."""
+    if _split(used) == "validation":
+        fields = onprem_to_spoke(net, "dev", ["primary"], "ledg", [{"location": "onprem-primary", "cidr": "172.20.20.0/25"}], "Mq")
+        return "On-prem primary /25 inside one user subnet, to dev ledger.", fields, \
+            "Half of the head office wired floor runs the ledger test client against dev."
+    fields = onprem_to_spoke(net, "prod", ["primary"], "sett", [{"location": "onprem-secondary", "cidr": "172.24.12.15/32"}], "Fs")
+    return "One on-prem secondary host to prod settlement.", fields, \
+        "One contact centre supervisor desktop needs the prod settlement screens."
+
+
+def build_planned_spoke(rng, net, used):
+    """An Azure address inside an env-site that no spoke owns yet: as the source (validation) or the destination (test)."""
+    if _split(used) == "validation":
+        spoke, code, svc = new_flow(rng, net, used, ["dev"], stop_case=True)
+        fields = egress(net, ["dev"], spoke, code, svc)
+        fields["change_sites"] = {"dev": ["primary"]}
+        fields["sources"] = [{"environment": "dev", "site": "primary", "cidr": "10.104.40.0/24"}]
+        return "Dev source in no spoke: a planned payments spoke.", fields, \
+            f"The new dev payments servers in 10.104.40.0/24 go live next sprint and send to {net.partners[code]['name']}."
+    _, protocol, ports = SERVICES["Fs"]
+    fields = {
+        "environments": ["stage"], "dr_site_built": {"stage": net.has_dr("stage", "rprt")}, "change_sites": {"stage": ["primary"]},
+        "sources": [{"environment": "stage", "site": "primary", "cidr": net.spoke_cidr[("stage", "primary", "rprt")]}],
+        "destination": [{"environment": "stage", "site": "primary", "cidr": "10.102.40.0/24"}],
+        "protocol": protocol, "ports": ports, "partner": None,
+    }
+    return "Stage destination in no spoke: a planned payments spoke.", fields, \
+        "The stage reporting servers will read payment summaries from the new payments servers in 10.102.40.0/24."
+
+
+def _accept(reason, accepted, planned=()):
+    """An engineer_review block: the engineer's recorded acceptance."""
+    return {"decision": "accept", "engineer": ENGINEER, "reason": reason, "accepted": list(accepted), "planned": list(planned)}
+
+
+def _planned(cidr, env, policy, spoke, placement):
+    """One planned-address entry, at the primary site."""
+    return {"cidr": cidr, "environment": env, "site": "primary", "firewall_policy": policy, "spoke": spoke, "placement": placement}
+
+
+def build_accepted_after_review(rng, net, used):
+    """A request the engineer accepted after a stop: a wider on-prem range, or a planned destination."""
+    split = _split(used)
+    nth = sum(1 for u in used if u[:2] == ("accepted-n", split))
+    used.add(("accepted-n", split, nth))
+    if split == "validation" and nth == 0:
+        fields = onprem_to_spoke(net, "lab", ["primary"], "xfer", [{"location": "onprem-secondary", "cidr": "172.24.12.0/23"}], "Sftp")
+        fields["_engineer_review"] = _accept("Requester confirmed the /23 holds the contact centre and its overflow desks.",
+                                             ["wider_than_plan"])
+        return "On-prem secondary /23, wider than the plan; the engineer accepted it.", fields, \
+            "Contact centre staff, including the overflow desks, upload files to the lab SFTP servers."
+    env, dest, policy, placement, svc = (("dev", "10.104.40.0/24", "afwp-hub-dev-eastus2", "rprt", "Fs") if split == "validation"
+                                         else ("prod", "10.100.40.0/24", "afwp-hub-prod-eastus2", "port", "Mq"))
+    _, protocol, ports = SERVICES[svc]
+    fields = {
+        "environments": [env], "dr_site_built": {env: net.has_dr(env, placement)}, "change_sites": {env: ["primary"]},
+        "sources": [{"environment": env, "site": "primary", "cidr": net.spoke_cidr[(env, "primary", placement)]}],
+        "destination": [{"environment": env, "site": "primary", "cidr": dest}],
+        "protocol": protocol, "ports": ports, "partner": None,
+        "_engineer_review": _accept("Payments spoke is planned; policy is prepared ahead of the build.", ["planned_address"],
+                                    [_planned(dest, env, policy, "pymt", placement)]),
+    }
+    role = net.holds[placement][0].lower() + net.holds[placement][1:]
+    return f"{env} {placement} to a planned payments subnet; the engineer accepted it with a planned record.", fields, \
+        f"The {env} {role} will call the new payments servers in {dest} once they are built."
+
+
 BUILDERS = {name: globals()["build_" + name.replace("-", "_")] for name, _, _ in CATEGORIES}
 
 
@@ -614,8 +713,13 @@ def ticket(number, rng, fields, justification):
     return body
 
 
+def version(body):
+    """The SHA-256 of a ticket's fields in a fixed order, as workflow/intake.py computes it."""
+    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def plan():
-    """Every request as (split, number, category, why, ticket), in a fixed order."""
+    """Every request as (split, number, category, why, ticket, engineer_review or None), in a fixed order."""
     net = Network()
     used = set()
     counters = {split: 0 for split in SPLITS}
@@ -634,7 +738,12 @@ def plan():
                 used.update(("pair", split, *u) for u in used - before if len(u) == 2 and u[0] in PARTNER_SPOKES)
                 if name.startswith("removal"):
                     fields["_removal"] = True
-                out.append((split, number, name, why, ticket(number, rng, fields, justification)))
+                review = fields.pop("_engineer_review", None)
+                body = ticket(number, rng, fields, justification)
+                if review is not None:  # the acceptance covers exactly this ticket version
+                    review = {**review, "ticket_version": version(body)}
+                    review = {k: review[k] for k in ("decision", "engineer", "reason", "ticket_version", "accepted", "planned")}
+                out.append((split, number, name, why, body, review))
     return out
 
 
@@ -647,9 +756,11 @@ _Dumper.add_representer(
 )
 
 
-def render(number, name, why, body):
-    """The request file text: header, metadata, ticket, and an empty label."""
+def render(number, name, why, body, review=None):
+    """The request file text: header, metadata, ticket, any engineer review, and an empty label."""
     data = {"id": number, "category": name, "why": why, "ticket": body}
+    if review is not None:
+        data["engineer_review"] = review
     text = yaml.dump(data, Dumper=_Dumper, sort_keys=False, width=120, default_flow_style=None)
     return (
         "# Eval request. Synthetic; all names and addresses are fictional.\n"
@@ -677,7 +788,7 @@ REVISED_JUSTIFICATIONS = {
 def write(out: Path) -> tuple[list[Path], list[Path]]:
     """Write every request file that does not exist yet, except retired numbers; return (written, kept)."""
     written, kept = [], []
-    for split, number, name, why, body in plan():
+    for split, number, name, why, body, review in plan():
         if number in RETIRED:
             continue
         path = out / split / f"{split}_{number}.yaml"
@@ -685,7 +796,7 @@ def write(out: Path) -> tuple[list[Path], list[Path]]:
             kept.append(path)
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render(number, name, why, body))
+        path.write_text(render(number, name, why, body, review))
         written.append(path)
     return written, kept
 

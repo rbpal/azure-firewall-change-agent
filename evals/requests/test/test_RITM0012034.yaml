@@ -1,0 +1,55 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012034
+category: accepted-after-review
+why: prod port to a planned payments subnet; the engineer accepted it with a planned record.
+ticket:
+  number: RITM0012034
+  item: Firewall Change Request
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-08T10:00:00-04:00'
+  environments: [prod]
+  dr_site_built: {prod: true}
+  change_sites:
+    prod: [primary]
+  sources:
+  - {environment: prod, site: primary, cidr: 10.100.17.0/24}
+  destination:
+  - {environment: prod, site: primary, cidr: 10.100.40.0/24}
+  protocol: TCP
+  ports: ['5671']
+  partner: null
+  justification: The prod client portal web front ends will call the new payments servers in 10.100.40.0/24 once they are
+    built.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+engineer_review:
+  decision: accept
+  engineer: Jordan Patel
+  reason: Payments spoke is planned; policy is prepared ahead of the build.
+  ticket_version: 76d24576f331ba69947618865ab236a3f79df7d9d684930272b0566d9e6c5218
+  accepted: [planned_address]
+  planned:
+  - {cidr: 10.100.40.0/24, environment: prod, site: primary, firewall_policy: afwp-hub-prod-eastus2, spoke: pymt, placement: port}
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Prod primary only. The destination 10.100.40.0/24 is in no spoke, but the engineer's planned record confirms it: prod primary, policy afwp-hub-prod-eastus2, planned spoke pymt, rule placed in port. The source is the existing port spoke, so the rule goes in the port group and no new file is needed. No rule in prod-eastus2 port reaches 10.100.40.0/24.
+  outcome: draft
+  rules:
+  - env_site: prod-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: amqps-port-to-pymtMq
+    sources: [10.100.17.0/24]
+    destinations: [10.100.40.0/24]
+    ports: ['5671']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.100.17.0/24}
+  - {tool: locate_address_for_env_site, address: 10.100.40.0/24}
+  - {tool: duplicate_rule_check, env_site: prod-eastus2}

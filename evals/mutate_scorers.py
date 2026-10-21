@@ -78,6 +78,9 @@ MUTATIONS = [
     Mutation("unseal the test split", RUN, 'if split == "test" and not allow_test:', "if False:"),
     Mutation("count a category ticket twice", RUN, "row[1] += 1", "row[1] += 2"),
     Mutation("hide labels pending review", RUN, 'pending = request.expected.get("review") == "pending"', "pending = False"),
+    Mutation("drop the engineer's review decision", RUN, "            if request.engineer_review is None:", "            if True:"),
+    Mutation("accept a review for another ticket version", RUN,
+             'if review is not None and review.get("ticket_version") != ticket_version(data["ticket"]):', "if False:"),
 ]
 # Not listed: removing the 1-65535 port bounds. An out-of-range port is already
 # outside every approved range, so no score can change; that mutant is equivalent.

@@ -1,0 +1,46 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011055
+category: narrower-onprem-source
+why: On-prem primary /25 inside one user subnet, to dev ledger.
+ticket:
+  number: RITM0011055
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-05T10:10:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {location: onprem-primary, cidr: 172.20.20.0/25}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.16.0/24}
+  protocol: TCP
+  ports: ['5671']
+  partner: null
+  justification: Half of the head office wired floor runs the ledger test client against dev.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Dev primary only. 172.20.20.0/25 sits inside the on-prem primary wired users subnet 172.20.20.0/24, and the ticket's location matches. Narrower than the plan is not an error, so draft it as given. An on-prem source goes in the destination spoke's group (RB-05): ledg at dev-eastus2. No rule there has an on-prem source.
+  outcome: draft
+  rules:
+  - env_site: dev-eastus2
+    spoke: ledg
+    collection: allow-ledg-network-rules
+    name: amqps-onpremPrimary-to-ledgMq
+    sources: [172.20.20.0/25]
+    destinations: [10.104.16.0/24]
+    ports: ['5671']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.20.0/25}
+  - {tool: locate_address_for_env_site, address: 10.104.16.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}

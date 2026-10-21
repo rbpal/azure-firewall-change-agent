@@ -1,0 +1,37 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0012031
+category: wider-than-plan
+why: On-prem primary /23 is wider than the one user subnet the plan lists.
+ticket:
+  number: RITM0012031
+  item: Firewall Change Request
+  state: approved
+  requested_for: Alex Kim (Contoso transfer team)
+  opened: '2026-10-06T10:40:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary]
+  sources:
+  - {location: onprem-primary, cidr: 172.20.20.0/23}
+  destination:
+  - {environment: stage, site: primary, cidr: 10.102.17.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: Head office wired users need the stage client portal for acceptance testing.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Stage primary only. 172.20.20.0/23 is wider than the on-prem primary subnet 172.20.20.0/24; the extra block 172.20.21.0/24 (256 addresses) is in no plan range. Stop for engineer review; never narrow it to the /24.
+  outcome: stop_and_ask
+  reason: wider_than_plan
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.20.0/23}

@@ -1,0 +1,54 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011058
+category: accepted-after-review
+why: dev rprt to a planned payments subnet; the engineer accepted it with a planned record.
+ticket:
+  number: RITM0011058
+  item: Firewall Change Request
+  state: approved
+  requested_for: Jamie Ortiz (Contoso integration)
+  opened: '2026-10-07T08:40:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.15.0/24}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.40.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: The dev reporting batch servers will call the new payments servers in 10.104.40.0/24 once they are built.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+engineer_review:
+  decision: accept
+  engineer: Jordan Patel
+  reason: Payments spoke is planned; policy is prepared ahead of the build.
+  ticket_version: fcf4539db7ddd149cd86ec8dcc07442b0b2e379dac39787515a19385a9752ab5
+  accepted: [planned_address]
+  planned:
+  - {cidr: 10.104.40.0/24, environment: dev, site: primary, firewall_policy: afwp-hub-dev-eastus2, spoke: pymt, placement: rprt}
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Dev primary only. The destination 10.104.40.0/24 is in no spoke, but the engineer's planned record confirms it: dev primary, policy afwp-hub-dev-eastus2, planned spoke pymt, rule placed in rprt. The source is the existing rprt spoke, so the rule goes in the rprt group as usual and no new file is needed. No rule in dev-eastus2 rprt reaches 10.104.40.0/24.
+  outcome: draft
+  rules:
+  - env_site: dev-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-rprt-to-pymtFs
+    sources: [10.104.15.0/24]
+    destinations: [10.104.40.0/24]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.104.40.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}

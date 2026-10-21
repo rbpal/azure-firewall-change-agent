@@ -1,0 +1,37 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011054
+category: wider-than-plan
+why: Dev source /23 spans the sett and rprt spokes.
+ticket:
+  number: RITM0011054
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-06T16:20:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: true}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {environment: dev, site: primary, cidr: 10.104.14.0/23}
+  destination:
+  - {cidr: 203.0.113.80/28}
+  protocol: TCP
+  ports: ['22']
+  partner: Fourth Coffee
+  justification: The dev settlement and reporting servers send files to Fourth Coffee.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Dev primary only. 10.104.14.0/23 holds two plan ranges, the sett spoke 10.104.14.0/24 and the rprt spoke 10.104.15.0/24, so it is wider than any one owner's range and the rule has no single spoke to go in. Stop for engineer review; never narrow the address or pick a spoke.
+  outcome: stop_and_ask
+  reason: wider_than_plan
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.104.14.0/23}

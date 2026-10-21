@@ -1,0 +1,53 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011057
+category: accepted-after-review
+why: On-prem secondary /23, wider than the plan; the engineer accepted it.
+ticket:
+  number: RITM0011057
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-08T11:30:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  change_sites:
+    lab: [primary]
+  sources:
+  - {location: onprem-secondary, cidr: 172.24.12.0/23}
+  destination:
+  - {environment: lab, site: primary, cidr: 10.106.20.0/24}
+  protocol: TCP
+  ports: ['22']
+  partner: null
+  justification: Contact centre staff, including the overflow desks, upload files to the lab SFTP servers.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+engineer_review:
+  decision: accept
+  engineer: Jordan Patel
+  reason: Requester confirmed the /23 holds the contact centre and its overflow desks.
+  ticket_version: a302de174f592ebe612e8218ae9ca6d70e628a0ef0b850e87a56ffcfe30fa73e
+  accepted: [wider_than_plan]
+  planned: []
+expected:
+  labelled_against: 73f4792
+  note: >-
+    Lab primary only. 172.24.12.0/23 is wider than the on-prem secondary subnet 172.24.12.0/24; the extra block 172.24.13.0/24 is in no plan range. The engineer accepted the /23 with a reason, so draft it exactly as approved, without narrowing. An on-prem source goes in the destination spoke's group (RB-05): xfer at lab-eastus2. No rule there has an on-prem source.
+  outcome: draft
+  rules:
+  - env_site: lab-eastus2
+    spoke: xfer
+    collection: allow-xfer-network-rules
+    name: sftp-onpremSecondary-to-xferSftp
+    sources: [172.24.12.0/23]
+    destinations: [10.106.20.0/24]
+    ports: ['22']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.24.12.0/23}
+  - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
+  - {tool: duplicate_rule_check, env_site: lab-eastus2}

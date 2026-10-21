@@ -18,7 +18,7 @@ from __future__ import annotations
 import copy
 from typing import Callable
 
-Agent = Callable[[dict], dict]
+Agent = Callable[..., dict]  # agent(ticket) or agent(ticket, engineer_review=...)
 
 # The boxes of a reply: the same names as in an `expected:` answer key, without
 # the label's own notes (labelled_against, note, tools).
@@ -29,7 +29,7 @@ def perfect(answers: dict[str, dict]) -> Agent:
     """Build an agent that answers each ticket with its labelled answer, keyed by ticket number."""
     keys = copy.deepcopy(answers)
 
-    def agent(ticket: dict) -> dict:
+    def agent(ticket: dict, engineer_review: dict | None = None) -> dict:
         """Return the labelled answer for this ticket, in reply shape."""
         expected = keys[ticket["number"]]
         return {k: copy.deepcopy(expected[k]) for k in REPLY_KEYS if k in expected}
@@ -37,6 +37,6 @@ def perfect(answers: dict[str, dict]) -> Agent:
     return agent
 
 
-def always_stop(ticket: dict) -> dict:
+def always_stop(ticket: dict, engineer_review: dict | None = None) -> dict:
     """Stop and ask on every ticket, always with the same reason."""
     return {"outcome": "stop_and_ask", "reason": "free_text_conflict", "rules": []}

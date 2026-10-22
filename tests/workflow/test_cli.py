@@ -89,13 +89,13 @@ def test_submit_writes_only_the_selected_file_and_keeps_a_record(repo, tmp_path,
     assert record["files"][file]["before"].encode() == before[Path(file)]
 
 
-def test_without_a_reply_accept_says_no_model_is_configured(repo, tmp_path, capsys):
+def test_without_a_reply_or_an_endpoint_accept_says_no_agent_is_configured(repo, tmp_path, capsys):
     ticket, _ = files(tmp_path, ADD)
     before = snapshot(repo)
     assert run(repo, "submit", ticket) == cli.REVIEW
     version = cli.load_record(repo, ADD)["ticket_version"][:12]
     assert run(repo, "accept", ADD, "--ticket-version", version, "--engineer", "E", "--reason", "r") == cli.REFUSED
-    assert "Step 04 Task 03" in capsys.readouterr().out
+    assert "no agent is configured: set FWAGENT_PROJECT_ENDPOINT" in capsys.readouterr().out
     assert changed(before, repo) == set() and cli.load_record(repo, ADD)["status"] == "awaiting_review"
 
 

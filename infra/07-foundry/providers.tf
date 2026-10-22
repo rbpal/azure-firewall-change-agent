@@ -9,3 +9,6 @@ provider "azurerm" {
 
 # azapi signs in the same way as azurerm (az login locally, ARM_SUBSCRIPTION_ID).
 provider "azapi" {}
+
+# azuread signs in with az login, like the others; it only reads here.
+provider "azuread" {}

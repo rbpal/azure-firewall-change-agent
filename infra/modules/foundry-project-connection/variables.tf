@@ -14,7 +14,7 @@ variable "category" {
 }
 
 variable "target" {
-  description = "Resource ID of the Azure resource the project connects to."
+  description = "Resource ID of the Azure resource the project connects to, or a URL when target_is_resource is false."
   type        = string
 }
 
@@ -33,4 +33,16 @@ variable "extra_metadata" {
   type        = map(string)
   default     = {}
   sensitive   = true
+}
+
+variable "target_is_resource" {
+  description = "True when target is an Azure resource ID (adds ApiType and ResourceId metadata); false for a URL, such as an MCP server."
+  type        = bool
+  default     = true
+}
+
+variable "audience" {
+  description = "Entra audience the project's identity requests a token for, such as an MCP server's Application ID URI. Null for none."
+  type        = string
+  default     = null
 }

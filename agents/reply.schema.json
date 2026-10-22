@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agents/reply.schema.json",
+  "title": "The drafter's reply",
+  "description": "What the agent returns for one ticket. Code checks it before anything is written; the draft check in workflow/scope.py then checks every value against the ticket.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["outcome"],
+  "properties": {
+    "outcome": { "enum": ["draft", "already_allowed", "stop_and_ask"] },
+    "reason": { "type": "string", "pattern": "^[a-z][a-z_]{2,63}$" },
+    "action": { "const": "remove" },
+    "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
+    "explanation": { "type": "string", "maxLength": 2000 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "stop_and_ask" } } },
+      "then": { "required": ["reason"], "properties": { "rules": { "maxItems": 0 }, "action": false } }
+    },
+    {
+      "if": { "properties": { "outcome": { "enum": ["draft", "already_allowed"] } } },
+      "then": { "required": ["rules"], "properties": { "rules": { "minItems": 1 }, "reason": false } }
+    },
+    {
+      "if": { "properties": { "outcome": { "const": "already_allowed" } } },
+      "then": { "properties": { "action": false } }
+    }
+  ],
+  "$defs": {
+    "strings": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"],
+      "properties": {
+        "env_site": { "type": "string", "pattern": "^(lab|dev|stage|prod)-(eastus2|centralus)$" },
+        "spoke": { "type": "string", "pattern": "^[a-z]{4}$" },
+        "collection": { "type": "string", "pattern": "^allow-[a-z]{4}-(network|app|dnat)-rules$" },
+        "name": { "type": "string", "minLength": 1 },
+        "sources": { "$ref": "#/$defs/strings" },
+        "destinations": { "$ref": "#/$defs/strings" },
+        "ports": { "$ref": "#/$defs/strings" },
+        "protocol": { "type": "string", "minLength": 1 },
+        "translated_address": { "type": "string", "minLength": 1 },
+        "translated_port": { "type": "string", "minLength": 1 }
+      },
+      "dependentRequired": { "translated_address": ["translated_port"], "translated_port": ["translated_address"] }
+    }
+  }
+}

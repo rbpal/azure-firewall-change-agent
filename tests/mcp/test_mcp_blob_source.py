@@ -140,3 +140,67 @@ def test_duplicate_rule_check_answers_the_same_from_blobs():
     assert blob["source"]["commit"] == SHA_A
     local["source"].pop("commit"), blob["source"].pop("commit")
     assert blob == local
+
+
+# --- one commit pinned for a whole ticket ----------------------------------
+
+def test_a_pinned_source_reads_its_commit_and_never_the_pointer():
+    blobs = {**snapshot_of_repo(SHA_A), **{k.replace(SHA_A, SHA_B): v for k, v in snapshot_of_repo(SHA_A).items()
+                                           if k.startswith("snapshots/")}}
+    container = FakeContainer(blobs)  # current.json points at A; B is an older snapshot still kept
+    source = BlobSource(container, SHA_B)
+    assert source.read(ROUTING) == (REPO / ROUTING).read_text()
+    assert source.commit == SHA_B and "current.json" not in container.downloads
+    assert all(d.startswith(f"snapshots/{SHA_B}/") for d in container.downloads)
+
+
+@pytest.mark.parametrize("commit", ["abc123", "A" * 40, "a" * 39, 123, "a" * 40 + "\n"])
+def test_a_pinned_commit_must_be_a_full_sha(commit):
+    with pytest.raises(NetworkDataError, match="full commit SHA"):
+        BlobSource(FakeContainer({}), commit)
+
+
+def test_a_pinned_snapshot_the_sync_job_never_uploaded_is_a_data_error():
+    with pytest.raises(NetworkDataError, match="is not in the snapshot container"):
+        BlobSource(FakeContainer(snapshot_of_repo(SHA_A)), SHA_B).read(ROUTING)
+
+
+@pytest.mark.parametrize("headers, want", [({"X-Fwagent-Snapshot": SHA_B}, SHA_B), ({"x-fwagent-snapshot": f" {SHA_B} "}, SHA_B),
+                                           ({"Other": "x"}, None), ({}, None)],
+                         ids=["header", "lower case, spaces", "other header", "no header"])
+def test_the_pinned_commit_is_read_from_the_request_header(headers, want):
+    assert blob_source.pinned_commit({"transport": {"properties": {"headers": headers}}}) == want
+
+
+def _with_header(context_json, value):
+    """Add the snapshot header to a tool context built by the allowed_context fixture."""
+    context = json.loads(context_json)
+    if value is not None:
+        context["transport"]["properties"]["headers"]["X-Fwagent-Snapshot"] = value
+    return json.dumps(context)
+
+
+@pytest.mark.parametrize("header, want", [(SHA_B, SHA_B), (None, SHA_A)], ids=["pinned", "latest"])
+def test_every_call_with_the_header_reads_the_pinned_commit_even_after_main_moves(allowed_context, monkeypatch, header, want):
+    import gateway
+    older = {k.replace(SHA_A, SHA_B): v for k, v in snapshot_of_repo(SHA_A).items() if k.startswith("snapshots/")}
+    container = FakeContainer({**snapshot_of_repo(SHA_A), **older})
+    monkeypatch.setattr(blob_source, "snapshot_container", lambda: container)
+    for address in ("10.100.14.20", "10.104.16.0/24"):  # two calls of one ticket
+        ctx = _with_header(allowed_context({"address": address}), header)
+        assert json.loads(gateway.run(ctx, locate_address_for_env_site, snapshot=True))["source"]["commit"] == want
+
+
+def test_a_malformed_snapshot_header_is_refused_before_any_read(allowed_context, monkeypatch):
+    import gateway
+    container = FakeContainer(snapshot_of_repo(SHA_A))
+    monkeypatch.setattr(blob_source, "snapshot_container", lambda: container)
+    out = json.loads(gateway.run(_with_header(allowed_context({"address": "10.100.14.20"}), "main"),
+                                 locate_address_for_env_site, snapshot=True))
+    assert out["error"] == "bad_arguments" and "X-Fwagent-Snapshot" in out["reason"] and container.downloads == []
+
+
+def test_a_pointer_with_a_trailing_newline_after_the_sha_is_refused():
+    """re.match with $ accepted "<sha>\\n" until 2026-10-22; the snapshot path would then hold a newline."""
+    with pytest.raises(NetworkDataError, match="full commit SHA"):
+        BlobSource(FakeContainer({"current.json": pointer(SHA_A + "\n")})).commit

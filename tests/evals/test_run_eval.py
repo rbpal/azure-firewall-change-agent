@@ -216,3 +216,64 @@ def test_a_dns_condition_must_name_a_ticket_host_and_a_known_fault(tmp_path, mon
     monkeypatch.setattr(runner, "REQUESTS", tmp_path)
     with pytest.raises(ValueError, match=why):
         load_requests("validation")
+
+
+def test_reviewed_only_leaves_out_every_pending_label_and_says_so():
+    not_run = []
+    results = run(perfect(KEYS), reviewed_only=True, not_run=not_run)
+    pending = {r.number for r in REQUESTS if r.expected.get("review") == "pending"}
+    assert pending and {n for n, _ in not_run} == pending and all(why == "label pending review" for _, why in not_run)
+    assert len(results) == len(REQUESTS) - len(pending) and not any(r.label_pending for r in results)
+
+
+def test_an_agent_whose_dns_tool_runs_in_azure_does_not_get_a_controlled_dns_request():
+    base = perfect(KEYS)
+
+    def hosted(ticket, engineer_review=None, dns_lookup=None):
+        """Like the hosted drafter: a controlled DNS answer would never reach its tool."""
+        assert dns_lookup is None
+        return base(ticket)
+
+    hosted.controlled_dns = False
+    not_run = []
+    results = run(hosted, not_run=not_run)
+    assert not_run == [("RITM0011069", "needs a controlled DNS answer the deployed tool cannot get")]
+    assert len(results) == len(REQUESTS) - 1 and not any("agent_error" in r.verdict.mistakes for r in results)
+
+
+def test_the_token_budget_stops_the_run_before_the_next_ticket_and_lists_the_rest():
+    from workflow.agent import Call
+    base = perfect(KEYS)
+
+    class Metered:
+        """A stand-in that records 1,000 tokens per call."""
+        calls = []
+
+        def __call__(self, ticket, **extra):
+            self.calls.append(Call(ticket["number"], 900, 100))
+            return base(ticket)
+
+    metered, not_run = Metered(), []
+    results = run(metered, token_budget=3000, not_run=not_run)
+    assert len(results) == 3 and len(not_run) == len(REQUESTS) - 3
+    assert {why for _, why in not_run} == {"token budget reached"}
+
+
+def test_replies_are_kept_for_the_record():
+    replies = []
+    run(always_stop, replies=replies)
+    assert len(replies) == len(REQUESTS) and replies[0]["reply"]["outcome"] == "stop_and_ask"
+
+
+def test_a_ticket_left_out_by_the_caller_is_listed_with_its_reason():
+    not_run = []
+    results = run(perfect(KEYS), not_run=not_run, skip={"RITM0011068": "snapshot lacks its rule"})
+    assert not_run == [("RITM0011068", "snapshot lacks its rule")] and "RITM0011068" not in {r.number for r in results}
+
+
+def test_the_foundry_run_refuses_data_that_differs_from_the_snapshot_unless_each_file_is_named(monkeypatch, capsys):
+    import workflow.agent as agent_mod
+    monkeypatch.setattr(agent_mod, "data_differences", lambda repo, commit: ["infra/envs/x.tfvars"])
+    monkeypatch.setattr(agent_mod.FoundryAgent, "from_env", classmethod(lambda cls, repo, require_same_data=True: always_stop))
+    assert main(["--agent", "foundry"]) == 2 and "infra/envs/x.tfvars" in capsys.readouterr().out
+    assert main(["--agent", "foundry", "--data-diff-ok", "infra/envs/x.tfvars", "--only", "RITM0011001"]) == 0

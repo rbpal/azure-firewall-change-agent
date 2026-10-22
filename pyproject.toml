@@ -6,6 +6,9 @@ dependencies = [
     "jsonschema>=4.23",
     "rfc3339-validator>=0.1.4",  # lets jsonschema check "date-time"; without it the format is silently skipped
     "pyyaml>=6.0",
+    "azure-ai-projects==2.8.0",
+    "openai==3.26.1",
+    "azure-identity>=1.17,<2",
 ]
 
 [dependency-groups]

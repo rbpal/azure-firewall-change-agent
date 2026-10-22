@@ -168,6 +168,7 @@ def test_unknown_kind_in_plan_is_a_network_data_error():
 def test_spoke_address_names_its_hub_firewall_and_policy():
     m = call("10.100.14.20")["match"]
     assert (m["firewall"], m["firewall_policy"]) == ("afw-hub-prod-eastus2", "afwp-hub-prod-eastus2")
+    assert m["firewall_public_ip"] == "192.0.2.10"  # routing.yaml; a DNAT rule's destination (RB-02-3)
 
 
 def test_dr_address_names_the_dr_hub_firewall():

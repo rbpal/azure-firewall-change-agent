@@ -30,3 +30,9 @@ data "azurerm_log_analytics_workspace" "this" {
   name                = var.law_name
   resource_group_name = data.azurerm_resource_group.this.name
 }
+
+# The MCP tool server's app registration, built by step 05-func, found by name.
+# Its Application ID URI is the audience of the project's tool connection.
+data "azuread_application" "mcp" {
+  display_name = var.mcp_app_name
+}

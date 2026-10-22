@@ -5,8 +5,8 @@ of all ranges that contain the input, the most specific one wins. The model
 never states where an address lives; this tool does, from the plan in the
 repo.
 
-Each answer also names the hub firewall and policy of the address's env-site,
-from routing.yaml. Code takes the firewalls for a request from the env-sites
+Each answer also names the hub firewall, its policy and its public IP for the
+address's env-site, from routing.yaml. A DNAT rule's destination is that public IP. Code takes the firewalls for a request from the env-sites
 of its source and destination; an address outside the plan has none, and the
 engineer says where it goes.
 
@@ -44,7 +44,8 @@ def _describe(r: Range | OnPremRange, hubs: dict[str, Hub]) -> dict:
     if hub is None:
         raise NetworkDataError(f"env-site {r.env_site} is in the address plan but has no hub in routing")
     out = {"cidr": str(r.network), "kind": r.kind, "environment": r.environment, "site": r.site,
-           "env_site": r.env_site, "firewall": hub.firewall, "firewall_policy": hub.firewall_policy}
+           "env_site": r.env_site, "firewall": hub.firewall, "firewall_policy": hub.firewall_policy,
+           "firewall_public_ip": hub.public_ip}  # a DNAT rule's destination (RB-02-3), from routing.yaml
     for key in ("spoke", "vnet", "ip_group", "holds"):
         value = getattr(r, key)
         if value is not None:

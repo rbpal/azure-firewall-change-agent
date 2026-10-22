@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
+import os
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -178,10 +180,25 @@ def score_reply(expected: dict, reply: object) -> Verdict:
     return verdict
 
 
-def run(agent: Agent, split: str = "validation", allow_test: bool = False) -> list[TicketResult]:
-    """Hand each ticket to the agent, score each reply, and return one result per ticket."""
+def run(agent: Agent, split: str = "validation", allow_test: bool = False, reviewed_only: bool = False,
+        token_budget: int | None = None, not_run: list | None = None, replies: list | None = None,
+        skip: dict | None = None) -> list[TicketResult]:
+    """Hand each ticket to the agent, score each reply, and return one result per ticket.
+
+    reviewed_only leaves out labels still pending review. An agent with controlled_dns = False
+    (its DNS tool runs in Azure) does not get requests with a dns: block. token_budget stops the
+    run before a ticket once the agent's recorded tokens reach it. skip maps ticket numbers the
+    caller leaves out to the reason, such as a snapshot that lacks the ticket's rule. Each left-out ticket is
+    appended to not_run as (number, why), and each reply to replies, so nothing vanishes.
+    """
     results = []
     for request in load_requests(split, allow_test):
+        why = _not_run_reason(request, agent, reviewed_only, token_budget, skip or {})
+        if why:
+            if not_run is not None:
+                not_run.append((request.number, why))
+            continue
+        reply = None
         try:
             extra = {}
             if request.engineer_review is not None:
@@ -194,10 +211,30 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False) -> li
         except Exception as error:  # a crashing agent fails its ticket, not the run
             verdict = Verdict(mistakes=["agent_error"], detail=[f"{type(error).__name__}: {error}"])
             outcome = "?"
+        if replies is not None:
+            replies.append({"number": request.number, "reply": reply, "mistakes": verdict.mistakes, "detail": verdict.detail})
         pending = request.expected.get("review") == "pending"
         results.append(TicketResult(request.number, request.category, request.expected["outcome"], outcome, verdict, pending,
                                     request.engineer_review is not None))
     return results
+
+
+def _not_run_reason(request: Request, agent, reviewed_only: bool, token_budget: int | None, skip: dict) -> str | None:
+    """Why this request is left out of the run, or None to run it."""
+    if request.number in skip:
+        return skip[request.number]
+    if reviewed_only and request.expected.get("review") == "pending":
+        return "label pending review"
+    if request.dns is not None and getattr(agent, "controlled_dns", True) is False:
+        return "needs a controlled DNS answer the deployed tool cannot get"
+    if token_budget is not None and _tokens(agent) >= token_budget:
+        return "token budget reached"
+    return None
+
+
+def _tokens(agent) -> int:
+    """Input plus output tokens the agent has recorded so far, or 0 for a stand-in."""
+    return sum(c.input_tokens + c.output_tokens for c in getattr(getattr(agent, "inner", agent), "calls", []))
 
 
 def summarise(results: list[TicketResult]) -> dict:
@@ -265,22 +302,68 @@ def format_report(results: list[TicketResult], split: str, agent_name: str) -> s
 def main(argv: list[str] | None = None) -> int:
     """Run one stand-in agent on one split and print the score sheet."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--agent", choices=("perfect", "always_stop"), required=True)
+    parser.add_argument("--agent", choices=("perfect", "always_stop", "foundry"), required=True)
     parser.add_argument("--split", choices=SPLITS, default="validation")
     parser.add_argument("--allow-test-split", action="store_true", help="unseal the test split")
+    parser.add_argument("--reviewed-only", action="store_true", help="leave out labels still pending review")
+    parser.add_argument("--only", nargs="+", metavar="RITM", help="run only these ticket numbers")
+    parser.add_argument("--token-budget", type=int, help="stop before a ticket once this many tokens are used")
+    parser.add_argument("--out", type=Path, help="write each reply and the token use to this JSON file")
+    parser.add_argument("--not-run", nargs="+", default=[], metavar="RITM=WHY",
+                        help="leave these tickets out, each with its reason; they are listed as not run")
+    parser.add_argument("--data-diff-ok", nargs="*", default=None, metavar="PATH",
+                        help="foundry: data files allowed to differ from the snapshot (each must be named)")
     args = parser.parse_args(argv)
+    not_run, replies = [], []
     try:
         if args.agent == "perfect":
             keys = {r.number: r.expected for r in load_requests(args.split, args.allow_test_split)}
             agent = perfect(keys)
+        elif args.agent == "foundry":
+            from workflow.agent import FoundryAgent, data_differences
+            repo = REQUESTS.parents[1]
+            differ = data_differences(repo, os.environ.get("FWAGENT_SNAPSHOT_COMMIT", ""))
+            unexplained = sorted(set(differ) - set(args.data_diff_ok or []))
+            if unexplained:
+                print("refused: this repo's data differs from the pinned snapshot, so labels and tools would use two "
+                      "revisions: " + ", ".join(unexplained) + " (name each with --data-diff-ok and leave out the "
+                      "tickets that depend on it with --not-run)")
+                return 2
+            agent = FoundryAgent.from_env(repo, require_same_data=False)
         else:
             agent = always_stop
-        results = run(agent, args.split, args.allow_test_split)
+        if args.only:
+            agent = _only(agent, set(args.only))
+        skip = dict(entry.split("=", 1) for entry in args.not_run)
+        results = run(agent, args.split, args.allow_test_split, args.reviewed_only, args.token_budget, not_run, replies, skip)
     except PermissionError as error:
         print(f"refused: {error} (command line: --allow-test-split)")
         return 2
-    print(format_report(results, args.split, args.agent))
+    results = [r for r in results if not args.only or r.number in args.only]
+    not_run = [n for n in not_run if not args.only or n[0] in args.only]
+    report = format_report(results, args.split, args.agent)
+    if not_run:
+        report += "\n\nNot run\n" + "\n".join(f"  {number}  {why}" for number, why in not_run)
+    calls = getattr(getattr(agent, "inner", agent), "calls", [])
+    if calls:
+        report += (f"\n\nTokens: {sum(c.input_tokens for c in calls)} in, {sum(c.output_tokens for c in calls)} out, "
+                   f"over {len(calls)} calls; tool calls: {sum(len(c.tools) for c in calls)}")
+    print(report)
+    if args.out:
+        args.out.write_text(json.dumps({"agent": args.agent, "split": args.split, "replies": replies,
+                                        "calls": [vars(c) for c in calls], "not_run": not_run}, indent=2) + "\n")
     return 0
+
+
+def _only(agent, numbers: set[str]):
+    """Wrap an agent so tickets outside numbers are answered without a call, then dropped from the sheet."""
+    def wrapped(ticket, **extra):
+        """Call the agent only for a chosen ticket."""
+        if ticket["number"] not in numbers:
+            return {"outcome": "stop_and_ask", "reason": "not_run", "rules": []}
+        return agent(ticket, **extra)
+    wrapped.inner, wrapped.controlled_dns = agent, getattr(agent, "controlled_dns", True)
+    return wrapped
 
 
 if __name__ == "__main__":

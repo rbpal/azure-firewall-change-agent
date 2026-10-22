@@ -13,14 +13,14 @@ resource "azapi_resource" "this" {
   schema_validation_enabled = false
 
   body = {
-    properties = {
+    properties = merge({
       category = var.category
       target   = var.target
       authType = var.auth_type
-      metadata = merge({
+      metadata = merge(var.target_is_resource ? {
         ApiType    = "Azure"
         ResourceId = var.target
-      }, var.extra_metadata)
-    }
+      } : {}, var.extra_metadata)
+    }, var.audience == null ? {} : { audience = var.audience })
   }
 }

@@ -16,9 +16,11 @@ Why: the engineer reviews the agent's draft as a normal diff in the tfvars files
 the same change the pull request reviewers will see. Each command is a function,
 so pytest drives it like the rest of the workflow.
 
-The agent: no model is configured yet (Step 04 Task 03). Until then the agent is a
-replay stand-in: `--reply` names a JSON file holding the reply a model would give.
-Without it the command stops and says the model is not configured.
+The agent: accept calls the drafter on Foundry (workflow/agent.py) when
+FWAGENT_PROJECT_ENDPOINT is set and no --reply is given. `--reply` names a JSON
+file holding the reply a model would give: the replay stand-in the tests use.
+fix needs --reply for now; the live fix, which must pass the engineer's note to
+the agent, is not built. A failed agent call or an invalid reply writes nothing.
 
 Safety rules:
 1. No command starts while a recovery backup from a failed write remains.
@@ -53,6 +55,7 @@ the ticket, and the pull request (stage 4).
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -62,6 +65,7 @@ from pathlib import Path
 
 import yaml
 
+from workflow.agent import AgentError, FoundryAgent
 from workflow.intake import NEEDS_PLANNED, finding, intake_findings, ticket_version
 from workflow.planned import check_planned, missing_spoke_files
 from workflow.scope import BackupsRemainError, PartialWriteError, check_no_backups, plan_writes, write_all
@@ -117,10 +121,26 @@ def save_record(repo: Path, record: dict) -> None:
     os.replace(tmp, path)
 
 
+def live_agent(repo: Path) -> FoundryAgent:
+    """The drafter on Foundry, published from agents/ if its definition changed."""
+    return FoundryAgent.from_env(repo)
+
+
+def agent_reply(repo: Path, ticket: dict, review: dict, reply_path: str | None) -> tuple[dict, str]:
+    """The agent's reply and where it came from: the replay file when given, else the live drafter when configured."""
+    if reply_path is not None or not os.environ.get("FWAGENT_PROJECT_ENDPOINT"):
+        return read_reply(reply_path), "replay"
+    try:
+        return live_agent(repo)(copy.deepcopy(ticket), engineer_review=copy.deepcopy(review)), "foundry"
+    except AgentError as error:
+        raise Refused(f"{ticket['number']}: {error}. Nothing was written; the ticket keeps its state.") from error
+
+
 def read_reply(path: str | None) -> dict:
     """The replay stand-in: read the agent's reply from a JSON file, or refuse when none is given."""
     if path is None:
-        raise Refused("no agent model is configured yet (Step 04 Task 03); pass --reply FILE with the agent's JSON")
+        raise Refused("no agent is configured: set FWAGENT_PROJECT_ENDPOINT for the drafter on Foundry, "
+                      "or pass --reply FILE with the agent's JSON")
     reply = json.loads(Path(path).read_text())
     if not isinstance(reply, dict) or "outcome" not in reply:
         raise Refused(f"{path}: an agent reply is a JSON object with an 'outcome'")
@@ -271,10 +291,10 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     if errors:
         raise Refused(f"{number}: the planned-address record does not fit the ticket:\n  " + "\n  ".join(errors))
     missing = missing_spoke_files(repo, record["ticket"], planned)
-    reply = None if missing else read_reply(reply_path)
     review = {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": record["ticket_version"],
               "accepted": [f["code"] for f in record["findings"]], "planned": planned}
-    record["history"].append({"at": _now(), "action": "accept", **review})
+    reply, source = (None, None) if missing else agent_reply(repo, record["ticket"], review, reply_path)
+    record["history"].append({"at": _now(), "action": "accept", **review, **({"agent": source} if source else {})})
     record["review"] = review  # the engineer_review a real agent receives with the ticket
     record["missing"] = missing
     if missing:

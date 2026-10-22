@@ -5,7 +5,6 @@ import json
 
 import azure.functions as func
 
-from data_readers.blob_source import snapshot_source
 from gateway import run
 from tools.dns_lookup_for_fqdn import dns_lookup_for_fqdn
 from tools.duplicate_rule_check import duplicate_rule_check
@@ -46,7 +45,7 @@ def dns_lookup_for_fqdn_tool(context: str) -> str:
     tool_name="locate_address_for_env_site",
     description=("Find which environment, site, spoke, VNet and IP group an internal IPv4 address or CIDR "
                  "belongs to, and that env-site's hub firewall and firewall policy. Reads the address plan "
-                 "and routing from the latest copy of main and names the commit it read."),
+                 "and routing from the copy of main (the pinned snapshot, else the latest) and names the commit it read."),
     tool_properties=json.dumps([{
         "propertyName": "address",
         "propertyType": "string",
@@ -54,7 +53,7 @@ def dns_lookup_for_fqdn_tool(context: str) -> str:
     }]),
 )
 def locate_address_for_env_site_tool(context: str) -> str:
-    return run(context, locate_address_for_env_site, source=snapshot_source())
+    return run(context, locate_address_for_env_site, snapshot=True)
 
 
 @app.mcp_tool_trigger(
@@ -74,4 +73,4 @@ def locate_address_for_env_site_tool(context: str) -> str:
     ]),
 )
 def duplicate_rule_check_tool(context: str) -> str:
-    return run(context, duplicate_rule_check, source=snapshot_source())
+    return run(context, duplicate_rule_check, snapshot=True)

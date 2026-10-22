@@ -114,3 +114,18 @@ variable "foundry_project_log_categories" {
   description = "Platform log categories sent from the Foundry project."
   type        = list(string)
 }
+
+variable "mcp_connection_name" {
+  description = "Name of the project connection to the MCP tool server; the agent's MCP tool names it."
+  type        = string
+}
+
+variable "mcp_function_app_name" {
+  description = "Function app that hosts the MCP tools, built by step 05-func."
+  type        = string
+}
+
+variable "mcp_app_name" {
+  description = "Display name of the MCP tool server's Entra app registration, built by step 05-func."
+  type        = string
+}

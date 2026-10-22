@@ -1,6 +1,7 @@
 # Step 07: the Foundry resource (Step 03 Task 04), its project (Task 05), the
 # model deployments plus Foundry User for the laptop (Task 06), and the project's
-# connection to Application Insights for traces (Task 07).
+# connection to Application Insights for traces (Task 07), and the project's
+# connection to the MCP tool server (Step 04 Task 03).
 
 module "foundry_account" {
   source = "../modules/foundry-account"
@@ -96,4 +97,25 @@ module "foundry_project_diagnostics" {
   target_resource_id         = module.foundry_project.id
   log_analytics_workspace_id = data.azurerm_log_analytics_workspace.this.id
   log_categories             = var.foundry_project_log_categories
+}
+
+# The agent's tools: Foundry Agent Service calls the MCP server on the function
+# app as the project's identity, which holds Tools.Read and is on the app's
+# allow list (step 05-func). No key is stored: the token is requested per call
+# for the tool app's audience.
+module "mcp_connection" {
+  source = "../modules/foundry-project-connection"
+
+  name               = var.mcp_connection_name
+  project_id         = module.foundry_project.id
+  category           = "RemoteTool"
+  auth_type          = "ProjectManagedIdentity"
+  target             = local.mcp_endpoint
+  target_is_resource = false
+  audience           = one(data.azuread_application.mcp.identifier_uris)
+  api_version        = var.connection_api_version
+}
+
+locals {
+  mcp_endpoint = "https://${var.mcp_function_app_name}.azurewebsites.net/runtime/webhooks/mcp"
 }

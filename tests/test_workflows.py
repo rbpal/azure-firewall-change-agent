@@ -8,6 +8,7 @@ Safety rule: the gate only reads. It never applies and never takes the state loc
 """
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -90,8 +91,8 @@ def test_sync_uploads_only_the_tool_data():
     # evals/ with the answers, would be readable by the agent.
     [upload] = [r for r in run_steps(SYNC) if "upload-batch" in r]
     assert set(re.search(r"for dir in ([^;]+);", upload).group(1).split()) == TOOL_DATA
-    [count] = [r for r in run_steps(SYNC) if "find " in r]
-    assert set(re.search(r"find (.+?) -type f", count).group(1).split()) == TOOL_DATA
+    [check] = [r for r in run_steps(SYNC) if "git ls-tree" in r]
+    assert set(re.search(r'--name-only "\$TARGET" -- (.+?) \|', check).group(1).split()) == TOOL_DATA
 
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
@@ -106,3 +107,68 @@ def test_tests_workflow_mutation_tests_the_scorers_after_the_suite():
     runs = run_steps(TESTS)
     assert runs[-1] == "uv run --python 3.11 python evals/mutate_scorers.py"
     assert any(r.startswith("uv run --python 3.11 pytest") for r in runs[:-1])
+
+
+def sync_step(name: str) -> dict:
+    """The sync job's step with this name."""
+    [step] = [s for s in load(SYNC)["jobs"]["sync"]["steps"] if s.get("name") == name]
+    return step
+
+
+def choose(rollback_to: str, tmp_path: Path) -> tuple[int, str]:
+    """Run the 'Choose the commit' step in this repo; return its exit code and what it wrote to GITHUB_ENV."""
+    env_file = tmp_path / "github_env"
+    env_file.write_text("")
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "GITHUB_REF": "refs/heads/main",
+           "GITHUB_SHA": "pushed-commit", "GITHUB_ENV": str(env_file), "ROLLBACK_TO": rollback_to}
+    run = sync_step("Choose the commit")["run"]
+    code = subprocess.run(["bash", "-e", "-c", run], cwd=REPO, env=env, capture_output=True).returncode
+    return code, env_file.read_text()
+
+
+def test_sync_keeps_two_snapshots():
+    # User decision 2026-10-22: the current snapshot and the one before it, nothing more.
+    assert load(SYNC)["env"]["KEEP"] == "2"
+
+
+def test_sync_rollback_input_reaches_the_shell_only_as_an_environment_variable():
+    # ${{ }} inside run: is pasted into the script before it runs, so input text could become commands.
+    assert load(SYNC)["on"]["workflow_dispatch"]["inputs"]["rollback_to"]["default"] == ""
+    assert sync_step("Choose the commit")["env"] == {"ROLLBACK_TO": "${{ inputs.rollback_to }}"}
+    assert not any("${{" in r for r in run_steps(SYNC))
+
+
+@pytest.mark.parametrize("bad", ["abc", "HEAD", "0" * 40, "$(id)", "A" * 40, "0" * 40 + "\nx"])
+def test_sync_rollback_refuses_anything_but_a_full_sha_on_main(bad, tmp_path):
+    code, written = choose(bad, tmp_path)
+    assert code != 0 and written == ""
+
+
+def test_sync_rollback_chooses_a_commit_on_main(tmp_path):
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip()
+    assert choose(head, tmp_path) == (0, f"TARGET={head}\n")
+
+
+def test_sync_without_rollback_chooses_the_pushed_commit(tmp_path):
+    assert choose("", tmp_path) == (0, "TARGET=pushed-commit\n")
+
+
+def test_sync_rollback_uploads_nothing_and_deletes_nothing():
+    only_on_sync = "github.event_name == 'push' || inputs.rollback_to == ''"
+    assert sync_step("Upload this commit's files")["if"] == only_on_sync
+    assert sync_step("Delete old copies")["if"] == only_on_sync
+    assert "if" not in sync_step("Check the snapshot is complete")
+    assert "if" not in sync_step("Point current.json at the chosen commit")
+
+
+def test_sync_points_at_the_checked_commit_and_never_deletes_it():
+    check = sync_step("Check the snapshot is complete")["run"]
+    assert 'git ls-tree -r --name-only "$TARGET"' in check and "diff wanted.txt uploaded.txt" in check
+    assert '"$TARGET" > current.json' in sync_step("Point current.json at the chosen commit")["run"]
+    assert '[ "$old" = "$TARGET" ] && continue' in sync_step("Delete old copies")["run"]
+    assert "$GITHUB_SHA" not in check + sync_step("Delete old copies")["run"]
+
+
+def test_sync_checkout_has_history_for_a_rollback():
+    [checkout] = [s for s in load(SYNC)["jobs"]["sync"]["steps"] if s.get("uses", "").startswith("actions/checkout@")]
+    assert checkout["with"]["fetch-depth"] == 0

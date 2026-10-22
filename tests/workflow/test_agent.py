@@ -260,20 +260,111 @@ def test_data_differences_refuses_a_commit_this_repo_does_not_have(tmp_path):
         data_differences(root, "e" * 40)
 
 
-def test_from_env_refuses_when_the_repo_data_is_another_revision(tmp_path, monkeypatch):
-    root, sha = _git_repo(tmp_path)
+class FakeContainer:
+    """Stands in for the snapshot container: blobs by name, current.json included."""
+
+    def __init__(self, blobs):
+        self.blobs = dict(blobs)
+
+    def download_blob(self, name):
+        if name not in self.blobs:
+            raise FileNotFoundError(name)
+        data = self.blobs[name]
+        return SimpleNamespace(readall=lambda: data)
+
+    def list_blobs(self, name_starts_with):
+        return [SimpleNamespace(name=n) for n in self.blobs if n.startswith(name_starts_with)]
+
+
+def synced(root, *commits, current=None):
+    """The container as the sync job leaves it: each commit's data files, and current.json naming one commit."""
+    import subprocess
+    blobs = {"current.json": json.dumps({"commit": current or commits[-1]}).encode()}
+    for c in commits:
+        names = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "--name-only", c], capture_output=True,
+                               text=True, check=True).stdout.split()
+        blobs.update({f"snapshots/{c}/{n}": b"x" for n in names})
+    return FakeContainer(blobs)
+
+
+def _second_commit(root):
+    """Commit a change to the data, as the next push to main would; return its SHA."""
+    import subprocess
+    (root / "data/network/routing.yaml").write_text("second\n")
+    run = lambda *a: subprocess.run(["git", "-C", str(root), *a], check=True, capture_output=True, text=True).stdout  # noqa: E731
+    run("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qam", "second")
+    return run("rev-parse", "HEAD").strip()
+
+
+def test_the_run_pins_the_commit_current_json_names(tmp_path, monkeypatch):
+    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
+    root, first = _git_repo(tmp_path)
+    second = _second_commit(root)
+    assert agent_mod.pin_snapshot(root, synced(root, first, second)) == second
+
+
+def test_the_previous_snapshot_is_never_used_when_current_json_does_not_match_the_required_commit(tmp_path, monkeypatch):
+    root, first = _git_repo(tmp_path)
+    second = _second_commit(root)
+    monkeypatch.setenv("FWAGENT_SNAPSHOT_COMMIT", second)
+    container = synced(root, first, second, current=first)  # a rollback left current.json on the previous snapshot
+    with pytest.raises(AgentError, match=f"current.json names {first[:12]}, but this run requires {second[:12]}.*never used"):
+        agent_mod.pin_snapshot(root, container)
+
+
+BAD_SNAPSHOTS = {
+    "pointer not a SHA": (lambda c, sha: c.blobs.update({"current.json": b'{"commit": "main"}'}), "does not name a full commit SHA"),
+    "pointer missing": (lambda c, sha: c.blobs.pop("current.json"), "current.json could not be read"),
+    "a file missing": (lambda c, sha: c.blobs.pop(f"snapshots/{sha}/data/network/routing.yaml"), "1 files missing"),
+    "an extra file": (lambda c, sha: c.blobs.update({f"snapshots/{sha}/infra/envs/stray.tfvars": b"x"}), "1 extra"),
+    "commit not in this checkout": (lambda c, sha: c.blobs.update({"current.json": json.dumps({"commit": "e" * 40}).encode()}),
+                                    "this checkout does not have commit"),
+}
+
+
+@pytest.mark.parametrize("break_it, why", BAD_SNAPSHOTS.values(), ids=BAD_SNAPSHOTS.keys())
+def test_an_invalid_current_snapshot_stops_the_run(tmp_path, monkeypatch, break_it, why):
+    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
+    root, first = _git_repo(tmp_path)
+    second = _second_commit(root)
+    container = synced(root, first, second)
+    break_it(container, second)
+    with pytest.raises(AgentError, match=why):
+        agent_mod.pin_snapshot(root, container)
+
+
+def test_the_checkout_must_hold_the_pinned_snapshots_data(tmp_path, monkeypatch):
+    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
+    root, first = _git_repo(tmp_path)
     (root / "data/network/routing.yaml").write_text("changed\n")
-    monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
-    monkeypatch.setenv("FWAGENT_SNAPSHOT_COMMIT", sha)
     with pytest.raises(AgentError, match="would use two revisions: data/network/routing.yaml"):
-        FoundryAgent.from_env(root)
+        agent_mod.pin_snapshot(root, synced(root, first))
+    assert agent_mod.pin_snapshot(root, synced(root, first), allowed_differences=["data/network/routing.yaml"]) == first
 
 
-def test_from_env_needs_a_full_snapshot_sha(monkeypatch):
+def test_from_env_pins_before_any_foundry_call(tmp_path, monkeypatch):
+    root, first = _git_repo(tmp_path)
+    second = _second_commit(root)
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
-    monkeypatch.setenv("FWAGENT_SNAPSHOT_COMMIT", "main")
-    with pytest.raises(AgentError, match="FWAGENT_SNAPSHOT_COMMIT must be the full SHA"):
-        FoundryAgent.from_env(REPO)
+    monkeypatch.setenv("FWAGENT_SNAPSHOT_COMMIT", second)
+    monkeypatch.setattr(agent_mod, "connect", lambda endpoint: pytest.fail("Foundry must not be called"))
+    with pytest.raises(AgentError, match="never used"):
+        FoundryAgent.from_env(root, container=synced(root, first, second, current=first))
+
+
+def test_from_env_publishes_the_version_pinned_to_current_and_reports_a_moved_pointer(tmp_path, monkeypatch):
+    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
+    root, first = _git_repo(tmp_path)
+    (root / "data/standards").mkdir(parents=True)
+    agents = FakeAgents(missing=True)
+    project = SimpleNamespace(agents=agents, get_openai_client=lambda: SimpleNamespace())
+    monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
+    monkeypatch.setattr(agent_mod, "connect", lambda endpoint: project)
+    container = synced(root, first)
+    a = FoundryAgent.from_env(root, container=container)
+    assert a.snapshot == first and agents.created[0][1].tools[0].headers == {"X-Fwagent-Snapshot": first}
+    container.blobs["current.json"] = json.dumps({"commit": "f" * 40}).encode()  # a push during the run
+    assert a.pointer_now() == "f" * 40 and a.snapshot == first
 
 
 def test_from_env_needs_the_project_endpoint(monkeypatch):

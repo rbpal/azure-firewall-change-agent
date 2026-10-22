@@ -95,9 +95,9 @@ The first real score comes after the agent and its model are configured.
 
 ## Running the real agent
 
-`--agent foundry` calls the drafter on Foundry (`workflow/agent.py`). It needs `FWAGENT_PROJECT_ENDPOINT` and `FWAGENT_SNAPSHOT_COMMIT`, the full SHA of the snapshot of `main` the tools must read. Every tool call of every ticket reads that one snapshot, and a reply is refused if any tool answer names another commit.
+`--agent foundry` calls the drafter on Foundry (`workflow/agent.py`). It needs `FWAGENT_PROJECT_ENDPOINT`. The run pins the snapshot `current.json` names, after checking it holds exactly that commit's files; if `FWAGENT_SNAPSHOT_COMMIT` is set, the snapshot must be that commit. Every tool call of every ticket reads that one snapshot, and a reply is refused if any tool answer names another commit.
 
-The run refuses to start when this repo's `data/network` or `infra/envs` differ from that snapshot, because the labels and the tools would then rest on two revisions. Each differing file must be named with `--data-diff-ok`, and each ticket that depends on it left out with `--not-run RITM…=reason`.
+The run refuses to start when this repo's `data/network` or `infra/envs` differ from that snapshot, because the labels and the tools would then rest on two revisions. Each differing file must be named with `--data-diff-ok`, and each ticket that depends on it left out with `--not-run RITM…=reason`. For a measured run, push instead, so the snapshot is the checkout's commit.
 
 - `--reviewed-only` leaves out labels still pending review.
 - `--token-budget N` stops before the next ticket once N tokens are used.

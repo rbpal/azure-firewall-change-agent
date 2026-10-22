@@ -10,7 +10,7 @@ commit. A push in the middle of a call can never mix two versions of main.
 A caller can pin one commit for a whole ticket with the X-Fwagent-Snapshot header. Then
 current.json is never read, and every call of that ticket reads the same snapshot, even if
 main moves between calls. Only a full commit SHA is accepted, and only a snapshot the sync
-job uploaded can be read; the sync job keeps the newest five.
+job uploaded can be read; the sync job keeps the newest two.
 
 Safety rule: read-only. It signs in with the Function app's managed identity; no keys.
 """

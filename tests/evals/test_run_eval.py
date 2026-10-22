@@ -218,12 +218,22 @@ def test_a_dns_condition_must_name_a_ticket_host_and_a_known_fault(tmp_path, mon
         load_requests("validation")
 
 
-def test_reviewed_only_leaves_out_every_pending_label_and_says_so():
+def test_reviewed_only_leaves_out_every_pending_label_and_says_so(tmp_path, monkeypatch):
+    """Mark two labels pending in a copy (every real label is reviewed); only those two are left out."""
+    import shutil
+    import evals.run_eval as runner
+    shutil.copytree(runner.REQUESTS / "validation", tmp_path / "validation")
+    marked = sorted((tmp_path / "validation").glob("*.yaml"))[:2]
+    for path in marked:
+        path.write_text(path.read_text().replace("\nexpected:\n", "\nexpected:\n  review: pending\n", 1))
+    monkeypatch.setattr(runner, "REQUESTS", tmp_path)
+    requests = load_requests("validation")
+    pending = {r.number for r in requests if r.expected.get("review") == "pending"}
+    assert len(pending) == 2
     not_run = []
-    results = run(perfect(KEYS), reviewed_only=True, not_run=not_run)
-    pending = {r.number for r in REQUESTS if r.expected.get("review") == "pending"}
-    assert pending and {n for n, _ in not_run} == pending and all(why == "label pending review" for _, why in not_run)
-    assert len(results) == len(REQUESTS) - len(pending) and not any(r.label_pending for r in results)
+    results = run(perfect({r.number: r.expected for r in requests}), reviewed_only=True, not_run=not_run)
+    assert {n for n, _ in not_run} == pending and all(why == "label pending review" for _, why in not_run)
+    assert len(results) == len(requests) - 2 and not any(r.label_pending for r in results)
 
 
 def test_an_agent_whose_dns_tool_runs_in_azure_does_not_get_a_controlled_dns_request():
@@ -273,7 +283,13 @@ def test_a_ticket_left_out_by_the_caller_is_listed_with_its_reason():
 
 def test_the_foundry_run_refuses_data_that_differs_from_the_snapshot_unless_each_file_is_named(monkeypatch, capsys):
     import workflow.agent as agent_mod
-    monkeypatch.setattr(agent_mod, "data_differences", lambda repo, commit: ["infra/envs/x.tfvars"])
-    monkeypatch.setattr(agent_mod.FoundryAgent, "from_env", classmethod(lambda cls, repo, require_same_data=True: always_stop))
+
+    def from_env(cls, repo, allowed_differences=(), container=None):
+        """Like the real one: refuse unless the one differing file is named."""
+        if "infra/envs/x.tfvars" not in allowed_differences:
+            raise agent_mod.AgentError("this checkout's data differs from snapshot cccc: infra/envs/x.tfvars")
+        return always_stop
+
+    monkeypatch.setattr(agent_mod.FoundryAgent, "from_env", classmethod(from_env))
     assert main(["--agent", "foundry"]) == 2 and "infra/envs/x.tfvars" in capsys.readouterr().out
     assert main(["--agent", "foundry", "--data-diff-ok", "infra/envs/x.tfvars", "--only", "RITM0011001"]) == 0

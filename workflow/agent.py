@@ -1,6 +1,6 @@
 """The drafting agent on Foundry: one call per accepted ticket, tools over remote MCP.
 
-Example: with FWAGENT_PROJECT_ENDPOINT and FWAGENT_SNAPSHOT_COMMIT set,
+Example: with FWAGENT_PROJECT_ENDPOINT set,
     agent = FoundryAgent.from_env(REPO)
     reply = agent(ticket, engineer_review=None)
 returns {"outcome": "draft", "rules": [...]} after the model has called
@@ -12,9 +12,12 @@ every version of the agent. Its tools are the deployed MCP server, reached throu
 the project connection mcp-fwagentic-tools as the project's managed identity, so
 the agent reads the same copy of main the tools serve (ADR 0003).
 
-One revision per ticket: FWAGENT_SNAPSHOT_COMMIT names the commit of main the tools
-must read. The agent version carries it as the X-Fwagent-Snapshot header, so every
-tool call of a ticket reads that snapshot, not whatever current.json says then.
+One revision per run: the run reads current.json once, checks that the snapshot it
+names holds exactly that commit's data files, and pins that SHA. It never falls back
+to the previous snapshot; a bad or mismatched snapshot stops the run. If
+FWAGENT_SNAPSHOT_COMMIT is set, current.json must name that commit. The agent version
+carries the SHA as the X-Fwagent-Snapshot header, so every tool call reads that
+snapshot even if current.json moves during the run.
 Because a header can be dropped on the way, the reply is accepted only when every
 tool answer that read main names that same commit, and only when this repo's
 data/network and infra/envs equal that commit, the files the draft is written into.
@@ -51,6 +54,8 @@ SNAPSHOT_HEADER = "X-Fwagent-Snapshot"
 COMMIT = re.compile(r"[0-9a-f]{40}")
 READS_MAIN = {"locate_address_for_env_site", "duplicate_rule_check"}  # their answers name the commit they read
 DATA = ("data/network", "infra/envs")  # what the sync job copies, and what a draft is written into
+SNAPSHOT_ACCOUNT = "stfwagentfuncdev"
+SNAPSHOT_CONTAINER = "network-snapshot"
 
 
 class AgentError(Exception):
@@ -86,6 +91,57 @@ def data_differences(repo: Path, commit: str) -> list[str]:
         return [line for line in done.stdout.splitlines() if line]
     git("cat-file", "-e", f"{commit}^{{commit}}")
     return sorted(set(git("diff", "--name-only", commit, "--", *DATA)) | set(git("ls-files", "--others", "--exclude-standard", "--", *DATA)))
+
+
+def _git_files(repo: Path, commit: str) -> set[str]:
+    """The data files commit holds, from this checkout's git history."""
+    done = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", "--name-only", commit, "--", *DATA],
+                          capture_output=True, text=True)
+    if done.returncode != 0:
+        raise AgentError(f"this checkout does not have commit {commit[:12]}, so its snapshot cannot be checked: "
+                         f"{done.stderr.strip()}")
+    return {line for line in done.stdout.splitlines() if line}
+
+
+def current_snapshot(repo: Path, container) -> str:
+    """The commit current.json names, after checking its snapshot holds exactly that commit's data files."""
+    try:
+        pointer = json.loads(container.download_blob("current.json").readall())
+    except Exception as error:
+        raise AgentError(f"current.json could not be read: {type(error).__name__}: {error}") from error
+    commit = pointer.get("commit") if isinstance(pointer, dict) else None
+    if not isinstance(commit, str) or not COMMIT.fullmatch(commit):
+        raise AgentError(f"current.json does not name a full commit SHA: {pointer!r}")
+    prefix = f"snapshots/{commit}/"
+    uploaded = {b.name[len(prefix):] for b in container.list_blobs(name_starts_with=prefix)}
+    wanted = _git_files(repo, commit)
+    if uploaded != wanted:
+        missing, extra = sorted(wanted - uploaded), sorted(uploaded - wanted)
+        raise AgentError(f"snapshot {commit[:12]} does not match its commit: {len(missing)} files missing "
+                         f"{missing[:3]}, {len(extra)} extra {extra[:3]}. Stopped; the previous snapshot is never used instead")
+    return commit
+
+
+def snapshot_container():
+    """The snapshot container, read with your az login (Storage Blob Data Reader on the container)."""
+    from azure.identity import AzureCliCredential
+    from azure.storage.blob import ContainerClient
+    account = os.environ.get("FWAGENT_SNAPSHOT_ACCOUNT", SNAPSHOT_ACCOUNT)
+    return ContainerClient(f"https://{account}.blob.core.windows.net", SNAPSHOT_CONTAINER, credential=AzureCliCredential())
+
+
+def pin_snapshot(repo: Path, container, allowed_differences=()) -> str:
+    """Pin the current snapshot for a run: verified, as required, and the same data as this checkout, or stop."""
+    commit = current_snapshot(repo, container)
+    required = os.environ.get("FWAGENT_SNAPSHOT_COMMIT")
+    if required and required != commit:
+        raise AgentError(f"current.json names {commit[:12]}, but this run requires {required[:12]}. Stopped; "
+                         "the previous snapshot is never used instead")
+    differ = sorted(set(data_differences(repo, commit)) - set(allowed_differences))
+    if differ:
+        raise AgentError(f"this checkout's data differs from snapshot {commit[:12]}, so the draft and the tools would "
+                         "use two revisions: " + ", ".join(differ))
+    return commit
 
 
 def tool_commits(response) -> list[tuple[str, str | None]]:
@@ -165,36 +221,44 @@ class Call:
     error: str | None = None
 
 
+def connect(endpoint: str):
+    """The Foundry project client, signed in with az login."""
+    from azure.ai.projects import AIProjectClient
+    from azure.identity import AzureCliCredential
+    return AIProjectClient(endpoint=endpoint, credential=AzureCliCredential())
+
+
 class FoundryAgent:
     """Calls the published drafter version on Foundry Agent Service, one ticket per call."""
 
     controlled_dns = False  # its DNS tool runs in Azure, so an eval's dns: condition cannot reach it
 
-    def __init__(self, project, openai_client, version: str, snapshot: str):
-        """Keep the project client, its OpenAI client, the agent version and the snapshot every call must use."""
+    def __init__(self, project, openai_client, version: str, snapshot: str, container=None):
+        """Keep the clients, the agent version, the pinned snapshot and the container that names the current one."""
         self.project, self.openai, self.version, self.snapshot = project, openai_client, version, snapshot
+        self.container = container
         self.calls: list[Call] = []
 
+    def pointer_now(self) -> str | None:
+        """The commit current.json names now, to report if it moved during the run; None if it cannot be read."""
+        try:
+            return json.loads(self.container.download_blob("current.json").readall()).get("commit")
+        except Exception:
+            return None
+
     @classmethod
-    def from_env(cls, repo: Path, require_same_data: bool = True) -> "FoundryAgent":
-        """Sign in with az login, check the snapshot, publish the drafter if its definition changed, and return the agent."""
+    def from_env(cls, repo: Path, allowed_differences=(), container=None) -> "FoundryAgent":
+        """Pin the current snapshot, sign in with az login, publish the drafter if its definition changed, and return it."""
         endpoint = os.environ.get("FWAGENT_PROJECT_ENDPOINT")
         if not endpoint:
             raise AgentError("FWAGENT_PROJECT_ENDPOINT is not set: the Foundry project endpoint, "
                              "https://<account>.services.ai.azure.com/api/projects/<project>")
-        snapshot = os.environ.get("FWAGENT_SNAPSHOT_COMMIT", "")
-        if not COMMIT.fullmatch(snapshot):
-            raise AgentError("FWAGENT_SNAPSHOT_COMMIT must be the full SHA of the snapshot the tools read")
-        differ = data_differences(repo, snapshot)
-        if require_same_data and differ:
-            raise AgentError(f"this repo's data differs from snapshot {snapshot[:12]}, so the draft and the tools "
-                             "would use two revisions: " + ", ".join(differ))
-        from azure.ai.projects import AIProjectClient
-        from azure.identity import AzureCliCredential
-        project = AIProjectClient(endpoint=endpoint, credential=AzureCliCredential())
+        container = container if container is not None else snapshot_container()
+        snapshot = pin_snapshot(repo, container, allowed_differences)  # before any Foundry call
+        project = connect(endpoint)
         body = definition(instructions(repo), snapshot, os.environ.get("FWAGENT_MODEL", DEFAULT_MODEL),
                           os.environ.get("FWAGENT_MCP_CONNECTION", DEFAULT_CONNECTION))
-        return cls(project, project.get_openai_client(), ensure_version(project, body), snapshot)
+        return cls(project, project.get_openai_client(), ensure_version(project, body), snapshot, container)
 
     def __call__(self, ticket: dict, engineer_review: dict | None = None, dns_lookup=None) -> dict:
         """Draft one ticket; refuse a controlled DNS condition, which cannot reach the deployed tools."""

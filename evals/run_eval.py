@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import copy
 import json
-import os
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -320,16 +319,13 @@ def main(argv: list[str] | None = None) -> int:
             keys = {r.number: r.expected for r in load_requests(args.split, args.allow_test_split)}
             agent = perfect(keys)
         elif args.agent == "foundry":
-            from workflow.agent import FoundryAgent, data_differences
-            repo = REQUESTS.parents[1]
-            differ = data_differences(repo, os.environ.get("FWAGENT_SNAPSHOT_COMMIT", ""))
-            unexplained = sorted(set(differ) - set(args.data_diff_ok or []))
-            if unexplained:
-                print("refused: this repo's data differs from the pinned snapshot, so labels and tools would use two "
-                      "revisions: " + ", ".join(unexplained) + " (name each with --data-diff-ok and leave out the "
-                      "tickets that depend on it with --not-run)")
+            from workflow.agent import AgentError, FoundryAgent
+            try:
+                agent = FoundryAgent.from_env(REQUESTS.parents[1], allowed_differences=args.data_diff_ok or [])
+            except AgentError as error:
+                print(f"refused: {error} (a differing data file can be named with --data-diff-ok, and each ticket "
+                      "that depends on it left out with --not-run)")
                 return 2
-            agent = FoundryAgent.from_env(repo, require_same_data=False)
         else:
             agent = always_stop
         if args.only:
@@ -344,7 +340,13 @@ def main(argv: list[str] | None = None) -> int:
     report = format_report(results, args.split, args.agent)
     if not_run:
         report += "\n\nNot run\n" + "\n".join(f"  {number}  {why}" for number, why in not_run)
-    calls = getattr(getattr(agent, "inner", agent), "calls", [])
+    inner = getattr(agent, "inner", agent)
+    if getattr(inner, "snapshot", None):
+        now = inner.pointer_now()
+        report += f"\n\nSnapshot pinned for every tool call: {inner.snapshot}"
+        if now != inner.snapshot:
+            report += f"\ncurrent.json now names {now}: main moved during the run, and the run kept the pinned snapshot"
+    calls = getattr(inner, "calls", [])
     if calls:
         report += (f"\n\nTokens: {sum(c.input_tokens for c in calls)} in, {sum(c.output_tokens for c in calls)} out, "
                    f"over {len(calls)} calls; tool calls: {sum(len(c.tools) for c in calls)}")

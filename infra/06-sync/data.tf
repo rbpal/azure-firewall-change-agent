@@ -12,3 +12,7 @@ data "azurerm_storage_account" "func" {
   name                = var.storage_account_name
   resource_group_name = var.resource_group_name
 }
+
+# Who is running Terraform. Used to give that person read access to the
+# storage account's containers.
+data "azurerm_client_config" "current" {}

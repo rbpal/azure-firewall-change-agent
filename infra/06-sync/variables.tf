@@ -57,3 +57,8 @@ variable "fic_audiences" {
   description = "Audiences the token must name."
   type        = list(string)
 }
+
+variable "blob_reader_for_terraform_user" {
+  description = "Give the person running Terraform Storage Blob Data Reader on the whole storage account: every container, now and later."
+  type        = bool
+}

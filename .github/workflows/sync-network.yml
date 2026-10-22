@@ -9,7 +9,7 @@
 #
 # Two snapshots are kept: the current one and the one before it. A manual run with
 # rollback_to moves current.json back to a kept snapshot; it uploads and deletes
-# nothing.
+# nothing. docs/snapshots.md says how to compare snapshots and roll back.
 name: sync-network
 
 on:

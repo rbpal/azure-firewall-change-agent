@@ -247,6 +247,3 @@ rajtest/
 # Local-only tooling: the network data generator and its tests
 data/generate_network.py
 tests/test_network_data.py
-
-# Snapshot notes, kept local while the process changes
-docs/snapshots.md

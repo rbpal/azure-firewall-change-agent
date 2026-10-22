@@ -29,7 +29,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: ce5daf0
-  review: pending
   note: >-
     The pasted URL's hostname is 273 characters. The ticket schema checks each label (at most 63 characters) but not
     the total, so the ticket passes the schema and intake (security register 50.22). dns_lookup_for_fqdn takes the

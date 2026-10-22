@@ -29,7 +29,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: ce5daf0
-  review: pending
   note: >-
     The ticket names ipg-partner-woodgrove as the destination. No env-site's ip-groups.tfvars holds it: checked at all
     eight, both selected dev sites included, and no partner IP group exists at any. duplicate_rule_check refuses it at

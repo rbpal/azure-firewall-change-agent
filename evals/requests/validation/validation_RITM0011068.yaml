@@ -30,10 +30,15 @@ ticket:
   assigned_to: Jordan Patel
   existing_rule: https-rprt-to-settApi
 expected:
-  labelled_against: 91d3e04
-  review: pending
+  labelled_against: ce5daf0
   note: >-
-    Both dev sites are selected. 008-https-rprt-to-settApi matches exactly in dev-eastus2, and dev-centralus has no copy: primary and DR have drifted. RB-03-5 stops when one selected site has an exact match and another has none.
+    Both dev sites are selected. 008-https-rprt-to-settApi matches exactly in dev-eastus2, and dev-centralus has no
+    copy: primary and DR have drifted. The rule was added in ce5daf0; at 91d3e04 neither site has it. RB-03-5 stops
+    when one selected site has an exact match and another has none. Return the ticket to the engineer for edit or
+    rejection, explaining that the rule exists at dev primary only. The engineer can narrow the ticket to dev primary
+    or reject it; an edited ticket must be accepted again before the agent proceeds. Never remove the rule at one site
+    alone and never add a copy at DR. If the agent drafts a primary-only removal, plan_writes refuses it because a
+    selected site has no rule, and writes nothing (confirmed by code inspection, not by an executed test).
   outcome: stop_and_ask
   reason: partial_site_match
   rules: []

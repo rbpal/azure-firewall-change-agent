@@ -29,7 +29,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: ce5daf0
-  review: pending
   note: >-
     AMQPS (TCP 5671) to the hostname api.tailspin.example. RB-01-4 gives an application rule only to HTTPS to a named
     host; anything else is a network rule. This project's firewall policies are Basic (firewall_policy_sku = "Basic"
@@ -38,9 +37,10 @@ expected:
     rule here could only hold the name's currently resolved addresses, which can change without notice. RB-01-6 stops:
     non_http_to_hostname. This is a limit of the Basic SKU this project uses, not of Azure Firewall in general:
     Standard and Premium filter hostnames in network rules through DNS proxy. Never replace the hostname with resolved
-    IPs. The ticket fields alone establish the stop, so no lookup is required. If the agent drafts anyway, the draft
-    check refuses resolved IPs in place of the hostname (STD-COLL-03), but writes a network rule that names the
-    hostname (security register 50.23).
+    IPs. Return the ticket to the engineer for edit or rejection, explaining that this project's Basic firewall policy
+    cannot filter this hostname in a network rule for TCP 5671. Draft nothing. The ticket fields alone establish the
+    stop, so no lookup is required. If the agent drafts anyway, the draft check refuses resolved IPs in place of the
+    hostname (STD-COLL-03), but writes a network rule that names the hostname (security register 50.23).
   outcome: stop_and_ask
   reason: non_http_to_hostname
   rules: []

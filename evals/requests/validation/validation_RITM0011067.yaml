@@ -31,14 +31,16 @@ ticket:
   existing_rule: smtp-sett-to-lamnaSmtp
 expected:
   labelled_against: 91d3e04
-  review: pending
   note: >-
-    The flow matches 011-smtp-sett-to-lamnaSmtp exactly at both dev sites, but the justification also asks to take 10.104.14.0/24 out of ipg-sett-dev. The agent never changes an IP group; they have their own approval process (RB-03-5). Stop for the whole ticket; do not draft the removal alone.
+    The flow matches 011-smtp-sett-to-lamnaSmtp exactly at both dev sites, but the justification also asks to take
+    10.104.14.0/24 out of ipg-sett-dev. The agent never changes an IP group; they have their own approval process
+    (RB-03-5). The explicit IP group change request in the justification establishes the stop, so no lookup is
+    required. Return the whole ticket to the engineer for edit or rejection, explaining that the IP group change must
+    go through the IP group process. The engineer can remove that request from the ticket or reject it; an edited
+    ticket must be accepted again before the agent proceeds. Do not draft the rule removal on its own, and never
+    change ipg-sett-dev. If the agent drafts the removal anyway, the workflow writes it, because the draft check does
+    not read the justification (security register 50.23, deferred).
   outcome: stop_and_ask
   reason: ip_group_change_requested
   rules: []
-  tools:
-  - {tool: locate_address_for_env_site, address: 10.104.14.0/24}
-  - {tool: locate_address_for_env_site, address: 10.105.14.0/24}
-  - {tool: duplicate_rule_check, env_site: dev-eastus2}
-  - {tool: duplicate_rule_check, env_site: dev-centralus}
+  tools: []

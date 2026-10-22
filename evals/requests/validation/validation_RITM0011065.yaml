@@ -30,7 +30,6 @@ ticket:
   existing_rule: sftp-sett-to-woodgroveSftp
 expected:
   labelled_against: ce5daf0
-  review: pending
   note: >-
     The ticket removes SFTP (TCP 22) from 10.100.14.0/25 to Woodgrove 203.0.113.48/28 at prod primary only.
     existing_rule names sftp-sett-to-woodgroveSftp; in prod-eastus2 that is key 021-sftp-sett-to-woodgroveSftp in
@@ -40,6 +39,7 @@ expected:
     match; the flow decides. RB-03-2: never trim a rule. RB-03-5 stops: rule_allows_more. Do not delete, trim or split
     the rule. Return the ticket to the engineer for edit or rejection, explaining that the rule covers the whole /24
     and asking whether the whole rule should go or a narrower rule should replace it through the change process.
+    Any broader removal or replacement requires an updated, approved request.
     Unlike the stops visible in the ticket fields, this one needs the existing rule's evidence. If the agent drafts
     anyway, the workflow refuses both forms: the /24 is not on the ticket, and no rule matches the /25 field for
     field.

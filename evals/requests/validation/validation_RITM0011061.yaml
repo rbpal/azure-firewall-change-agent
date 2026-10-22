@@ -28,7 +28,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: ce5daf0
-  review: pending
   note: >-
     Source 172.20.20.0/24 is an on-prem primary wired-user subnet, and destination 172.24.12.0/24 an on-prem secondary
     one (locate_address_for_env_site: kind users-wired at each location, no env-site, no firewall policy). The ticket

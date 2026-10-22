@@ -30,7 +30,6 @@ ticket:
 dns: {exchange.northwind.example: timeout}
 expected:
   labelled_against: ce5daf0
-  review: pending
   note: >-
     The URL is valid: dns_lookup_for_fqdn takes it as its target and extracts exchange.northwind.example, port 443.
     The request's dns: block makes that lookup time out, so the tool answers tool_failed: the lookup could not run.

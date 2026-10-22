@@ -33,9 +33,13 @@ ticket:
   existing_rule: ntp-spokes-to-hubNtp
 expected:
   labelled_against: 91d3e04
-  review: pending
   note: >-
-    The flow matches 002-ntp-spokes-to-hubNtp in stage-eastus2 exactly (duplicate), but that rule is in the hub group, which serves every spoke (RB-03-5).
+    The flow matches 002-ntp-spokes-to-hubNtp in stage-eastus2 exactly (duplicate), but that rule is in the shared hub
+    group, which serves every spoke (RB-03-5). Hub rules are outside this workflow's scope. Return the ticket to the
+    engineer for edit or rejection, explaining that the matching rule belongs to the shared hub group. Do not delete or
+    change the hub rule. Draft nothing. If the agent drafts anyway, the writer refuses it because hub is not a spoke
+    routed through stage-eastus2, and writes nothing (confirmed by code inspection of spoke_path in
+    workflow/tfvars_writer.py, not by an executed test).
   outcome: stop_and_ask
   reason: hub_rule
   rules: []

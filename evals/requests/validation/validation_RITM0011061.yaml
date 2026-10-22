@@ -27,13 +27,20 @@ ticket:
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: 91d3e04
+  labelled_against: ce5daf0
   review: pending
   note: >-
-    Source 172.20.20.0/24 is an on-prem primary user subnet and destination 172.24.12.0/24 an on-prem secondary one. That traffic never reaches an Azure firewall (RB-05-5), so no rule anywhere would allow or block it.
+    Source 172.20.20.0/24 is an on-prem primary wired-user subnet, and destination 172.24.12.0/24 an on-prem secondary
+    one (locate_address_for_env_site: kind users-wired at each location, no env-site, no firewall policy). The ticket
+    names no Azure address, so RB-05-4 cannot choose an env-site, firewall policy or rule collection group. RB-05-5
+    stops: both_ends_onprem. The repository does not record the path between the two data centres: routing.yaml
+    connects both to all eight hubs over ExpressRoute, and its inspection field says "assumed, not verified". So this
+    label does not claim the flow bypasses Azure. Return the ticket to the engineer for edit or rejection, explaining
+    that the request has no Azure endpoint for this workflow to place a rule on. Never draft a rule at any env-site or
+    redirect the request. If the agent drafts one anyway, the workflow code writes it (security register 50.23).
   outcome: stop_and_ask
   reason: both_ends_onprem
   rules: []
   tools:
-  - {tool: locate_address_for_env_site, address: 172.20.20.0/24}
-  - {tool: locate_address_for_env_site, address: 172.24.12.0/24}
+  - {tool: locate_address_for_env_site, address: "172.20.20.0/24"}
+  - {tool: locate_address_for_env_site, address: "172.24.12.0/24"}

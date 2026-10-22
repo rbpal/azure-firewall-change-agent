@@ -223,3 +223,25 @@ def test_onprem_source_is_internal_not_inbound(ticket, source):
 def test_external_source_with_https_is_still_inbound_and_refused(ticket):
     """The same ticket from a partner range is inbound DNAT, which takes TCP or UDP only."""
     assert ticket_errors(onprem_to_azure(ticket, {"cidr": "203.0.113.16/28"})) != []
+
+
+def test_a_hostname_over_253_characters_passes_intake_but_the_dns_tool_refuses_it(ticket):
+    """Known gap, security register 50.22: the schema limits each label to 63 characters but sets
+    no total, so a 273-character name reaches the agent, and only the DNS tool refuses it. Kept out
+    of the eval (RITM0011063 uses a valid name) until the gap is decided. When the schema or intake
+    starts refusing it, this test fails: move the case to the refusal tests."""
+    import workflow.scope  # noqa: F401  (puts mcp/ on the path for the tool import)
+    from errors import BadArguments
+    from tools.dns_lookup_for_fqdn import parse_target
+    from workflow.intake import intake_findings
+
+    label = ("files-" * 11)[:63]
+    host = ".".join([label] * 4 + ["northwind", "example"])
+    assert len(host) == 273
+    ticket["destination"] = [{"url": f"https://{host}/v1/upload"}]
+    ticket["protocol"] = "HTTPS"
+    assert ticket_errors(ticket) == []
+    assert intake_findings(TICKETS.parent.parent, ticket) == []
+    with pytest.raises(BadArguments, match="is not a valid hostname"):
+        parse_target(f"https://{host}/v1/upload")
+    assert parse_target(f"https://{host[len(label) + 1:]}/v1/upload")[0]  # 209 characters: the tool accepts it

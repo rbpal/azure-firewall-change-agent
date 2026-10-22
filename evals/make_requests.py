@@ -4,15 +4,16 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 99 varied tickets, 65 for validation and 34 for test, spread
-over 42 kinds of request, including changes to the primary site only, the DR
+Why: the eval needs 100 varied tickets, 66 for validation and 34 for test, spread
+over 43 kinds of request, including changes to the primary site only, the DR
 site only, or both, IP groups, on-prem users, addresses wider or narrower than
 the plan, planned spokes, requests that resume after an engineer's review, and
 one validation case for each runbook escalation that has its own stop code.
 A script gives variety and the same output every run.
 
-Safety rule: this script writes tickets, and for the resume cases the engineer's
-recorded decision (`engineer_review:`), which is part of the question, not the answer. Every `expected:` block is written
+Safety rule: this script writes tickets, for the resume cases the engineer's
+recorded decision (`engineer_review:`), and for a DNS failure case the DNS
+condition the tools meet (`dns:`). Both are part of the question, not the answer. Every `expected:` block is written
 by hand. The script never imports the agent's tools, so a bug in a tool cannot
 reach a label, and it never overwrites a file that already exists, so a
 hand-written label is never lost.
@@ -120,6 +121,8 @@ CATEGORIES = [
     ("removal-hub-rule", 1, 0),
     ("removal-asks-ip-group-change", 1, 0),
     ("removal-one-site-matches", 1, 0),
+    # Added 2026-10-22: a valid hostname whose lookup fails, apart from url-not-valid's input the tool refuses.
+    ("dns-lookup-failed", 1, 0),
 ]
 
 ENGINEER = "Jordan Patel"
@@ -768,6 +771,22 @@ def build_url_not_valid(rng, net, used):
         fields, "The lab settlement servers upload files to Northwind's exchange. URL copied from the partner portal."
 
 
+def build_dns_lookup_failed(rng, net, used):
+    """HTTPS to a valid partner URL whose DNS lookup times out (RB-01-6): dns_lookup_failed.
+
+    The `dns:` block makes the failure part of the question: the eval's resolver times
+    out for this one name, so the tool cannot answer. Without it the name would be
+    NXDOMAIN, a caution and a draft (RB-01-7), as in RITM0011015. Same flow as
+    url-not-valid (RITM0011063); only the URL differs, so the pair separates input
+    the tool refuses from a lookup that cannot run.
+    """
+    host = "exchange.northwind.example"
+    fields = egress(net, ["lab"], "sett", "northwind", "Fs")
+    fields.update(destination=[{"url": f"https://{host}/v1/upload"}], protocol="HTTPS", _dns={host: "timeout"})
+    return "Valid partner URL; the DNS lookup times out, so the tool cannot say what the name resolves to.", \
+        fields, "The lab settlement servers upload files to Northwind's exchange. URL copied from the partner portal."
+
+
 def build_non_http_to_hostname(rng, net, used):
     """AMQPS to a partner hostname: non-HTTP traffic to a name (RB-01-6): non_http_to_hostname."""
     assert not net.exists_anywhere("amqps-rprt-to-tailspinMq", ["stage"], "rprt")
@@ -863,7 +882,7 @@ def version(body):
 
 
 def plan():
-    """Every request as (split, number, category, why, ticket, engineer_review or None), in a fixed order."""
+    """Every request as (split, number, category, why, ticket, engineer_review or None, dns or None), in a fixed order."""
     net = Network()
     used = set()
     counters = {split: 0 for split in SPLITS}
@@ -883,11 +902,12 @@ def plan():
                 if name.startswith("removal"):
                     fields["_removal"] = True
                 review = fields.pop("_engineer_review", None)
+                dns = fields.pop("_dns", None)
                 body = ticket(number, rng, fields, justification)
                 if review is not None:  # the acceptance covers exactly this ticket version
                     review = {**review, "ticket_version": version(body)}
                     review = {k: review[k] for k in ("decision", "engineer", "reason", "ticket_version", "accepted", "planned")}
-                out.append((split, number, name, why, body, review))
+                out.append((split, number, name, why, body, review, dns))
     return out
 
 
@@ -900,11 +920,13 @@ _Dumper.add_representer(
 )
 
 
-def render(number, name, why, body, review=None):
-    """The request file text: header, metadata, ticket, any engineer review, and an empty label."""
+def render(number, name, why, body, review=None, dns=None):
+    """The request file text: header, metadata, ticket, any engineer review or DNS condition, and an empty label."""
     data = {"id": number, "category": name, "why": why, "ticket": body}
     if review is not None:
         data["engineer_review"] = review
+    if dns is not None:
+        data["dns"] = dns
     text = yaml.dump(data, Dumper=_Dumper, sort_keys=False, width=120, default_flow_style=None)
     return (
         "# Eval request. Synthetic; all names and addresses are fictional.\n"
@@ -932,7 +954,7 @@ REVISED_JUSTIFICATIONS = {
 def write(out: Path) -> tuple[list[Path], list[Path]]:
     """Write every request file that does not exist yet, except retired numbers; return (written, kept)."""
     written, kept = [], []
-    for split, number, name, why, body, review in plan():
+    for split, number, name, why, body, review, dns in plan():
         if number in RETIRED:
             continue
         path = out / split / f"{split}_{number}.yaml"
@@ -940,7 +962,7 @@ def write(out: Path) -> tuple[list[Path], list[Path]]:
             kept.append(path)
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render(number, name, why, body, review))
+        path.write_text(render(number, name, why, body, review, dns))
         written.append(path)
     return written, kept
 

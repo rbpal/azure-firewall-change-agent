@@ -16,7 +16,7 @@ STOP_CATEGORIES = {
     "sites-contradict-addresses", "address-environment-contradicts-ticket",
     "address-not-in-plan", "free-text-names-another-environment",
     "onprem-address-not-in-plan", "onprem-location-mismatch", "wider-than-plan", "planned-spoke",
-    "dnat-open-source", "dnat-destination-not-one-host", "onprem-to-onprem", "ip-group-not-found", "url-not-valid",
+    "dnat-open-source", "dnat-destination-not-one-host", "onprem-to-onprem", "ip-group-not-found", "url-not-valid", "dns-lookup-failed",
     "non-http-to-hostname", "removal-rule-allows-more", "removal-hub-rule", "removal-asks-ip-group-change",
     "removal-one-site-matches",
 }
@@ -59,7 +59,7 @@ def test_script_writes_the_planned_mix(generated):
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation - retired[name], name
         assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 65
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 66
     assert sum(v for (split, _), v in counts.items() if split == "test") == 34
 
 
@@ -84,7 +84,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 99
+    assert written == [] and len(kept) == 100
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -125,8 +125,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_99_committed_requests():
-    assert len(COMMITTED) == 99
+def test_there_are_100_committed_requests():
+    assert len(COMMITTED) == 100
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -144,7 +144,7 @@ def test_committed_ticket_still_matches_the_script(path, generated):
     # changes under it; then the label must be checked again.
     fresh = load(generated / path.parent.name / path.name)
     committed = load(path)
-    for key in ("id", "category", "why", "ticket", "engineer_review"):
+    for key in ("id", "category", "why", "ticket", "engineer_review", "dns"):
         assert committed.get(key) == fresh.get(key), key
 
 
@@ -169,13 +169,20 @@ def test_label_has_the_agreed_shape(path):
 REGION = {"primary": "eastus2", "dr": "centralus"}
 
 
-@pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
+# Only a draft changes files. Listed here rather than skipped, so a stop or already_allowed
+# label is not counted as a skipped test (until 2026-10-22 each one was, 36 of the 39 skips).
+DRAFTS = [p for p in COMMITTED if (load(p)["expected"] or {}).get("outcome") == "draft"]
+
+
+def test_the_draft_list_holds_every_draft_label():
+    assert len(DRAFTS) == 63
+
+
+@pytest.mark.parametrize("path", DRAFTS, ids=lambda p: p.name)
 def test_label_rules_touch_exactly_the_selected_sites(path):
     # A primary-only ticket names no DR rule, even when DR is built, and the other way round.
     request = load(path)
     expected = request["expected"]
-    if expected is None or expected["outcome"] != "draft":
-        pytest.skip("only a draft changes files")
     selected = {f"{env}-{REGION[site]}" for env, sites in request["ticket"]["change_sites"].items() for site in sites}
     assert {r["env_site"] for r in expected["rules"]} == selected
 

@@ -27,12 +27,16 @@ ticket:
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: 91d3e04
+  labelled_against: ce5daf0
   review: pending
   note: >-
-    Inbound SFTP with a source of 0.0.0.0/0. RB-02-2 never widens the source, and RB-02-5 stops on 0.0.0.0/0 or * (STD-COLL-04, the only hard block). Intake passes the ticket: 0.0.0.0/0 is a valid CIDR, so only the agent's stop catches it before Tier 1.
+    Inbound SFTP whose source is 0.0.0.0/0. The destination 10.102.20.14/32 is the SFTP host in the stage primary xfer
+    spoke (locate_address_for_env_site: spoke xfer, stage-eastus2, plan range 10.102.20.0/24). RB-02-2: never widen
+    the source; a source of 0.0.0.0/0 or * is never drafted (STD-COLL-04, the only standard that blocks). RB-02-5
+    stops: open_dnat_source. Ask for the partner's specific source ranges and draft nothing. The ticket fields alone
+    establish the stop, so no lookup is required. If the agent drafts the rule anyway, the workflow's draft check
+    refuses it and writes nothing (security register 50.21, fixed).
   outcome: stop_and_ask
   reason: open_dnat_source
   rules: []
-  tools:
-  - {tool: locate_address_for_env_site, address: 10.102.20.14/32}
+  tools: []

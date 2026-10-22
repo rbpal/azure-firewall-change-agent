@@ -531,3 +531,101 @@ def test_a_dnat_rule_publishes_and_translates_only_the_tickets_port(repo, change
     with pytest.raises(ApprovalError, match=why):
         apply_reply(repo, t, e)
     assert changed(before, repo) == set()
+
+
+STAGE_XFER = ["infra/envs/stage-eastus2/firewall_policy_rule_collection_groups/xfer.tfvars",
+              "infra/envs/stage-centralus/firewall_policy_rule_collection_groups/xfer.tfvars"]
+
+
+def dnat_from(ticket_sources, rule_sources, removal=False):
+    """The labelled stage DNAT request (RITM0011020, both sites) with the ticket's and both rules' sources replaced."""
+    t, e = _label("RITM0011020")
+    t["sources"] = ticket_sources
+    for rule in e["rules"]:
+        rule["sources"] = rule_sources
+    if removal:
+        t["item"], e["action"] = "Firewall Rule Removal", "remove"
+    return t, e
+
+
+def add_ip_group(root, name, cidrs):
+    """Add one IP group to both stage env-sites' ip-groups.tfvars in the copy."""
+    for env_site in ("stage-eastus2", "stage-centralus"):
+        path = root / "infra" / "envs" / env_site / "ip-groups.tfvars"
+        text = path.read_text().rstrip()
+        members = ", ".join(f'"{c}"' for c in cidrs)
+        path.write_text(text[:-1] + f'  {name} = {{\n    name  = "{name}"\n    cidrs = [{members}]\n  }}\n}}\n')
+
+
+OPEN_DNAT = {  # (ticket sources, reply sources): the ticket approves each, and each lets in everyone
+    "0.0.0.0/0": ([{"cidr": "0.0.0.0/0"}], ["0.0.0.0/0"]),
+    "padded prefix 0.0.0.0/00": ([{"cidr": "0.0.0.0/0"}], ["0.0.0.0/00"]),
+    "dotted mask 0.0.0.0/0.0.0.0": ([{"cidr": "0.0.0.0/0"}], ["0.0.0.0/0.0.0.0"]),
+    "host bits 8.8.8.8/0": ([{"cidr": "0.0.0.0/0"}], ["8.8.8.8/0"]),
+    "two halves": ([{"cidr": "0.0.0.0/1"}, {"cidr": "128.0.0.0/1"}], ["0.0.0.0/1", "128.0.0.0/1"]),
+    "hostname *": ([{"fqdn": "*"}], ["*"]),
+    "IP group holding every address": ([{"ip_group": "ipg-partner-anyone"}], ["ipg-partner-anyone"]),
+}
+
+
+@pytest.mark.parametrize("t_sources, r_sources", OPEN_DNAT.values(), ids=OPEN_DNAT.keys())
+def test_an_open_dnat_add_is_refused_even_when_the_ticket_asks(repo, t_sources, r_sources):
+    """Security register 50.21: STD-COLL-04 blocks however the open source is written, and nothing is written."""
+    add_ip_group(repo, "ipg-partner-anyone", ["0.0.0.0/1", "128.0.0.0/1"])
+    t, e = dnat_from(t_sources, r_sources)
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match=r"source is open to everyone: .*\(STD-COLL-04, RB-02-5 open_dnat_source\)"):
+        apply_reply(repo, t, e)
+    assert changed(before, repo) == set()
+
+
+def test_an_ipv6_open_source_is_refused_not_a_crash(repo):
+    """::/0 against an IPv4 ticket range is not approved; before 2026-10-22 it raised TypeError."""
+    t, e = dnat_from([{"cidr": "0.0.0.0/0"}], ["::/0"])
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="::/0 is not on the ticket"):
+        apply_reply(repo, t, e)
+    assert changed(before, repo) == set()
+
+
+RESTRICTED_DNAT = {  # (ticket sources, reply sources): restricted, so the draft is written
+    "the partner's range": ([{"cidr": "198.51.100.80/28"}], ["198.51.100.80/28"]),
+    "narrower than the ticket": ([{"cidr": "198.51.100.80/28"}], ["198.51.100.80/29"]),
+    "half of every address (a caution, RB-02-6)": ([{"cidr": "0.0.0.0/1"}], ["0.0.0.0/1"]),
+    "partner IP group": ([{"ip_group": "ipg-partner-wingtip"}], ["ipg-partner-wingtip"]),
+}
+
+
+@pytest.mark.parametrize("t_sources, r_sources", RESTRICTED_DNAT.values(), ids=RESTRICTED_DNAT.keys())
+def test_a_dnat_add_with_a_restricted_source_is_written(repo, t_sources, r_sources):
+    add_ip_group(repo, "ipg-partner-wingtip", ["198.51.100.80/28"])
+    t, e = dnat_from(t_sources, r_sources)
+    before = snapshot(repo)
+    apply_reply(repo, t, e)
+    assert changed(before, repo) == set(STAGE_XFER)
+
+
+def test_an_existing_open_dnat_rule_can_still_be_removed(repo):
+    """Deleting an open rule closes the hole, so STD-COLL-04 never blocks a removal."""
+    apply_reply(repo, *dnat_from([{"cidr": "0.0.0.0/1"}], ["0.0.0.0/1"]))
+    for f in STAGE_XFER:  # make the rule just written open, as if it had been added outside the workflow
+        path = repo / f
+        assert path.read_text().count('"0.0.0.0/1"') == 1
+        path.write_text(path.read_text().replace('"0.0.0.0/1"', '"0.0.0.0/0"'))
+    before = snapshot(repo)
+    apply_reply(repo, *dnat_from([{"cidr": "0.0.0.0/0"}], ["0.0.0.0/0"], removal=True))
+    assert changed(before, repo) == set(STAGE_XFER)
+    for f in STAGE_XFER:
+        text = (repo / f).read_text()
+        assert "sftp-wingtip-to-xferSftp" not in text and '"0.0.0.0/0"' not in text
+
+
+def test_an_open_source_in_a_network_rule_is_left_to_the_tier1_caution(repo):
+    """STD-COLL-04 is about DNAT only; 0.0.0.0/0 elsewhere is a STD-COLL-02 caution the engineer sees."""
+    t = flow_ticket("TCP", ["443"])
+    t["sources"] = [{"cidr": "0.0.0.0/0"}]
+    r = flow_reply("TCP", ["443"])
+    r["rules"][0]["sources"] = ["0.0.0.0/0"]
+    before = snapshot(repo)
+    apply_reply(repo, t, r)
+    assert changed(before, repo) == {SPOKE_FILE.format(PRIMARY)}

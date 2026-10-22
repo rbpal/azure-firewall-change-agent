@@ -126,15 +126,55 @@ def _changes(plan: dict) -> dict:
 
 # ------------------------------------------------------------ the checks
 
+def open_to_everyone(addresses: list, ip_groups: list = (), members: dict | None = None) -> str:
+    """Say how a source list lets in every address, such as "0.0.0.0/00 is every IPv4 address", or return ''.
+
+    Catches every way of writing it: `*` or Any; 0.0.0.0/0 with a padded prefix, a
+    dotted mask or host bits (8.8.8.8/0); ::/0; an a-b range; several CIDRs or IP
+    group members that together cover everything (0.0.0.0/1 and 128.0.0.0/1). A group
+    missing from `members` is not counted, because its addresses are unknown here.
+    """
+    nets = {4: [], 6: []}
+    for a in addresses:
+        s = str(a).strip()
+        if s.lower() in {"*", "any"}:
+            return f"{a} is open to everyone"
+        try:
+            if "-" in s:
+                low, high = (ipaddress.ip_address(x.strip()) for x in s.split("-", 1))
+                found = list(ipaddress.summarize_address_range(low, high))
+            else:
+                found = [ipaddress.ip_network(s, strict=False)]
+        except (ValueError, TypeError):
+            continue
+        if any(n.prefixlen == 0 for n in found):
+            return f"{a} is every IPv{found[0].version} address"
+        for n in found:
+            nets[n.version].append(n)
+    for name in ip_groups:
+        for cidr in (members or {}).get(name, []):
+            try:
+                n = ipaddress.ip_network(str(cidr).strip(), strict=False)
+            except ValueError:
+                continue
+            if n.prefixlen == 0:
+                return f"IP group {name} holds {cidr}, every IPv{n.version} address"
+            nets[n.version].append(n)
+    for version, found in nets.items():
+        if any(n.prefixlen == 0 for n in ipaddress.collapse_addresses(found)):
+            return f"together these sources cover every IPv{version} address"
+    return ""
+
+
 def check_open_dnat(m: dict, **_) -> list[Finding]:
-    """STD-COLL-04: no DNAT rule may take its source from anywhere."""
+    """STD-COLL-04: no DNAT rule may take its source from anywhere, however that is written."""
     out = []
     for g, c, r in _rules(m, "nat_rule_collection"):
         if not r.get("source_addresses") and not r.get("source_ip_groups"):
             out.append(Finding("block", "STD-COLL-04", _where(g, c, r), "DNAT rule has no source"))
-        for s in r.get("source_addresses") or []:
-            if s in OPEN:
-                out.append(Finding("block", "STD-COLL-04", _where(g, c, r), f"DNAT source {s} is open to everyone"))
+        why = open_to_everyone(r.get("source_addresses") or [], r.get("source_ip_group_names") or [], m["ip_groups"])
+        if why:
+            out.append(Finding("block", "STD-COLL-04", _where(g, c, r), f"DNAT source is open to everyone: {why}"))
     return out
 
 

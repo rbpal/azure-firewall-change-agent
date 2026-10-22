@@ -1,7 +1,7 @@
 """Tier 2 runner: give each labelled ticket to an agent, score the reply, print a score sheet.
 
 Example: `uv run --python 3.11 python -m evals.run_eval --agent perfect` reads the
-65 validation files, hands each `ticket:` block to the perfect stand-in agent,
+66 validation files, hands each `ticket:` block to the perfect stand-in agent,
 scores every reply against its `expected:` block and prints the sheet. A ticket
 passes when the outcome word matches, Least-Privilege is pass or not_scored, and
 Abstention is pass. A pass is "complete" only if the draft is not narrower than
@@ -13,7 +13,11 @@ tested with stand-in agents before the real agent exists (Step 04 Task 03).
 Safety rule: the agent receives a copy of the `ticket:` block only, never the
 answer key. A request that tests the engineer-review path also carries a
 `engineer_review:` block, the engineer's recorded decision; the agent gets a copy of that
-too, as the workflow would give it, and still never the answer key. The test split is sealed: reading it needs allow_test=True. An agent
+too, as the workflow would give it, and still never the answer key. A request with a
+`dns:` block fixes what DNS does for a named host (a timeout or SERVFAIL); the agent
+gets a resolver for its DNS tool that behaves that way, never the block itself, and
+every other name is NXDOMAIN, as the reserved .example names are in real DNS.
+The test split is sealed: reading it needs allow_test=True. An agent
 crash or a malformed reply fails that ticket as agent_error and the run goes on,
 so no ticket is ever dropped from the count.
 """
@@ -22,10 +26,13 @@ from __future__ import annotations
 
 import argparse
 import copy
+import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import dns.exception
+import dns.resolver
 import yaml
 
 from evals.abstention import score_abstention
@@ -34,6 +41,13 @@ from evals.least_privilege import score_least_privilege
 from evals.stand_in_agents import Agent, always_stop, perfect
 
 REQUESTS = Path(__file__).resolve().parent / "requests"
+sys.path.insert(0, str(REQUESTS.parents[1] / "mcp"))
+from tools.dns_lookup_for_fqdn import Lookup, Reply, parse_target  # noqa: E402  (the tool's own types)
+
+DNS_FAULTS = {  # what dnspython raises, so the tool fails exactly as it would in Azure
+    "timeout": lambda: dns.exception.Timeout(),
+    "servfail": lambda: dns.resolver.NoNameservers(),
+}
 SPLITS = ("validation", "test")
 OUTCOMES = ("draft", "already_allowed", "stop_and_ask")
 MISTAKES = (
@@ -57,6 +71,7 @@ class Request:
     ticket: dict
     expected: dict
     engineer_review: dict | None = None  # the engineer's recorded decision, for requests that resume after review
+    dns: dict | None = None  # host -> "timeout" or "servfail": what DNS does for that name in this request
 
 
 @dataclass
@@ -103,10 +118,42 @@ def load_requests(split: str = "validation", allow_test: bool = False) -> list[R
         review = data.get("engineer_review")
         if review is not None and review.get("ticket_version") != ticket_version(data["ticket"]):
             raise ValueError(f"{path.name}: engineer_review is for another ticket version; the acceptance does not cover it")
-        requests.append(Request(data["id"], data["category"], data["ticket"], data["expected"], data.get("engineer_review")))
+        dns_block = data.get("dns")
+        if dns_block is not None:
+            hosts = _ticket_hosts(data["ticket"])
+            for host, fault in dns_block.items():
+                if host not in hosts or fault not in DNS_FAULTS:
+                    raise ValueError(f"{path.name}: dns names {host}: {fault}; it must be a ticket hostname "
+                                     f"({sorted(hosts)}) and one of {sorted(DNS_FAULTS)}")
+        requests.append(Request(data["id"], data["category"], data["ticket"], data["expected"], data.get("engineer_review"),
+                                dns_block))
     if not requests:
         raise FileNotFoundError(f"no labelled tickets in {REQUESTS / split}")
     return requests
+
+
+def _ticket_hosts(ticket: dict) -> set[str]:
+    """Every hostname the ticket names, from a URL or an FQDN, as the DNS tool reads it."""
+    hosts = set()
+    for entry in ticket["sources"] + ticket["destination"]:
+        if "url" in entry or "fqdn" in entry:
+            try:
+                hosts.add(parse_target(entry.get("url") or entry["fqdn"])[0])
+            except Exception:  # a wildcard or malformed name is never looked up
+                continue
+    return hosts
+
+
+def controlled_dns(conditions: dict) -> Lookup:
+    """A resolver for the DNS tool: a listed host fails as named; every other name is NXDOMAIN."""
+
+    def lookup(host: str, rdtype: str) -> Reply:
+        """Answer one query the way this request's DNS behaves."""
+        if host in conditions:
+            raise DNS_FAULTS[conditions[host]]()
+        return Reply(rcode="NXDOMAIN")
+
+    return lookup
 
 
 def score_reply(expected: dict, reply: object) -> Verdict:
@@ -136,10 +183,12 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False) -> li
     results = []
     for request in load_requests(split, allow_test):
         try:
-            if request.engineer_review is None:
-                reply = agent(copy.deepcopy(request.ticket))
-            else:
-                reply = agent(copy.deepcopy(request.ticket), engineer_review=copy.deepcopy(request.engineer_review))
+            extra = {}
+            if request.engineer_review is not None:
+                extra["engineer_review"] = copy.deepcopy(request.engineer_review)
+            if request.dns is not None:
+                extra["dns_lookup"] = controlled_dns(request.dns)
+            reply = agent(copy.deepcopy(request.ticket), **extra)
             verdict = score_reply(request.expected, reply)
             outcome = reply.get("outcome", "?") if isinstance(reply, dict) else "?"
         except Exception as error:  # a crashing agent fails its ticket, not the run

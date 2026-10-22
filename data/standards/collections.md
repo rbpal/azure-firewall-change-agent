@@ -48,6 +48,8 @@ Enforced: Tier 1
 
 No DNAT rule may use `0.0.0.0/0` or `*` as its source.
 
+Every way of writing "everyone" counts: a zero-length prefix written with extra zeros, as an all-zero dotted mask, or after any address; the IPv6 all-addresses range; `Any`; a range over every address; several CIDRs that together cover every address; or an IP group whose members do. The workflow code refuses to write such a rule even when the approved ticket asks for it, and Tier 1 blocks it in the plan. Removing such a rule is always allowed, because it closes the hole.
+
 This is the only standard that blocks a draft. Every other Tier 1 standard raises a caution the engineer can approve past with a reason.
 Enforced: Tier 1 (blocking)
 

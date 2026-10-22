@@ -5,7 +5,7 @@ The eval harness. Tier 2 scores the agent on the labelled requests in `requests/
 - `requests/validation/`: labelled requests that prompts and thresholds are tuned against.
 - `requests/test/`: labelled requests kept back for the final score. Nothing is tuned against them.
 
-Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. `make_requests.py` writes the tickets: 99 requests across 42 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
+Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. A few also carry part of the question: `engineer_review:` (the engineer's recorded acceptance) or `dns:` (what DNS does for one ticket hostname). `make_requests.py` writes the tickets: 100 requests across 43 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
 
 Two scorers read an agent reply shaped like `expected:` and need no model:
 
@@ -13,6 +13,12 @@ Two scorers read an agent reply shaped like `expected:` and need no model:
 - `abstention.py`: fails a reply that misses a stop, stops with the wrong reason, writes rules while stopping, or stops when the label proceeds.
 
 There is no training set: the model's weights are never trained here.
+
+## What a label's fields mean
+
+- `labelled_against`: the commit whose network data, rule files and tools the label was checked against. A later commit that changes those files can change the right answer, so the label must be checked again.
+- `tools`: the lookups the answer rests on, for the reviewer. It is empty when the ticket's own fields establish the answer. No scorer reads it, so an agent that stops correctly without a lookup is not marked down. Scoring tool use comes later, and will require only these lookups.
+- `note`: why the answer is right, the evidence checked, and what the workflow code does if the agent drafts instead.
 
 ## Labels pending review
 
@@ -30,6 +36,7 @@ Scores from different versions are not comparable. Each version is fixed by a co
 | v4 | 2026-10-20 | 80 (50 validation, 30 test) | 28 | `51df5fd` |
 | v5 | 2026-10-20 | 89 (55 validation, 34 test) | 32 | labels against `73f4792`; requests in the commit after it |
 | v6 | 2026-10-21 | 99 (65 validation, 34 test) | 42 | labels against `91d3e04`; requests, labels and one drift rule in the commit after it |
+| v7 | 2026-10-22 | 100 (66 validation, 34 test) | 43 | labels against `ce5daf0`; RITM0011069, the `dns:` block and the rewritten notes in the commit after it |
 
 v1 stays readable in git, for example `git show bd8588b:evals/requests/test/test_RITM0012015.yaml`.
 
@@ -68,13 +75,20 @@ What changed in v6 (2026-10-21):
 4. **One drift rule.** RITM0011068 needs a rule at one selected site only. `008-https-rprt-to-settApi` was added to dev-eastus2 rprt with no dev-centralus copy. It is a spoke-to-spoke rule, so no partner request can match it, and every earlier ticket is unchanged.
 5. **No old ticket changed, no test request added.** The new categories come last and are validation only. The ten new codes are therefore not measured on the test split.
 
-The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). v6 did not change it. No agent, real or stand-in, has been scored on the test split under any version, so no result was tuned against it.
+What changed in v7 (2026-10-22):
+
+1. **A valid hostname whose lookup fails.** RITM0011063 stays as it was: its URL's 273-character hostname is input the DNS tool refuses. RB-01-6 puts that under `dns_lookup_failed` on purpose, together with a lookup that cannot run. New category `dns-lookup-failed`, RITM0011069, gives the same flow a valid URL, `https://exchange.northwind.example/v1/upload`, whose lookup times out. Validation only.
+2. **New `dns:` block.** A request may fix what DNS does for a hostname on its ticket: `timeout` or `servfail`. RITM0011069 has `dns: {exchange.northwind.example: timeout}`. The runner gives the agent a resolver for its DNS tool that fails that way; the agent never sees the block. Every other name is NXDOMAIN, as the reserved `.example` names are in real DNS, so RITM0011015 stays a caution and a draft. The runner refuses a block that names a host not on the ticket or another fault.
+3. **The 253-character gap has its own software test.** `tests/test_ticket_schema.py` shows a 273-character hostname passes the schema and intake and is refused only by the DNS tool.
+4. **Notes rewritten for RITM0011059 to RITM0011065.** Each now names the evidence checked, what the agent must not do, and what the workflow code does if the agent drafts anyway. `labelled_against` moved to `ce5daf0`. The answers did not change, and all eleven labels from RITM0011059 on stay `review: pending`.
+
+The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). v6 and v7 did not change it. No agent, real or stand-in, has been scored on the test split under any version, so no result was tuned against it.
 
 ## What has been measured
 
 No real model has been scored yet. The two stand-in agents in `stand_in_agents.py` check the scoring code only:
 
-- `perfect` replays the labels. It passes 65 of 65 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
-- `always_stop` stops on every request. It passes 3 of 65. That is a baseline, not a floor.
+- `perfect` replays the labels. It passes 66 of 66 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
+- `always_stop` stops on every request. It passes 3 of 66. That is a baseline, not a floor.
 
 The first real score comes after the agent and its model are configured.

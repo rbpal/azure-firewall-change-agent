@@ -28,12 +28,20 @@ ticket:
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: 91d3e04
+  labelled_against: ce5daf0
   review: pending
   note: >-
-    The pasted URL's hostname is 273 characters. The ticket schema checks each label but not the total; dns_lookup_for_fqdn refuses a name over 253 characters. RB-01-4 and RB-01-6: a refused URL escalates; never shorten or correct it.
+    The pasted URL's hostname is 273 characters. The ticket schema checks each label (at most 63 characters) but not
+    the total, so the ticket passes the schema and intake (security register 50.22). dns_lookup_for_fqdn takes the
+    ticket's URL as its target and extracts the hostname itself; it refuses this one as "not a valid hostname",
+    because a DNS name stops at 253 characters. RB-01-4: if the tool refuses the URL, escalate under RB-01-6. RB-01-6
+    lists "the URL is not valid (dns_lookup_for_fqdn refuses it)" under dns_lookup_failed, so the code deliberately
+    covers input the tool refuses as well as a lookup that cannot run; RITM0011069 is the valid-hostname case. Ask for
+    a corrected URL and draft nothing. Never shorten or repair the hostname. Return the ticket to the engineer for
+    edit or rejection. If the agent drafts anyway, the workflow code writes an application rule to this name (security
+    register 50.23).
   outcome: stop_and_ask
   reason: dns_lookup_failed
   rules: []
   tools:
-  - {tool: dns_lookup_for_fqdn, target: the ticket's URL}
+  - {tool: dns_lookup_for_fqdn, target: "the ticket's URL"}

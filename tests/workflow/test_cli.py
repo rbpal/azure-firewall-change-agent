@@ -338,3 +338,19 @@ def test_a_draft_inside_the_tickets_flow_still_writes(repo, tmp_path, number, fi
     before = snapshot(repo)
     assert draft(repo, ticket, reply) == cli.DONE
     assert changed(before, repo) == {file}
+
+
+def test_an_accepted_open_dnat_ticket_with_an_open_draft_writes_nothing(repo, tmp_path, capsys):
+    """Security register 50.21: the engineer accepted a ticket asking for 0.0.0.0/0, but STD-COLL-04 still blocks."""
+    t, e = copy.deepcopy(request("RITM0011020"))
+    t["sources"] = [{"cidr": "0.0.0.0/0"}]
+    for rule in e["rules"]:
+        rule["sources"] = ["0.0.0.0/00"]
+    ticket, reply = files(tmp_path, "RITM0011020", reply=e, ticket=t)
+    before = snapshot(repo)
+    assert draft(repo, ticket, reply) == cli.REFUSED
+    assert "source is open to everyone: 0.0.0.0/00 is every IPv4 address" in capsys.readouterr().out
+    assert changed(before, repo) == set()
+    record = cli.load_record(repo, "RITM0011020")
+    assert record["status"] == "awaiting_review" and record["files"] == {}
+    assert [h["action"] for h in record["history"]] == ["submit"]

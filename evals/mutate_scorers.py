@@ -68,8 +68,10 @@ MUTATIONS = [
     Mutation("accept a needless stop", AB, 'return Score("fail", "over_abstain"', 'return Score("pass", "over_abstain"'),
     Mutation("treat any non-draft as a stop", AB, 'stopped = reply.get("outcome") == STOP', 'stopped = reply.get("outcome") != "draft"'),
     # Runner: the ways it could leak the answer key or miscount the marks.
-    Mutation("hand the agent its answer key", RUN, "reply = agent(copy.deepcopy(request.ticket))",
-             'reply = agent({**request.ticket, "expected": request.expected})'),
+    Mutation("hand the agent its answer key", RUN, "reply = agent(copy.deepcopy(request.ticket), **extra)",
+             'reply = agent({**request.ticket, "expected": request.expected}, **extra)'),
+    Mutation("hand the agent the dns: block", RUN, 'extra["dns_lookup"] = controlled_dns(request.dns)',
+             'extra["dns_lookup"] = request.dns'),
     Mutation("let a crash stop the run", RUN, "except Exception as error:", "except KeyError as error:"),
     Mutation("count incomplete as complete", RUN, "return self.passed and not self.incomplete", "return self.passed"),
     Mutation("ignore a Least-Privilege fail", RUN, 'if lp.result == "fail":', "if False:"),
@@ -78,7 +80,8 @@ MUTATIONS = [
     Mutation("unseal the test split", RUN, 'if split == "test" and not allow_test:', "if False:"),
     Mutation("count a category ticket twice", RUN, "row[1] += 1", "row[1] += 2"),
     Mutation("hide labels pending review", RUN, 'pending = request.expected.get("review") == "pending"', "pending = False"),
-    Mutation("drop the engineer's review decision", RUN, "            if request.engineer_review is None:", "            if True:"),
+    Mutation("drop the engineer's review decision", RUN, "            if request.engineer_review is not None:",
+             "            if False:"),
     Mutation("accept a review for another ticket version", RUN,
              'if review is not None and review.get("ticket_version") != ticket_version(data["ticket"]):', "if False:"),
 ]

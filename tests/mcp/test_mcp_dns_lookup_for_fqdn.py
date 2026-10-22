@@ -204,3 +204,22 @@ def test_live_fake_partner_name_is_nxdomain():
     ns = _system_nameserver()
     out = dns_lookup_for_fqdn(None, {"target": "api.northwind.example"}, lookup=dnspython_lookup(ns), resolver_name=ns)
     assert out["rcode"] == "NXDOMAIN" and out["resolves"] is False
+
+
+# --- the eval's controlled DNS (RITM0011063) ------------------------------
+
+@pytest.mark.parametrize("fault", ["timeout", "servfail"])
+def test_a_controlled_dns_failure_reaches_the_agent_as_tool_failed(allowed_context, fault):
+    """The eval resolver raises what dnspython raises, so the agent sees what it would in Azure: the lookup could not run."""
+    from evals.run_eval import controlled_dns
+    ctx = allowed_context({"target": "https://exchange.northwind.example/v1/upload"})
+    out = json.loads(gateway.run(ctx, dns_lookup_for_fqdn, lookup=controlled_dns({"exchange.northwind.example": fault})))
+    assert out == {"error": "tool_failed"}
+
+
+def test_a_name_without_a_dns_condition_is_nxdomain_as_in_real_dns(allowed_context):
+    """Every other name, such as api.litware.example in RITM0011015, gets NXDOMAIN: a caution, not a failure."""
+    from evals.run_eval import controlled_dns
+    ctx = allowed_context({"target": "https://api.litware.example/v1/upload"})
+    out = json.loads(gateway.run(ctx, dns_lookup_for_fqdn, lookup=controlled_dns({"exchange.northwind.example": "timeout"})))
+    assert out["rcode"] == "NXDOMAIN" and out["resolves"] is False

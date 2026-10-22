@@ -22,6 +22,10 @@ a rule for other traffic was never approved (RB-03-2). A DNAT rule translates to
 the same port it publishes (RB-02-2). The one documented substitute is HTTPS to
 addresses written as a TCP network rule (RB-01-4). Ports are read the way the
 ticket schema writes them, so a malformed port is refused, never corrected.
+A DNAT rule is never added with a source open to everyone, however it is written
+(0.0.0.0/0, 0.0.0.0/00, *, two halves, an IP group holding them), even when the
+ticket asks for it: STD-COLL-04 is the one standard that blocks. A removal of such
+a rule is still written, because deleting it closes the hole.
 Otherwise nothing is written. All files are worked out in memory first and written
 only when every one succeeds, so a refusal leaves every file byte for byte as it was.
 Disk failures: before anything is replaced, each original's exact bytes are saved
@@ -53,9 +57,11 @@ from workflow.rule_index import next_index
 from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_type, spoke_path
 from workflow.tickets import SCHEMA_PATH
 
-from data_readers.read_addressplan_routing import ROUTING  # noqa: E402  (tfvars_writer puts mcp/ on the path)
+from data_readers.read_addressplan_routing import ROUTING, LocalSource  # noqa: E402  (tfvars_writer puts mcp/ on the path)
+from data_readers.read_env_site_ipgroup import read_ip_groups  # noqa: E402
 from errors import BadArguments  # noqa: E402
 from tools.duplicate_rule_check import _ports, _ports_within  # noqa: E402  (the agent tool's port maths, so the two agree)
+from policy.tier1 import open_to_everyone  # noqa: E402  (Tier 1's own STD-COLL-04 test, so the two agree)
 
 REMOVAL_ITEM = "Firewall Rule Removal"
 
@@ -65,7 +71,7 @@ class ScopeError(DraftError):
 
 
 class ApprovalError(ScopeError):
-    """A reply rule uses an address, address type, protocol or port the ticket does not approve; nothing is written."""
+    """A reply rule uses an address, address type, protocol or port the ticket does not approve, or opens DNAT to everyone; nothing is written."""
 
 
 KINDS = {"cidr": "a CIDR", "ip_group": "an IP group", "fqdn": "a hostname"}
@@ -99,8 +105,10 @@ def _not_approved(value: str, approved: list[tuple[str, str]]) -> str:
     """Say why one reply address is not approved by the ticket, or return ''."""
     kind = _kind(value)
     for k, v in approved:
-        if k == kind == "cidr" and ipaddress.ip_network(value, strict=False).subnet_of(ipaddress.ip_network(v)):
-            return ""
+        if k == kind == "cidr":
+            given, ok = ipaddress.ip_network(value, strict=False), ipaddress.ip_network(v)
+            if given.version == ok.version and given.subnet_of(ok):  # ::/0 is refused, never a crash
+                return ""
         if k == kind and k != "cidr" and v.lower() == value.lower():
             return ""
     given = ", ".join(f"{v} ({k.replace('_', ' ')})" for k, v in approved) or "nothing"
@@ -152,8 +160,18 @@ def flow_errors(ticket: dict, rule: dict, removal: bool) -> list[str]:
     return errors
 
 
+def open_dnat_error(repo: Path, rule: dict) -> str:
+    """Say why an added DNAT rule's sources let in everyone (STD-COLL-04), or return ''."""
+    sources = [str(s) for s in rule.get("sources") or []]
+    groups = [s for s in sources if s.lower().startswith("ipg-")]
+    members = read_ip_groups(LocalSource(Path(repo)), rule["env_site"]) if groups else {}
+    why = open_to_everyone([s for s in sources if s not in groups], groups, members)
+    return (f"source is open to everyone: {why}. A DNAT rule never takes its source from everyone, "
+            "even when the ticket asks (STD-COLL-04, RB-02-5 open_dnat_source)") if why else ""
+
+
 def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
-    """Every reply address, protocol or port the ticket does not approve at that rule's env-site."""
+    """Every reply address, protocol or port the ticket does not approve at that rule's env-site, and every open DNAT add."""
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
     removal = reply.get("action") == "remove"
     errors = []
@@ -170,6 +188,8 @@ def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
             errors += [f"{rule['env_site']} {rule['name']}: {side} {why}"
                        for v in values if (why := _not_approved(str(v), approved))]
         errors += [f"{rule['env_site']} {rule['name']}: {why}" for why in flow_errors(ticket, rule, removal)]
+        if "translated_address" in rule and not removal and (why := open_dnat_error(repo, rule)):
+            errors.append(f"{rule['env_site']} {rule['name']}: {why}")
     return errors
 
 
@@ -195,7 +215,8 @@ def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | N
         raise ScopeError(f"ticket selects {sorted(scope - named)}, but the reply has no rule there")
     errors = approval_errors(repo, ticket, reply)
     if errors:
-        raise ApprovalError("reply uses addresses, a protocol or ports the ticket does not approve:\n  " + "\n  ".join(errors))
+        raise ApprovalError("reply uses addresses, a protocol or ports the ticket does not approve, "
+                            "or opens DNAT to everyone:\n  " + "\n  ".join(errors))
 
     texts: dict[Path, str] = dict(base or {})  # fix plans the new draft on the text from before the old one
     out = []

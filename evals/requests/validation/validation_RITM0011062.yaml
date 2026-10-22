@@ -28,14 +28,22 @@ ticket:
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: 91d3e04
+  labelled_against: ce5daf0
   review: pending
   note: >-
-    The ticket names ipg-partner-woodgrove, which no env-site's ip-groups.tfvars holds; duplicate_rule_check refuses it as a group that does not exist in dev-eastus2. RB-01-2: escalate rather than create the group, and never put Woodgrove's CIDR in its place (STD-COLL-03).
+    The ticket names ipg-partner-woodgrove as the destination. No env-site's ip-groups.tfvars holds it: checked at all
+    eight, both selected dev sites included, and no partner IP group exists at any. duplicate_rule_check refuses it at
+    dev-eastus2 and at dev-centralus: "IP group 'ipg-partner-woodgrove' does not exist in this env-site". RB-01-2: if
+    the named group does not exist, escalate rather than create it. RB-01-6 stops: ip_group_not_found. Return the
+    ticket to the engineer for edit or rejection, naming the missing group and the two env-sites where its absence was
+    confirmed. Never create the group, start provisioning, or put Woodgrove's CIDR 203.0.113.48/28 in its place
+    (STD-COLL-03). This is not ip_group_change_requested: the ticket uses a group that does not exist; it does not ask
+    to change one. If the agent drafts anyway, the draft check refuses the CIDR in place of the group, but writes a
+    rule that names the missing group (security register 50.23); the firewall-policy module looks each group name up,
+    so the Terraform plan would then fail.
   outcome: stop_and_ask
   reason: ip_group_not_found
   rules: []
   tools:
-  - {tool: locate_address_for_env_site, address: 10.104.16.0/24}
-  - {tool: locate_address_for_env_site, address: 10.105.16.0/24}
-  - {tool: duplicate_rule_check, env_site: dev-eastus2}
+  - {tool: duplicate_rule_check, env_site: "dev-eastus2"}
+  - {tool: duplicate_rule_check, env_site: "dev-centralus"}

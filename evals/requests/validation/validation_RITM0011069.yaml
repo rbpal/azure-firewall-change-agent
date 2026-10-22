@@ -1,0 +1,46 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011069
+category: dns-lookup-failed
+why: Valid partner URL; the DNS lookup times out, so the tool cannot say what the name resolves to.
+ticket:
+  number: RITM0011069
+  item: Firewall Change Request
+  state: approved
+  requested_for: Priya Shah (Contoso app owner)
+  opened: '2026-10-09T15:50:00-04:00'
+  environments: [lab]
+  dr_site_built: {lab: true}
+  change_sites:
+    lab: [primary, dr]
+  sources:
+  - {environment: lab, site: primary, cidr: 10.106.14.0/24}
+  - {environment: lab, site: dr, cidr: 10.107.14.0/24}
+  destination:
+  - {url: 'https://exchange.northwind.example/v1/upload'}
+  protocol: HTTPS
+  ports: ['443']
+  partner: Northwind Traders
+  justification: The lab settlement servers upload files to Northwind's exchange. URL copied from the partner portal.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+dns: {exchange.northwind.example: timeout}
+expected:
+  labelled_against: ce5daf0
+  review: pending
+  note: >-
+    The URL is valid: dns_lookup_for_fqdn takes it as its target and extracts exchange.northwind.example, port 443.
+    The request's dns: block makes that lookup time out, so the tool answers tool_failed: the lookup could not run.
+    RB-01-6 stops when the lookup could not run: dns_lookup_failed. Without the block the name would be NXDOMAIN, a
+    caution and a draft under RB-01-7, as in RITM0011015. Same flow as RITM0011063; only the URL differs. No lab sett
+    rule names this host; 001-https-sett-to-northwindApi is for api.northwind.example only. Never retry with another
+    name or guess an address. Return the ticket to the engineer, who can retry once DNS answers, or edit or reject it.
+    If the agent drafts anyway, the workflow code writes the application rule (security register 50.23).
+  outcome: stop_and_ask
+  reason: dns_lookup_failed
+  rules: []
+  tools:
+  - {tool: dns_lookup_for_fqdn, target: "https://exchange.northwind.example/v1/upload"}

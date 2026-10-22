@@ -28,14 +28,20 @@ ticket:
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: 91d3e04
+  labelled_against: ce5daf0
   review: pending
   note: >-
-    AMQPS (TCP 5671) to api.tailspin.example. Only HTTP(S) to a name gets an application rule; a network rule to a hostname on the Basic SKU pins addresses that can change (RB-01-6).
+    AMQPS (TCP 5671) to the hostname api.tailspin.example. RB-01-4 gives an application rule only to HTTPS to a named
+    host; anything else is a network rule. This project's firewall policies are Basic (firewall_policy_sku = "Basic"
+    in dev-eastus2 and dev-centralus; the README records Basic for the project; the stage policies are not yet in
+    code). Microsoft documents that Basic has no DNS proxy and no hostname filtering in network rules. So a network
+    rule here could only hold the name's currently resolved addresses, which can change without notice. RB-01-6 stops:
+    non_http_to_hostname. This is a limit of the Basic SKU this project uses, not of Azure Firewall in general:
+    Standard and Premium filter hostnames in network rules through DNS proxy. Never replace the hostname with resolved
+    IPs. The ticket fields alone establish the stop, so no lookup is required. If the agent drafts anyway, the draft
+    check refuses resolved IPs in place of the hostname (STD-COLL-03), but writes a network rule that names the
+    hostname (security register 50.23).
   outcome: stop_and_ask
   reason: non_http_to_hostname
   rules: []
-  tools:
-  - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
-  - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
-  - {tool: dns_lookup_for_fqdn, target: api.tailspin.example}
+  tools: []

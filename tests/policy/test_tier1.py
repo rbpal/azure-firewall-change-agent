@@ -109,6 +109,41 @@ def test_open_dnat_blocks(plan, source):
     assert found(plan)[0] == ("block", "STD-COLL-04")
 
 
+OPEN_FORMS = {  # each lets in every address, written another way (security register 50.21)
+    "padded prefix": (["0.0.0.0/00"], None),
+    "host bits": (["8.8.8.8/0"], None),
+    "dotted mask": (["0.0.0.0/0.0.0.0"], None),
+    "IPv6": (["::/0"], None),
+    "lower-case any": (["any"], None),
+    "full range": (["0.0.0.0-255.255.255.255"], None),
+    "two halves": (["0.0.0.0/1", "128.0.0.0/1"], None),
+    "IP group holding two halves": ([], ["0.0.0.0/1", "128.0.0.0/1"]),
+}
+
+
+@pytest.mark.parametrize("sources, members", OPEN_FORMS.values(), ids=OPEN_FORMS.keys())
+def test_open_dnat_blocks_however_it_is_written(plan, sources, members):
+    rule = dnat(plan)
+    rule["source_addresses"] = sources
+    if members is not None:
+        resources = plan["planned_values"]["root_module"]["child_modules"][0]["resources"]
+        resources.append({"type": "azurerm_ip_group", "values": {"name": "ipg-partner-anyone", "cidrs": members}})
+        name = next(k for k, v in plan["variables"]["xfer"]["value"]["nat_rule_collections"].items())
+        tf_rules = plan["variables"]["xfer"]["value"]["nat_rule_collections"][name]["rules"]
+        next(v for v in tf_rules.values() if v["name"] == rule["name"])["source_ip_groups"] = ["ipg-partner-anyone"]
+        rule["source_ip_groups"] = ["/ipGroups/ipg-partner-anyone"]
+    first = tier1.run(plan)[0]
+    assert (first.level, first.standard) == ("block", "STD-COLL-04") and "open to everyone" in first.detail
+
+
+@pytest.mark.parametrize("sources", [["0.0.0.0/1"], ["198.51.100.0/24", "203.0.113.0/24"]],
+                         ids=["half of every address", "two partner ranges"])
+def test_a_wide_but_not_open_dnat_source_does_not_block(plan, sources):
+    """Wider than a /24 is a caution under RB-02-6, not STD-COLL-04."""
+    dnat(plan)["source_addresses"] = sources
+    assert ("block", "STD-COLL-04") not in found(plan)
+
+
 def test_dnat_with_no_source_blocks(plan):
     dnat(plan)["source_addresses"] = []
     assert ("block", "STD-COLL-04") in found(plan)

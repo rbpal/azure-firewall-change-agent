@@ -15,6 +15,8 @@ Compare like with like (STD-COLL-03). A ticket that gives CIDRs matches only rul
 
 If a rule matches the ticket's flow exactly, delete it. Delete it at every selected site, and only there (STD-COLL-05). A primary-only ticket leaves the DR copy in place, and a DR-only ticket leaves the primary copy. The copy at the other site is not a reason to stop.
 
+For a DNAT rule, the ticket's `ports` are the ports the rule publishes on the firewall. The rule's translated address and translated port must match the stored rule exactly; take them from the matched rule, never change them. RB-02-2's "translated to the same port" applies to new rules only. So an older rule that publishes 2221 and translates to 22 is removed by a ticket for port 2221. A ticket for port 22 does not match it.
+
 If a rule allows more than the ticket's flow, such as an extra source or port, do not trim it. Removing part of a rule changes it, and nobody approved that change. Escalate.
 
 ## RB-03-3 — When nothing matches

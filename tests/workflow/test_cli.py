@@ -354,3 +354,35 @@ def test_an_accepted_open_dnat_ticket_with_an_open_draft_writes_nothing(repo, tm
     record = cli.load_record(repo, "RITM0011020")
     assert record["status"] == "awaiting_review" and record["files"] == {}
     assert [h["action"] for h in record["history"]] == ["submit"]
+
+
+def _scope_draft(number):
+    """The draft an agent might write instead of stopping on RITM0011060, 0061 or 0062."""
+    if number == "RITM0011060":
+        return [{"env_site": "lab-eastus2", "spoke": "xfer", "collection": "allow-xfer-dnat-rules",
+                 "name": "sftp-proseware-to-xferSftp", "sources": ["198.51.100.32/28"], "destinations": ["192.0.2.14"],
+                 "ports": ["22"], "protocol": "TCP", "translated_address": "10.106.20.14", "translated_port": "22"}]
+    if number == "RITM0011061":
+        return [{"env_site": "prod-eastus2", "spoke": "sett", "collection": "allow-sett-network-rules",
+                 "name": "https-onpremUsers-to-onpremConsole", "sources": ["172.20.20.0/24"],
+                 "destinations": ["172.24.12.0/24"], "ports": ["443"], "protocol": "TCP"}]
+    return [{"env_site": es, "spoke": "ledg", "collection": "allow-ledg-network-rules", "name": "smtp-ledg-to-woodgroveSmtp",
+             "sources": [src], "destinations": ["ipg-partner-woodgrove"], "ports": ["587"], "protocol": "TCP"}
+            for es, src in (("dev-eastus2", "10.104.16.0/24"), ("dev-centralus", "10.105.16.0/24"))]
+
+
+@pytest.mark.parametrize("number, why", [("RITM0011060", "dnat_destination_not_host"), ("RITM0011061", "both_ends_onprem"),
+                                         ("RITM0011062", "ip_group_not_found")])
+def test_a_draft_that_breaks_a_documented_scope_rule_writes_nothing_and_waits_for_the_engineer(
+        repo, tmp_path, capsys, number, why):
+    """Security register 50.23: the agent should stop; if it drafts instead, the workflow refuses and writes nothing."""
+    t, _ = request(number)
+    ticket, reply = files(tmp_path, number, reply={"outcome": "draft", "rules": _scope_draft(number)}, ticket=t)
+    before = snapshot(repo)
+    assert draft(repo, ticket, reply) == cli.REFUSED
+    out = capsys.readouterr().out
+    assert why in out and "waits for the engineer to edit or reject it" in out
+    assert changed(before, repo) == set()
+    record = cli.load_record(repo, number)
+    assert record["status"] == "awaiting_review" and record["files"] == {}
+    assert [h["action"] for h in record["history"]] == ["submit"]

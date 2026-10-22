@@ -18,14 +18,21 @@ the ticket names. A group is never accepted for a CIDR or a CIDR for a group,
 even when they hold the same addresses (STD-COLL-03).
 Every rule must use the ticket's protocol, and its ports must sit inside the
 ticket's ports. A removal must name exactly the ticket's ports, because deleting
-a rule for other traffic was never approved (RB-03-2). A DNAT rule translates to
-the same port it publishes (RB-02-2). The one documented substitute is HTTPS to
+a rule for other traffic was never approved (RB-03-2). An added DNAT rule
+translates to the same port it publishes (RB-02-2). The one documented substitute is HTTPS to
 addresses written as a TCP network rule (RB-01-4). Ports are read the way the
 ticket schema writes them, so a malformed port is refused, never corrected.
 A DNAT rule is never added with a source open to everyone, however it is written
 (0.0.0.0/0, 0.0.0.0/00, *, two halves, an IP group holding them), even when the
 ticket asks for it: STD-COLL-04 is the one standard that blocks. A removal of such
 a rule is still written, because deleting it closes the hole.
+An added DNAT rule needs one internal host from the ticket at its site (RB-02-2).
+An add needs an Azure address on the ticket: a ticket whose every source and
+destination is on-prem has no env-site for a rule (RB-05-4). Every IP group a rule
+names must already exist at its env-site; the workflow never creates one (STD-COLL-03).
+A removal matches the stored rule field for field, so a legacy DNAT rule that
+publishes 2221 and translates to 22 is removed by a ticket for its published port.
+A refusal leaves the ticket awaiting review: the engineer edits or rejects it.
 Otherwise nothing is written. All files are worked out in memory first and written
 only when every one succeeds, so a refusal leaves every file byte for byte as it was.
 Disk failures: before anything is replaced, each original's exact bytes are saved
@@ -117,6 +124,21 @@ def _not_approved(value: str, approved: list[tuple[str, str]]) -> str:
     return f"{value} {why}; the ticket approves {given} (STD-COLL-03)"
 
 
+ONPREM_GROUPS = {"ipg-onprem-primary", "ipg-onprem-secondary"}
+
+
+def _onprem(entry: dict) -> bool:
+    """True for an on-prem ticket address: a CIDR with a location, or an on-prem user IP group."""
+    return "location" in entry or str(entry.get("ip_group", "")).lower() in ONPREM_GROUPS
+
+
+def _one_host(approved: list[tuple[str, str]]) -> bool:
+    """True when the ticket gives exactly one internal address at this site, and it is a single host."""
+    if len(approved) != 1 or approved[0][0] != "cidr":
+        return False
+    return ipaddress.ip_network(approved[0][1], strict=False).num_addresses == 1
+
+
 def _port_spans(values) -> list[tuple[int, int]] | None:
     """Read reply ports written as a ticket writes them ("22", "1000-2000", "*") as ranges, or None if any is not."""
     if not isinstance(values, list) or not values:
@@ -154,7 +176,10 @@ def flow_errors(ticket: dict, rule: dict, removal: bool) -> list[str]:
                    for v, span in zip(rule["ports"], ports) if not _ports_within([span], approved)]
     if "translated_address" in rule:
         translated = _port_spans([rule.get("translated_port")])
-        if translated is None or translated[0][0] != translated[0][1] or not _same_ports(ports or [], translated):
+        if removal:  # RB-02-2 is for adds; a removal matches the stored rule's own translation field for field
+            if translated is None or translated[0][0] != translated[0][1]:
+                errors.append(f"translated port {rule.get('translated_port')!r} is not one port")
+        elif translated is None or translated[0][0] != translated[0][1] or not _same_ports(ports or [], translated):
             errors.append(f"translated port {rule.get('translated_port')!r} is not the one port the rule publishes, "
                           f"{rule.get('ports')}; DNAT translates to the same port (RB-02-2)")
     return errors
@@ -175,9 +200,24 @@ def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
     removal = reply.get("action") == "remove"
     errors = []
+    if not removal and all(_onprem(a) for a in ticket["sources"] + ticket["destination"]):
+        errors.append("every source and destination on the ticket is on-prem, so it has no Azure address; a rule goes at "
+                      "the env-site of the ticket's Azure address (RB-05-4, RB-05-5 both_ends_onprem)")
+    groups: dict[str, set[str]] = {}
     for rule in reply.get("rules") or []:
         where = sites[rule["env_site"]]
         env, site = where["environment"], where["site"]
+        named = [str(v) for v in (rule.get("sources") or []) + (rule.get("destinations") or []) if str(v).lower().startswith("ipg-")]
+        if named and rule["env_site"] not in groups:
+            groups[rule["env_site"]] = {g.lower() for g in read_ip_groups(LocalSource(Path(repo)), rule["env_site"])}
+        errors += [f"{rule['env_site']} {rule['name']}: IP group {g} does not exist at {rule['env_site']}; a group must "
+                   "already exist, and the workflow never creates one (STD-COLL-03, RB-01-2 ip_group_not_found)"
+                   for g in named if g.lower() not in groups[rule["env_site"]]]
+        if "translated_address" in rule and not removal and not _one_host(hosts := _approved(ticket["destination"], env, site)):
+            given = ", ".join(v for _, v in hosts) or "nothing"
+            errors.append(f"{rule['env_site']} {rule['name']}: the ticket's destination here is {given}, not one internal "
+                          "host; a DNAT rule translates to the one host the ticket names (RB-02-2, RB-02-5 "
+                          "dnat_destination_not_host)")
         checks = [("source", rule.get("sources") or [], ticket["sources"])]
         if "translated_address" in rule:  # DNAT: the rule's destination is the firewall; the ticket's is the host
             checks.append(("translated address", [rule["translated_address"]], ticket["destination"]))
@@ -215,8 +255,9 @@ def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | N
         raise ScopeError(f"ticket selects {sorted(scope - named)}, but the reply has no rule there")
     errors = approval_errors(repo, ticket, reply)
     if errors:
-        raise ApprovalError("reply uses addresses, a protocol or ports the ticket does not approve, "
-                            "or opens DNAT to everyone:\n  " + "\n  ".join(errors))
+        raise ApprovalError("reply uses addresses, a protocol or ports the ticket does not approve, or breaks a "
+                            "documented scope rule; nothing was written, and the ticket waits for the engineer to edit "
+                            "or reject it:\n  " + "\n  ".join(errors))
 
     texts: dict[Path, str] = dict(base or {})  # fix plans the new draft on the text from before the old one
     out = []

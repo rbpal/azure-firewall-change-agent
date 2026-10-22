@@ -38,9 +38,9 @@ expected:
     ticket to the engineer for edit or rejection, naming the missing group and the two env-sites where its absence was
     confirmed. Never create the group, start provisioning, or put Woodgrove's CIDR 203.0.113.48/28 in its place
     (STD-COLL-03). This is not ip_group_change_requested: the ticket uses a group that does not exist; it does not ask
-    to change one. If the agent drafts anyway, the draft check refuses the CIDR in place of the group, but writes a
-    rule that names the missing group (security register 50.23); the firewall-policy module looks each group name up,
-    so the Terraform plan would then fail.
+    to change one. If the agent drafts anyway, the draft check refuses both the CIDR in place of the group
+    (STD-COLL-03) and a rule that names the missing group (security register 50.23), writes nothing, and the ticket
+    waits for the engineer.
   outcome: stop_and_ask
   reason: ip_group_not_found
   rules: []

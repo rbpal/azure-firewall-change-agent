@@ -37,7 +37,8 @@ expected:
     connects both to all eight hubs over ExpressRoute, and its inspection field says "assumed, not verified". So this
     label does not claim the flow bypasses Azure. Return the ticket to the engineer for edit or rejection, explaining
     that the request has no Azure endpoint for this workflow to place a rule on. Never draft a rule at any env-site or
-    redirect the request. If the agent drafts one anyway, the workflow code writes it (security register 50.23).
+    redirect the request. If the agent drafts one anyway, the workflow's draft check refuses it because the ticket has
+    no Azure address (RB-05-4), writes nothing, and the ticket waits for the engineer (security register 50.23).
   outcome: stop_and_ask
   reason: both_ends_onprem
   rules: []

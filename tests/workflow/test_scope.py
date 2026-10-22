@@ -296,6 +296,7 @@ def test_an_unapproved_type_swap_is_refused(repo, side, kind, value):
                                                 ("destination", "destination_ip_groups", "ipg-partner-northwind")])
 def test_a_group_the_ticket_names_is_written_as_a_group(repo, side, field, group):
     """The positive case: the ticket names the group, the reply uses it, and the file gets it as an IP group."""
+    add_ip_group(repo, "ipg-partner-northwind", ["203.0.113.16/28"], [PRIMARY])  # no env-site has a partner group yet
     r = reply([PRIMARY])
     r["rules"][0]["sources" if side == "source" else "destinations"] = [group]
     apply_reply(repo, typed_ticket(side, "ip_group"), r)
@@ -548,9 +549,9 @@ def dnat_from(ticket_sources, rule_sources, removal=False):
     return t, e
 
 
-def add_ip_group(root, name, cidrs):
-    """Add one IP group to both stage env-sites' ip-groups.tfvars in the copy."""
-    for env_site in ("stage-eastus2", "stage-centralus"):
+def add_ip_group(root, name, cidrs, env_sites=("stage-eastus2", "stage-centralus")):
+    """Add one IP group to the named env-sites' ip-groups.tfvars in the copy (both stage sites by default)."""
+    for env_site in env_sites:
         path = root / "infra" / "envs" / env_site / "ip-groups.tfvars"
         text = path.read_text().rstrip()
         members = ", ".join(f'"{c}"' for c in cidrs)
@@ -629,3 +630,152 @@ def test_an_open_source_in_a_network_rule_is_left_to_the_tier1_caution(repo):
     before = snapshot(repo)
     apply_reply(repo, t, r)
     assert changed(before, repo) == {SPOKE_FILE.format(PRIMARY)}
+
+
+# ------------------------------------------------------------ documented scope rules (register 50.23, items 1-3)
+
+def _stage_dnat(primary_destination, translated):
+    """RITM0011020 (stage DNAT, both sites) with the ticket's primary destination and the primary rule's translated address replaced."""
+    t, e = _label("RITM0011020")
+    t["destination"] = [d for d in t["destination"] if d["site"] != "primary"] + [
+        {"environment": "stage", "site": "primary", **d} for d in primary_destination]
+    e["rules"][0]["translated_address"] = translated
+    return t, e
+
+
+DNAT_NOT_ONE_HOST = {  # (ticket's primary destination entries, translated address the agent drafted)
+    "whole subnet": ([{"cidr": "10.102.20.0/24"}], "10.102.20.0/24"),
+    "host the agent picked in the subnet": ([{"cidr": "10.102.20.0/24"}], "10.102.20.14"),
+    "two hosts at one site": ([{"cidr": "10.102.20.14/32"}, {"cidr": "10.102.20.15/32"}], "10.102.20.14"),
+}
+
+
+@pytest.mark.parametrize("destination, translated", DNAT_NOT_ONE_HOST.values(), ids=DNAT_NOT_ONE_HOST.keys())
+def test_a_dnat_add_needs_one_internal_host_from_the_ticket(repo, destination, translated):
+    """RB-02-2: the destination is the internal host, one per site; the agent never picks one inside a range."""
+    t, e = _stage_dnat(destination, translated)
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match=r"not one internal host.*dnat_destination_not_host.*") as error:
+        apply_reply(repo, t, e)
+    assert "waits for the engineer to edit or reject it" in str(error.value)
+    assert changed(before, repo) == set()
+
+
+def test_a_dnat_add_to_the_tickets_one_host_is_written(repo):
+    t, e = _stage_dnat([{"cidr": "10.102.20.14/32"}], "10.102.20.14")
+    before = snapshot(repo)
+    apply_reply(repo, t, e)
+    assert changed(before, repo) == set(STAGE_XFER)
+
+
+ONPREM_TO_ONPREM = {
+    "two on-prem CIDRs": ([{"location": "onprem-primary", "cidr": "172.20.20.0/24"}],
+                          [{"location": "onprem-secondary", "cidr": "172.24.12.0/24"}], "172.20.20.0/24", "172.24.12.0/24"),
+    "two on-prem groups": ([{"ip_group": "ipg-onprem-primary"}], [{"ip_group": "ipg-onprem-secondary"}],
+                           "ipg-onprem-primary", "ipg-onprem-secondary"),
+}
+
+
+@pytest.mark.parametrize("sources, destination, src, dst", ONPREM_TO_ONPREM.values(), ids=ONPREM_TO_ONPREM.keys())
+def test_an_on_prem_to_on_prem_add_is_refused(repo, sources, destination, src, dst):
+    """RB-05-4 places a rule at the env-site of the ticket's Azure address; this ticket has none (RITM0011061)."""
+    t = ticket("primary")
+    t.update(sources=sources, destination=destination)
+    r = reply([PRIMARY])
+    r["rules"][0].update(sources=[src], destinations=[dst])
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="has no Azure address.*RB-05-5 both_ends_onprem"):
+        apply_reply(repo, t, r)
+    assert changed(before, repo) == set()
+
+
+def test_an_on_prem_source_to_an_azure_destination_is_still_written(repo):
+    """The documented on-prem case (RB-05): RITM0011051's labelled draft is written."""
+    t, e = _label("RITM0011051")
+    before = snapshot(repo)
+    apply_reply(repo, t, e)
+    assert len(changed(before, repo)) == len({r["env_site"] for r in e["rules"]})
+
+
+def woodgrove(env_sites=("dev-eastus2", "dev-centralus")):
+    """RITM0011062's ticket and a draft that names ipg-partner-woodgrove at each dev site."""
+    t, _ = _label("RITM0011062")
+    src = {"dev-eastus2": "10.104.16.0/24", "dev-centralus": "10.105.16.0/24"}
+    rules = [{"env_site": es, "spoke": "ledg", "collection": "allow-ledg-network-rules", "name": "smtp-ledg-to-woodgroveSmtp",
+              "sources": [src[es]], "destinations": ["ipg-partner-woodgrove"], "ports": ["587"], "protocol": "TCP"}
+             for es in env_sites]
+    return t, {"outcome": "draft", "rules": rules}
+
+
+@pytest.mark.parametrize("held_at, missing_at", [((), ["dev-eastus2", "dev-centralus"]), (("dev-eastus2",), ["dev-centralus"])],
+                         ids=["at no site", "at the primary only"])
+def test_a_rule_naming_a_group_missing_at_its_env_site_is_refused(repo, held_at, missing_at):
+    """STD-COLL-03 and RB-01-2: the group must already exist where the rule goes; the workflow never creates it."""
+    add_ip_group(repo, "ipg-partner-woodgrove", ["203.0.113.48/28"], held_at)
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError) as error:
+        apply_reply(repo, *woodgrove())
+    found = [es for es in ("dev-eastus2", "dev-centralus")
+             if f"IP group ipg-partner-woodgrove does not exist at {es}" in str(error.value)]
+    assert found == missing_at and "ip_group_not_found" in str(error.value)
+    assert changed(before, repo) == set()
+
+
+def test_a_rule_naming_a_group_that_exists_at_both_sites_is_written(repo):
+    add_ip_group(repo, "ipg-partner-woodgrove", ["203.0.113.48/28"], ["dev-eastus2", "dev-centralus"])
+    before = snapshot(repo)
+    apply_reply(repo, *woodgrove())
+    assert len(changed(before, repo)) == 2
+
+
+def test_a_removal_naming_a_group_missing_at_its_env_site_is_refused(repo):
+    """RB-03-5 applies RB-01-6's address checks to removals: a group from another environment is not at prod DR."""
+    t, e = _label("RITM0011050")
+    t["sources"] = [{**t["sources"][0], "ip_group": "ipg-ledg-stage-dr"}]
+    e["rules"][0]["sources"] = ["ipg-ledg-stage-dr"]
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="IP group ipg-ledg-stage-dr does not exist at prod-centralus"):
+        apply_reply(repo, t, e)
+    assert changed(before, repo) == set()
+
+
+# ------------------------------------------------------------ legacy DNAT removal: ports are the published ports
+
+PROD_XFER = "infra/envs/prod-eastus2/firewall_policy_rule_collection_groups/xfer.tfvars"
+
+
+def legacy_removal(ticket_ports=("2221",), **rule_change):
+    """Remove prod-eastus2 001-sftp-woodgrove-to-xferSftp, which publishes 2221 and translates to 22."""
+    t = ticket("primary", removal=True)
+    t.update(sources=[{"cidr": "203.0.113.48/28"}], protocol="TCP", ports=list(ticket_ports),
+             destination=[{"environment": "prod", "site": "primary", "cidr": "10.100.20.14/32"}])
+    rule = {"env_site": PRIMARY, "spoke": "xfer", "collection": "allow-xfer-dnat-rules", "name": "sftp-woodgrove-to-xferSftp",
+            "sources": ["203.0.113.48/28"], "destinations": ["192.0.2.10"], "ports": ["2221"], "protocol": "TCP",
+            "translated_address": "10.100.20.14", "translated_port": "22", **rule_change}
+    return t, {"outcome": "draft", "action": "remove", "rules": [rule]}
+
+
+def test_a_legacy_dnat_rule_is_removed_by_a_ticket_for_its_published_port(repo):
+    """RB-03-2: the stored rule matches field for field, its own translated port included; the litware rule stays."""
+    before = snapshot(repo)
+    apply_reply(repo, *legacy_removal())
+    assert changed(before, repo) == {PROD_XFER}
+    text = (repo / PROD_XFER).read_text()
+    assert "sftp-woodgrove-to-xferSftp" not in text and '"001-sftp-litware-to-xferSftp"' in text and '"2223"' in text
+
+
+LEGACY_REFUSED = {  # (ticket ports, change to the drafted rule, error type, what the refusal says)
+    "ticket names the translated port": (("22",), {}, ApprovalError, r"are not exactly the ticket's \['22'\]"),
+    "draft translates to the published port": (("2221",), {"translated_port": "2221"}, DraftError, "does not match the removal request"),
+    "draft names another host": (("2221",), {"translated_address": "10.100.20.15"}, ApprovalError,
+                                 "translated address 10.100.20.15 is not on the ticket"),
+    "draft translates to a range": (("2221",), {"translated_port": "22-23"}, ApprovalError, "is not one port"),
+}
+
+
+@pytest.mark.parametrize("ports, change, error, why", LEGACY_REFUSED.values(), ids=LEGACY_REFUSED.keys())
+def test_a_legacy_dnat_removal_still_matches_the_stored_rule_exactly(repo, ports, change, error, why):
+    before = snapshot(repo)
+    with pytest.raises(error, match=why):
+        apply_reply(repo, *legacy_removal(ports, **change))
+    assert changed(before, repo) == set()

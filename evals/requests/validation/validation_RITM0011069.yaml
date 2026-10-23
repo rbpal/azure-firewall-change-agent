@@ -37,7 +37,8 @@ expected:
     caution and a draft under RB-01-7, as in RITM0011015. Same flow as RITM0011063; only the URL differs. No lab sett
     rule names this host; 001-https-sett-to-northwindApi is for api.northwind.example only. Never retry with another
     name or guess an address. Return the ticket to the engineer, who can retry once DNS answers, or edit or reject it.
-    If the agent drafts anyway, the workflow code writes the application rule (security register 50.23).
+    An edited ticket must be accepted again before the agent proceeds; acceptance covers the ticket's source,
+    destination, port and URL. If the agent drafts anyway, the workflow code writes the application rule (security register 50.23).
   outcome: stop_and_ask
   reason: dns_lookup_failed
   rules: []

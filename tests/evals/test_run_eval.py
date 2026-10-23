@@ -293,3 +293,18 @@ def test_the_foundry_run_refuses_data_that_differs_from_the_snapshot_unless_each
     monkeypatch.setattr(agent_mod.FoundryAgent, "from_env", classmethod(from_env))
     assert main(["--agent", "foundry"]) == 2 and "infra/envs/x.tfvars" in capsys.readouterr().out
     assert main(["--agent", "foundry", "--data-diff-ok", "infra/envs/x.tfvars", "--only", "RITM0011001"]) == 0
+
+
+def test_tickets_left_out_by_only_are_listed_as_not_run_and_never_written_as_replies(tmp_path, capsys):
+    import json
+
+    out = tmp_path / "run.json"
+    assert main(["--agent", "perfect", "--only", "RITM0011002", "--out", str(out)]) == 0
+    record = json.loads(out.read_text())
+    assert [r["number"] for r in record["replies"]] == ["RITM0011002"]
+    assert record["replies"][0]["mistakes"] == []
+    others = {r.number for r in REQUESTS} - {"RITM0011002"}
+    assert {n for n, _ in record["not_run"]} == others
+    assert {why for _, why in record["not_run"]} == {"not selected with --only"}
+    sheet = capsys.readouterr().out
+    assert "validation split · 1 tickets" in sheet and "RITM0011003  not selected with --only" in sheet

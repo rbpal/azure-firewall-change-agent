@@ -181,18 +181,19 @@ def score_reply(expected: dict, reply: object) -> Verdict:
 
 def run(agent: Agent, split: str = "validation", allow_test: bool = False, reviewed_only: bool = False,
         token_budget: int | None = None, not_run: list | None = None, replies: list | None = None,
-        skip: dict | None = None) -> list[TicketResult]:
+        skip: dict | None = None, only: set | None = None) -> list[TicketResult]:
     """Hand each ticket to the agent, score each reply, and return one result per ticket.
 
     reviewed_only leaves out labels still pending review. An agent with controlled_dns = False
     (its DNS tool runs in Azure) does not get requests with a dns: block. token_budget stops the
     run before a ticket once the agent's recorded tokens reach it. skip maps ticket numbers the
-    caller leaves out to the reason, such as a snapshot that lacks the ticket's rule. Each left-out ticket is
-    appended to not_run as (number, why), and each reply to replies, so nothing vanishes.
+    caller leaves out to the reason, such as a snapshot that lacks the ticket's rule. only, when given, runs just
+    those ticket numbers. Each left-out ticket is appended to not_run as (number, why), never scored and never
+    written as a reply; each reply goes to replies, so nothing vanishes.
     """
     results = []
     for request in load_requests(split, allow_test):
-        why = _not_run_reason(request, agent, reviewed_only, token_budget, skip or {})
+        why = _not_run_reason(request, agent, reviewed_only, token_budget, skip or {}, only)
         if why:
             if not_run is not None:
                 not_run.append((request.number, why))
@@ -218,8 +219,11 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
     return results
 
 
-def _not_run_reason(request: Request, agent, reviewed_only: bool, token_budget: int | None, skip: dict) -> str | None:
+def _not_run_reason(request: Request, agent, reviewed_only: bool, token_budget: int | None, skip: dict,
+                    only: set | None = None) -> str | None:
     """Why this request is left out of the run, or None to run it."""
+    if only is not None and request.number not in only:
+        return "not selected with --only"
     if request.number in skip:
         return skip[request.number]
     if reviewed_only and request.expected.get("review") == "pending":
@@ -328,15 +332,12 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
         else:
             agent = always_stop
-        if args.only:
-            agent = _only(agent, set(args.only))
         skip = dict(entry.split("=", 1) for entry in args.not_run)
-        results = run(agent, args.split, args.allow_test_split, args.reviewed_only, args.token_budget, not_run, replies, skip)
+        results = run(agent, args.split, args.allow_test_split, args.reviewed_only, args.token_budget, not_run, replies, skip,
+                      set(args.only) if args.only else None)
     except PermissionError as error:
         print(f"refused: {error} (command line: --allow-test-split)")
         return 2
-    results = [r for r in results if not args.only or r.number in args.only]
-    not_run = [n for n in not_run if not args.only or n[0] in args.only]
     report = format_report(results, args.split, args.agent)
     if not_run:
         report += "\n\nNot run\n" + "\n".join(f"  {number}  {why}" for number, why in not_run)
@@ -355,17 +356,6 @@ def main(argv: list[str] | None = None) -> int:
         args.out.write_text(json.dumps({"agent": args.agent, "split": args.split, "replies": replies,
                                         "calls": [vars(c) for c in calls], "not_run": not_run}, indent=2) + "\n")
     return 0
-
-
-def _only(agent, numbers: set[str]):
-    """Wrap an agent so tickets outside numbers are answered without a call, then dropped from the sheet."""
-    def wrapped(ticket, **extra):
-        """Call the agent only for a chosen ticket."""
-        if ticket["number"] not in numbers:
-            return {"outcome": "stop_and_ask", "reason": "not_run", "rules": []}
-        return agent(ticket, **extra)
-    wrapped.inner, wrapped.controlled_dns = agent, getattr(agent, "controlled_dns", True)
-    return wrapped
 
 
 if __name__ == "__main__":

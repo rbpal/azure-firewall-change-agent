@@ -308,3 +308,321 @@ def test_tickets_left_out_by_only_are_listed_as_not_run_and_never_written_as_rep
     assert {why for _, why in record["not_run"]} == {"not selected with --only"}
     sheet = capsys.readouterr().out
     assert "validation split · 1 tickets" in sheet and "RITM0011003  not selected with --only" in sheet
+
+
+# ------------------------------------------------- throttling, pacing and infrastructure errors
+
+class Clock:
+    """A fake clock: sleep moves it forward and records each wait."""
+
+    def __init__(self):
+        self.now, self.waits = 0.0, []
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        """Record the wait and move time forward by it."""
+        self.waits.append(seconds)
+        self.now += seconds
+
+
+def scripted(failures, tokens=0, clock=None, interrupt_at=None):
+    """The perfect stand-in, but raising failures[number] (a list, one per attempt) before it answers.
+
+    Each answered call records `tokens`, as a Foundry call does; with a clock, each call also takes 5 seconds.
+    """
+    from workflow.agent import Call
+    base, left = perfect(KEYS), {n: list(errors) for n, errors in failures.items()}
+
+    class Scripted:
+        """Answers like the perfect agent after its scripted failures."""
+        calls = []
+
+        def __call__(self, ticket, **extra):
+            """Raise the next scripted failure for this ticket, or answer."""
+            if ticket["number"] == interrupt_at:
+                raise KeyboardInterrupt
+            if clock is not None:
+                clock.now += 5
+            self.calls.append(Call(ticket["number"]))
+            if left.get(ticket["number"]):
+                self.calls[-1].error = "scripted"
+                raise left[ticket["number"]].pop(0)
+            self.calls[-1].input_tokens = tokens
+            return base(ticket)
+
+    return Scripted()
+
+
+def throttled(wait=None):
+    """The error the agent raises when the deployment throttles a call."""
+    from workflow.agent import RateLimited
+    return RateLimited("the agent call failed: InternalServerError: rate_limit_exceeded", retry_after=wait)
+
+
+def test_a_throttled_ticket_is_retried_after_the_wait_and_every_attempt_is_recorded():
+    clock, attempts = Clock(), []
+    agent = scripted({"RITM0011002": [throttled(12.0), throttled()]})
+    results = run(agent, attempts=attempts, max_attempts=3, sleep=clock.sleep, clock=clock, jitter=lambda: 1.0)
+    assert result_for(results, "RITM0011002").verdict.complete
+    mine = [a for a in attempts if a["number"] == "RITM0011002"]
+    assert [(a["attempt"], a["kind"]) for a in mine] == [(1, "rate_limit"), (2, "rate_limit"), (3, None)]
+    assert clock.waits == [13.0, 61.0]  # the server's wait, else a full minute, each plus jitter
+    assert [a["waited"] for a in mine] == [13.0, 61.0, 0]
+
+
+def test_a_ticket_throttled_on_every_attempt_is_not_run_and_never_scored():
+    clock, attempts, not_run = Clock(), [], []
+    agent = scripted({"RITM0011002": [throttled(), throttled(), throttled()]})
+    results = run(agent, attempts=attempts, not_run=not_run, max_attempts=3, sleep=clock.sleep, clock=clock,
+                  jitter=lambda: 0.0)
+    assert "RITM0011002" not in {r.number for r in results} and len(results) == len(REQUESTS) - 1
+    assert not_run == [("RITM0011002", "infrastructure: rate_limit_exceeded on all 3 attempts")]
+    assert [a["kind"] for a in attempts if a["number"] == "RITM0011002"] == ["rate_limit"] * 3
+    assert clock.waits == [60.0, 60.0]  # no wait after the last attempt
+
+
+def test_other_infrastructure_errors_are_not_retried_and_never_scored():
+    from workflow.agent import InfraError
+    attempts, not_run = [], []
+    agent = scripted({"RITM0011002": [InfraError("the agent call failed: AuthenticationError: 401")]})
+    results = run(agent, attempts=attempts, not_run=not_run, max_attempts=3, sleep=Clock().sleep)
+    assert not_run == [("RITM0011002", "infrastructure: the agent call failed: AuthenticationError: 401")]
+    assert [a["kind"] for a in attempts if a["number"] == "RITM0011002"] == ["infrastructure"]
+    assert not any("agent_error" in r.verdict.mistakes for r in results)
+
+
+def test_a_model_error_is_not_retried_and_still_fails_its_ticket():
+    from workflow.agent import AgentError
+    attempts = []
+    agent = scripted({"RITM0011033": [AgentError("the agent's reply does not fit agents/reply.schema.json")]})
+    results = run(agent, attempts=attempts, max_attempts=3, sleep=Clock().sleep)
+    assert result_for(results, "RITM0011033").verdict.mistakes == ["agent_error"]
+    assert [a["kind"] for a in attempts if a["number"] == "RITM0011033"] == ["model"]
+
+
+def test_tickets_wait_until_the_last_minute_has_room_for_another_ticket():
+    clock = Clock()
+    agent = scripted({}, tokens=10_000, clock=clock)
+    run(agent, sleep=clock.sleep, clock=clock, pace_tokens=15_000, max_attempts=3)
+    # each ticket uses 10,000; a second inside the same minute would make 20,000 > 15,000
+    assert clock.waits[:2] == [55.0, 55.0] and len(clock.waits) == len(REQUESTS) - 1
+
+
+def test_three_tickets_in_a_row_failing_on_infrastructure_stop_the_run():
+    first = [r.number for r in REQUESTS[:3]]
+    clock, not_run = Clock(), []
+    agent = scripted({n: [throttled()] * 3 for n in first})
+    results = run(agent, not_run=not_run, max_attempts=3, sleep=clock.sleep, clock=clock, jitter=lambda: 0.0)
+    assert results == [] and [n for n, _ in not_run[:3]] == first
+    rest = not_run[3:]
+    assert len(rest) == len(REQUESTS) - 3
+    assert {why for _, why in rest} == {"run stopped: 3 tickets in a row failed on infrastructure"}
+
+
+def test_an_interrupt_keeps_what_finished_and_lists_the_rest_as_not_run():
+    third = REQUESTS[2].number
+    not_run, replies = [], []
+    try:
+        results = run(scripted({}, interrupt_at=third), not_run=not_run, replies=replies)
+    except KeyboardInterrupt:
+        pytest.fail("the interrupt escaped the run instead of stopping it gracefully")
+    assert [r.number for r in results] == [r.number for r in REQUESTS[:2]] and len(replies) == 2
+    assert not_run[0] == (third, "run interrupted") and len(not_run) == len(REQUESTS) - 2
+
+
+def test_pacing_counts_each_model_call_not_only_billed_tokens():
+    from workflow.agent import Call
+    clock, base = Clock(), perfect(KEYS)
+
+    class TwoTools:
+        """Bills only 1,000 tokens a ticket, but makes three model calls: before, between and after two tools."""
+        calls = []
+
+        def __call__(self, ticket, **extra):
+            """Answer, recording two tool calls and 1,000 billed tokens."""
+            clock.now += 5
+            self.calls.append(Call(ticket["number"], input_tokens=1000, tools=["locate", "duplicate"]))
+            return base(ticket)
+
+    run(TwoTools(), sleep=clock.sleep, clock=clock, pace_tokens=30_000, reserve_per_call=8_000)
+    assert clock.waits[:2] == [55.0, 55.0]  # 3 x 8,000 = 24,000 a ticket; two would be 48,000 > 30,000
+
+
+def test_progress_is_reported_after_every_ticket_with_the_count_so_far():
+    seen = []
+    run(scripted({"RITM0011002": [throttled()] * 3}), max_attempts=3, sleep=Clock().sleep, jitter=lambda: 0.0,
+        progress=seen.append)
+    assert [e["number"] for e in seen] == [r.number for r in REQUESTS]
+    second = seen[1]
+    assert (second["status"], second["attempts"], second["done"], second["total"]) == ("not_run", 3, 2, len(REQUESTS))
+    assert second["why"] == "infrastructure: rate_limit_exceeded on all 3 attempts" and seen[0]["status"] == "scored"
+
+
+def _interrupting(monkeypatch, how):
+    """Make --agent perfect stop on the third ticket, by KeyboardInterrupt or by SIGTERM to this process."""
+    import os
+    import signal
+    import evals.run_eval as run_eval
+    third = REQUESTS[2].number
+    base = perfect(KEYS)
+
+    def agent(ticket, **extra):
+        """Answer, but stop the run at the third ticket."""
+        if ticket["number"] == third:
+            if how == "sigterm":
+                os.kill(os.getpid(), signal.SIGTERM)
+            raise KeyboardInterrupt
+        return base(ticket)
+
+    monkeypatch.setattr(run_eval, "perfect", lambda keys: agent)
+    return third
+
+
+@pytest.mark.parametrize("how", ["interrupt", "sigterm"])
+def test_a_stopped_run_still_writes_what_finished_and_says_it_stopped(tmp_path, capsys, monkeypatch, how):
+    import json
+    import signal
+    before = signal.getsignal(signal.SIGTERM)
+    third = _interrupting(monkeypatch, how)
+    out = tmp_path / "run.json"
+    try:
+        code = main(["--agent", "perfect", "--out", str(out)])
+    except KeyboardInterrupt:
+        pytest.fail("the interrupt escaped main instead of stopping the run gracefully")
+    assert code == 130
+    record = json.loads(out.read_text())
+    assert record["status"] == "interrupted" and len(record["replies"]) == 2
+    assert record["not_run"][0] == [third, "run interrupted"] and len(record["not_run"]) == len(REQUESTS) - 2
+    captured = capsys.readouterr()
+    assert "run interrupted" in captured.out and f"[2/{len(REQUESTS)}]" in captured.err
+    assert signal.getsignal(signal.SIGTERM) == before  # the handler is put back
+
+
+def test_the_out_file_is_rewritten_after_every_ticket(tmp_path, monkeypatch):
+    import json
+    import evals.run_eval as run_eval
+    out, sizes = tmp_path / "run.json", []
+    real = run_eval._save
+
+    def save(path, record):
+        """Save as usual, then note how many replies the file holds."""
+        real(path, record)
+        sizes.append(len(json.loads(path.read_text())["replies"]))
+
+    monkeypatch.setattr(run_eval, "_save", save)
+    assert main(["--agent", "perfect", "--only", "RITM0011001", "RITM0011002", "--out", str(out)]) == 0
+    # saved after each attempt (the reply is not in yet) and again after each ticket
+    assert sizes[:5] == [0, 1, 1, 2, 2] and json.loads(out.read_text())["status"] == "complete"
+
+
+def test_coverage_separates_answered_tickets_from_throttled_and_other_not_run():
+    from evals.run_eval import coverage
+    results = run(perfect(KEYS))[:3]
+    not_run = [("A", "infrastructure: rate_limit_exceeded on all 3 attempts"),
+               ("B", "infrastructure: the agent call failed: AuthenticationError: 401"),
+               ("C", "run stopped: 3 tickets in a row failed on infrastructure"),
+               ("D", "needs a controlled DNS answer the deployed tool cannot get"), ("E", "not selected with --only")]
+    text = coverage(results, not_run)
+    assert "Answered and scored                 3 / 8" in text
+    assert "Throttled (rate limit)              1 / 8" in text
+    assert "Other infrastructure error          1 / 8" in text
+    assert "Run stopped or interrupted          1 / 8" in text
+    assert "Left out by design or selection     2 / 8" in text
+
+
+def test_the_foundry_run_refuses_an_agent_version_other_than_the_one_required(monkeypatch, capsys):
+    import workflow.agent as agent_mod
+
+    class Pinned:
+        """A published agent at version 3."""
+        version, snapshot, calls, controlled_dns = "3", "c" * 40, [], False
+
+        def __call__(self, ticket, **extra):
+            """Never called: the run refuses first."""
+            raise AssertionError("called")
+
+        def pointer_now(self):
+            """The pointer has not moved."""
+            return self.snapshot
+
+    monkeypatch.setattr(agent_mod.FoundryAgent, "from_env", classmethod(lambda cls, repo, allowed_differences=(): Pinned()))
+    assert main(["--agent", "foundry", "--agent-version", "2"]) == 2
+    assert "agent version 3, but this run requires version 2" in capsys.readouterr().out
+
+
+def test_attempts_start_at_least_the_minimum_gap_apart_including_retries():
+    clock, attempts = Clock(), []
+    agent = scripted({REQUESTS[1].number: [throttled(5.0)]}, clock=clock)
+    run(agent, attempts=attempts, sleep=clock.sleep, clock=clock, min_gap=60, max_attempts=3, jitter=lambda: 0.0)
+    starts = [a["at"] for a in attempts]
+    assert all(b - a >= 60 for a, b in zip(starts, starts[1:]))
+    assert clock.waits[:3] == [55.0, 5.0, 50.0]  # gap after ticket 1; Azure's 5 s; then the rest of the gap
+
+
+def test_every_attempt_is_saved_to_disk_as_soon_as_it_ends(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import evals.run_eval as run_eval
+    clock = Clock()
+    agent = scripted({"RITM0011001": [throttled(), throttled()]}, clock=clock)
+    monkeypatch.setattr(run_eval, "perfect", lambda keys: agent)
+    monkeypatch.setattr(run_eval, "time", SimpleNamespace(sleep=clock.sleep, monotonic=clock))
+    out, saved = tmp_path / "run.json", []
+    real = run_eval._save
+
+    def save(path, record):
+        """Save as usual, then note how many attempts the file on disk holds."""
+        real(path, record)
+        saved.append(len(json.loads(path.read_text())["attempts"]))
+
+    monkeypatch.setattr(run_eval, "_save", save)
+    assert main(["--agent", "perfect", "--only", "RITM0011001", "--out", str(out)]) == 0
+    assert saved[:3] == [1, 2, 3]  # each throttled attempt is on disk before the wait for the next
+    record = json.loads(out.read_text())
+    assert [a["kind"] for a in record["attempts"]] == ["rate_limit", "rate_limit", None]
+    assert clock.waits and min(clock.waits) >= 60  # the waits went to the fake clock, each at least a minute
+
+
+def test_a_longer_azure_retry_delay_always_wins_over_the_minimum_gap():
+    clock, attempts = Clock(), []
+    agent = scripted({REQUESTS[0].number: [throttled(120.0)]}, clock=clock)
+    run(agent, attempts=attempts, sleep=clock.sleep, clock=clock, min_gap=60, max_attempts=3, jitter=lambda: 0.0)
+    first, second = attempts[0], attempts[1]
+    assert clock.waits[0] == 120.0 and first["waited"] == 120.0
+    assert second["at"] - (first["at"] + 5) >= 120  # 120 s after the throttled attempt ended, with no gap shortening it
+
+
+def test_stop_on_failure_stops_after_the_first_answer_that_does_not_pass():
+    second = REQUESTS[1].number
+    agent = perfect_except(second, lambda reply: {**reply, "outcome": "already_allowed"})
+    not_run = []
+    results = run(agent, not_run=not_run, stop_on_failure=True)
+    assert [r.number for r in results] == [REQUESTS[0].number, second] and not result_for(results, second).verdict.passed
+    assert {why for _, why in not_run} == {f"run stopped: {second} did not pass"} and len(not_run) == len(REQUESTS) - 2
+
+
+def test_stop_on_failure_stops_after_the_first_infrastructure_failure():
+    from workflow.agent import InfraError
+    first = REQUESTS[0].number
+    not_run = []
+    results = run(scripted({first: [InfraError("the agent call failed: AuthenticationError: 401")]}), not_run=not_run,
+                  stop_on_failure=True, sleep=Clock().sleep)
+    assert results == [] and not_run[0] == (first, "infrastructure: the agent call failed: AuthenticationError: 401")
+    assert {why for _, why in not_run[1:]} == {f"run stopped: {first} failed on infrastructure"}
+
+
+def test_stop_on_failure_counts_a_ticket_that_runs_out_of_throttle_retries():
+    first = REQUESTS[0].number
+    not_run = []
+    run(scripted({first: [throttled()] * 2}), not_run=not_run, stop_on_failure=True, max_attempts=2,
+        sleep=Clock().sleep, jitter=lambda: 0.0)
+    assert not_run[0] == (first, "infrastructure: rate_limit_exceeded on all 2 attempts")
+    assert {why for _, why in not_run[1:]} == {f"run stopped: {first} failed on infrastructure"}
+
+
+def test_stop_on_failure_does_not_stop_a_passing_run():
+    not_run = []
+    results = run(perfect(KEYS), not_run=not_run, stop_on_failure=True)
+    assert len(results) == len(REQUESTS) and not_run == []

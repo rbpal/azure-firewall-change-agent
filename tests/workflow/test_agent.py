@@ -201,6 +201,46 @@ def test_a_failed_call_or_an_invalid_reply_is_an_agent_error_and_is_recorded():
     assert bad.calls[0].error.startswith("the agent's reply is not JSON")
 
 
+def _api_error(cls, status, body, headers=None):
+    """An openai error as the agent service returns it, with its status, body and headers."""
+    import httpx2
+    import openai
+    response = httpx2.Response(status, headers=headers or {}, request=httpx2.Request("POST", "https://example.test"))
+    return getattr(openai, cls)(f"Error code: {status}", response=response, body=body)
+
+
+@pytest.mark.parametrize("cls, status, body, headers, wait", [
+    ("InternalServerError", 500, {"code": "rate_limit_exceeded", "message": "Rate limit is exceeded."},
+     {"retry-after-ms": "12000"}, 12.0),
+    ("RateLimitError", 429, {"code": "429", "message": "Too many requests."}, {"retry-after": "7"}, 7.0),
+    ("RateLimitError", 429, None, None, None),
+    ("InternalServerError", 500, {"error": {"code": "rate_limit_exceeded"}}, None, None),
+])
+def test_a_throttled_call_is_rate_limited_with_its_wait_and_is_recorded(cls, status, body, headers, wait):
+    a = foundry("", fail=_api_error(cls, status, body, headers))
+    with pytest.raises(agent_mod.RateLimited, match="the agent call failed") as raised:
+        a({"number": "RITM0011002"})
+    assert raised.value.retry_after == wait and isinstance(raised.value, agent_mod.InfraError)
+    assert a.calls[0].error.startswith(cls)
+
+
+@pytest.mark.parametrize("fail", [
+    TimeoutError("no answer"),
+    _api_error("AuthenticationError", 401, {"code": "unauthorized"}),
+    _api_error("InternalServerError", 500, {"code": "server_error", "message": "boom"}),
+])
+def test_other_failed_calls_are_infrastructure_errors_but_not_rate_limits(fail):
+    with pytest.raises(agent_mod.InfraError) as raised:
+        foundry("", fail=fail)({"number": "RITM0011002"})
+    assert not isinstance(raised.value, agent_mod.RateLimited)
+
+
+def test_an_invalid_reply_is_a_model_error_not_an_infrastructure_error():
+    with pytest.raises(AgentError) as raised:
+        foundry('{"outcome": "stop_and_ask", "rules": []}')({"number": "RITM0011033"})  # no reason, as 0033 replied
+    assert not isinstance(raised.value, agent_mod.InfraError) and "reason" in str(raised.value)
+
+
 def test_a_controlled_dns_condition_is_refused_without_a_call():
     a = foundry("{}")
     with pytest.raises(AgentError, match="DNS tool runs in Azure"):
@@ -357,12 +397,13 @@ def test_from_env_publishes_the_version_pinned_to_current_and_reports_a_moved_po
     root, first = _git_repo(tmp_path)
     (root / "data/standards").mkdir(parents=True)
     agents = FakeAgents(missing=True)
-    project = SimpleNamespace(agents=agents, get_openai_client=lambda: SimpleNamespace())
+    project = SimpleNamespace(agents=agents, get_openai_client=lambda **options: SimpleNamespace(options=options))
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
     monkeypatch.setattr(agent_mod, "connect", lambda endpoint: project)
     container = synced(root, first)
     a = FoundryAgent.from_env(root, container=container)
     assert a.snapshot == first and agents.created[0][1].tools[0].headers == {"X-Fwagent-Snapshot": first}
+    assert a.openai.options == {"max_retries": 0}  # the runner retries, so every attempt is recorded
     container.blobs["current.json"] = json.dumps({"commit": "f" * 40}).encode()  # a push during the run
     assert a.pointer_now() == "f" * 40 and a.snapshot == first
 

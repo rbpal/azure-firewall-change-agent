@@ -62,6 +62,40 @@ class AgentError(Exception):
     """The agent's call failed or its reply is not a valid reply; nothing is written."""
 
 
+class InfraError(AgentError):
+    """The call itself failed (network, sign-in, service or quota), so the model gave no answer to judge."""
+
+
+class RateLimited(InfraError):
+    """The deployment throttled the call; retry_after is the server's wait in seconds, or None if it sent none."""
+
+    def __init__(self, message: str, retry_after: float | None = None):
+        """Keep the message and the server's wait."""
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+def failed_call(error: Exception) -> InfraError:
+    """Turn a failed call into RateLimited when the service throttled it, else into InfraError."""
+    message = f"the agent call failed: {type(error).__name__}: {error}"
+    body = getattr(error, "body", None)
+    codes = [getattr(error, "code", None)]
+    if isinstance(body, dict):
+        codes += [body.get("code"), (body.get("error") or {}).get("code") if isinstance(body.get("error"), dict) else None]
+    if getattr(error, "status_code", None) != 429 and "rate_limit_exceeded" not in codes:
+        return InfraError(message)
+    headers = getattr(getattr(error, "response", None), "headers", None) or {}
+    wait = None
+    try:
+        if headers.get("retry-after-ms") is not None:
+            wait = float(headers["retry-after-ms"]) / 1000
+        elif headers.get("retry-after") is not None:
+            wait = float(headers["retry-after"])
+    except ValueError:  # an HTTP-date or junk: fall back to the caller's default wait
+        wait = None
+    return RateLimited(message, retry_after=wait)
+
+
 def instructions(repo: Path) -> str:
     """What the agent is told on every call: agents/drafter.md, then each standard and runbook page."""
     parts = [(AGENTS / "drafter.md").read_text().strip()]
@@ -258,7 +292,8 @@ class FoundryAgent:
         project = connect(endpoint)
         body = definition(instructions(repo), snapshot, os.environ.get("FWAGENT_MODEL", DEFAULT_MODEL),
                           os.environ.get("FWAGENT_MCP_CONNECTION", DEFAULT_CONNECTION))
-        return cls(project, project.get_openai_client(), ensure_version(project, body), snapshot, container)
+        # No hidden retries in the SDK: the runner retries, waits and records every attempt.
+        return cls(project, project.get_openai_client(max_retries=0), ensure_version(project, body), snapshot, container)
 
     def __call__(self, ticket: dict, engineer_review: dict | None = None, dns_lookup=None) -> dict:
         """Draft one ticket; refuse a controlled DNS condition, which cannot reach the deployed tools."""
@@ -273,7 +308,7 @@ class FoundryAgent:
                 extra_body={"agent_reference": {"name": AGENT_NAME, "version": self.version, "type": "agent_reference"}})
         except Exception as error:
             call.error = f"{type(error).__name__}: {error}"
-            raise AgentError(f"the agent call failed: {call.error}") from error
+            raise failed_call(error) from error
         usage = getattr(response, "usage", None)
         call.input_tokens = getattr(usage, "input_tokens", 0) or 0
         call.output_tokens = getattr(usage, "output_tokens", 0) or 0

@@ -17,9 +17,12 @@ too, as the workflow would give it, and still never the answer key. A request wi
 `dns:` block fixes what DNS does for a named host (a timeout or SERVFAIL); the agent
 gets a resolver for its DNS tool that behaves that way, never the block itself, and
 every other name is NXDOMAIN, as the reserved .example names are in real DNS.
-The test split is sealed: reading it needs allow_test=True. An agent
-crash or a malformed reply fails that ticket as agent_error and the run goes on,
-so no ticket is ever dropped from the count.
+The test split is sealed: reading it needs allow_test=True. A malformed reply
+or an agent crash fails that ticket as agent_error, a model error. A call that
+failed (throttling, sign-in, network) is an infrastructure error: the ticket is
+listed as not run, never scored. A throttled call is retried after the server's
+wait, at most max_attempts times, and every attempt is recorded. No ticket is
+ever dropped from the count; the coverage section says how many were answered.
 """
 
 from __future__ import annotations
@@ -27,7 +30,11 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
+import random
+import signal
 import sys
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +44,7 @@ import dns.resolver
 import yaml
 
 from evals.abstention import score_abstention
+from workflow.agent import InfraError, RateLimited
 from workflow.intake import ticket_version
 from evals.least_privilege import score_least_privilege
 from evals.stand_in_agents import Agent, always_stop, perfect
@@ -181,8 +189,11 @@ def score_reply(expected: dict, reply: object) -> Verdict:
 
 def run(agent: Agent, split: str = "validation", allow_test: bool = False, reviewed_only: bool = False,
         token_budget: int | None = None, not_run: list | None = None, replies: list | None = None,
-        skip: dict | None = None, only: set | None = None) -> list[TicketResult]:
-    """Hand each ticket to the agent, score each reply, and return one result per ticket.
+        skip: dict | None = None, only: set | None = None, attempts: list | None = None, max_attempts: int = 1,
+        pace_tokens: int | None = None, reserve_per_call: int = 0, stop_after: int | None = 3, progress=None,
+        min_gap: float = 0, on_attempt=None, stop_on_failure: bool = False, sleep=None, clock=None,
+        jitter=None) -> list[TicketResult]:
+    """Hand each ticket to the agent, score each reply, and return one result per scored ticket.
 
     reviewed_only leaves out labels still pending review. An agent with controlled_dns = False
     (its DNS tool runs in Azure) does not get requests with a dns: block. token_budget stops the
@@ -190,33 +201,130 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
     caller leaves out to the reason, such as a snapshot that lacks the ticket's rule. only, when given, runs just
     those ticket numbers. Each left-out ticket is appended to not_run as (number, why), never scored and never
     written as a reply; each reply goes to replies, so nothing vanishes.
+
+    A throttled call (RateLimited) is tried again after the server's wait, else 60 seconds, plus jitter, up to
+    max_attempts in all. Any other failed call (InfraError) is not retried. Either way the ticket goes to not_run
+    as an infrastructure error, never scored as the model's mistake. stop_after tickets in a row failing that
+    way stop the run; an interrupt (Ctrl-C or SIGTERM) stops it too. Every remaining ticket is then listed as
+    not run, and the results so far are returned. With pace_tokens, each attempt waits until the estimated use
+    in the last 60 seconds, plus the previous attempt's estimate, fits that budget. An attempt's estimate is its
+    billed tokens or reserve_per_call for each model call it made (one more than its tool calls), whichever is
+    larger, because the quota counts every model call's reservation, not the bill. It is an estimate, not the
+    service's own count, so pacing makes throttling less likely but cannot prevent it; the bounded retries
+    handle the rest. min_gap is the least time, in seconds, between the starts of two attempts, retries included.
+    Each attempt is appended to attempts and passed to on_attempt as soon as it ends; progress, if given, is
+    called with one event per ticket. stop_on_failure, for a trial, stops after the first ticket that is not
+    answered and passed: a wrong, incomplete or invalid answer, or any infrastructure failure.
     """
-    results = []
-    for request in load_requests(split, allow_test):
-        why = _not_run_reason(request, agent, reviewed_only, token_budget, skip or {}, only)
+    sleep, clock = sleep or time.sleep, clock or time.monotonic
+    jitter = jitter or (lambda: random.uniform(0, 5))
+    not_run = [] if not_run is None else not_run
+    attempts = [] if attempts is None else attempts
+    requests = load_requests(split, allow_test)
+    results, window, last, in_a_row, stopped, previous = [], [], 0, 0, None, None
+
+    def report(done: int, event: dict):
+        """Tell the caller how far the run has got."""
+        if progress is not None:
+            progress({**event, "done": done, "total": len(requests)})
+
+    for done, request in enumerate(requests, 1):
+        why = _not_run_reason(request, agent, reviewed_only, token_budget, skip or {}, only) or stopped
         if why:
-            if not_run is not None:
-                not_run.append((request.number, why))
+            not_run.append((request.number, why))
+            report(done, {"number": request.number, "status": "not_run", "attempts": 0, "why": why})
             continue
-        reply = None
+        extra = {}
+        if request.engineer_review is not None:
+            extra["engineer_review"] = copy.deepcopy(request.engineer_review)
+        if request.dns is not None:
+            extra["dns_lookup"] = controlled_dns(request.dns)
+        tries = 0
         try:
-            extra = {}
-            if request.engineer_review is not None:
-                extra["engineer_review"] = copy.deepcopy(request.engineer_review)
-            if request.dns is not None:
-                extra["dns_lookup"] = controlled_dns(request.dns)
-            reply = agent(copy.deepcopy(request.ticket), **extra)
+            for tries in range(1, max_attempts + 1):
+                if pace_tokens is not None:
+                    _wait_for_room(window, last, pace_tokens, sleep, clock)
+                if previous is not None and clock() - previous < min_gap:
+                    sleep(previous + min_gap - clock())
+                started = previous = clock()
+                made = len(_calls(agent))
+                reply, kind, error = None, None, None
+                try:
+                    reply = agent(copy.deepcopy(request.ticket), **extra)
+                except RateLimited as e:
+                    kind, error = "rate_limit", e
+                except InfraError as e:
+                    kind, error = "infrastructure", e
+                except Exception as e:  # a crash or a malformed reply is the agent's own failure
+                    kind, error = "model", e
+                last = _use(_calls(agent)[made:], kind, reserve_per_call)
+                window.append((started, last))
+                wait = 0
+                if kind == "rate_limit" and tries < max_attempts:
+                    wait = (60.0 if error.retry_after is None else error.retry_after) + jitter()
+                attempts.append({"number": request.number, "attempt": tries, "at": round(started, 3), "kind": kind,
+                                 "error": None if error is None else f"{type(error).__name__}: {error}", "waited": wait})
+                if on_attempt is not None:
+                    on_attempt(attempts[-1])
+                if not wait:
+                    break
+                sleep(wait)
+        except KeyboardInterrupt:
+            stopped = "run interrupted"
+            not_run.append((request.number, stopped))
+            report(done, {"number": request.number, "status": "not_run", "attempts": tries, "why": stopped})
+            continue
+        if kind in ("rate_limit", "infrastructure"):
+            why = (f"infrastructure: rate_limit_exceeded on all {tries} attempts" if kind == "rate_limit"
+                   else f"infrastructure: {error}")
+            not_run.append((request.number, why))
+            in_a_row += 1
+            if stop_after and in_a_row >= stop_after:
+                stopped = f"run stopped: {in_a_row} tickets in a row failed on infrastructure"
+            if stop_on_failure:
+                stopped = f"run stopped: {request.number} failed on infrastructure"
+            report(done, {"number": request.number, "status": "not_run", "attempts": tries, "why": why})
+            continue
+        in_a_row = 0
+        if kind == "model":
+            verdict, outcome = Verdict(mistakes=["agent_error"], detail=[f"{type(error).__name__}: {error}"]), "?"
+        else:
             verdict = score_reply(request.expected, reply)
             outcome = reply.get("outcome", "?") if isinstance(reply, dict) else "?"
-        except Exception as error:  # a crashing agent fails its ticket, not the run
-            verdict = Verdict(mistakes=["agent_error"], detail=[f"{type(error).__name__}: {error}"])
-            outcome = "?"
         if replies is not None:
             replies.append({"number": request.number, "reply": reply, "mistakes": verdict.mistakes, "detail": verdict.detail})
         pending = request.expected.get("review") == "pending"
         results.append(TicketResult(request.number, request.category, request.expected["outcome"], outcome, verdict, pending,
                                     request.engineer_review is not None))
+        report(done, {"number": request.number, "status": "scored", "attempts": tries, "outcome": outcome,
+                      "passed": verdict.complete})
+        if stop_on_failure and not verdict.complete:
+            stopped = f"run stopped: {request.number} did not pass"
     return results
+
+
+def _calls(agent) -> list:
+    """The calls the agent has recorded so far; a stand-in records none."""
+    return getattr(agent, "calls", [])
+
+
+def _use(calls: list, kind: str | None, reserve_per_call: int) -> int:
+    """What one attempt counts against the quota: billed tokens, or the reservation of every model call made."""
+    billed = sum(c.input_tokens + c.output_tokens for c in calls)
+    model_calls = sum(len(c.tools) + 1 for c in calls)
+    if kind == "rate_limit" and calls:
+        model_calls = max(model_calls, 2)  # throttled after a tool call, as the traces show: two model calls
+    return max(billed, model_calls * reserve_per_call)
+
+
+def _wait_for_room(window: list, need: int, budget: int, sleep, clock):
+    """Sleep until the uses started in the last 60 seconds, plus need, fit the budget."""
+    while True:
+        now = clock()
+        window[:] = [(t, n) for t, n in window if t > now - 60]
+        if not window or sum(n for _, n in window) + need <= budget:
+            return
+        sleep(window[0][0] + 60 - now)
 
 
 def _not_run_reason(request: Request, agent, reviewed_only: bool, token_budget: int | None, skip: dict,
@@ -303,7 +411,7 @@ def format_report(results: list[TicketResult], split: str, agent_name: str) -> s
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run one stand-in agent on one split and print the score sheet."""
+    """Run one agent on one split, save progress after every ticket, and print the score sheet."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--agent", choices=("perfect", "always_stop", "foundry"), required=True)
     parser.add_argument("--split", choices=SPLITS, default="validation")
@@ -311,13 +419,49 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reviewed-only", action="store_true", help="leave out labels still pending review")
     parser.add_argument("--only", nargs="+", metavar="RITM", help="run only these ticket numbers")
     parser.add_argument("--token-budget", type=int, help="stop before a ticket once this many tokens are used")
-    parser.add_argument("--out", type=Path, help="write each reply and the token use to this JSON file")
+    parser.add_argument("--out", type=Path, help="write each reply, attempt and the token use to this JSON file, "
+                                                 "rewritten after every ticket")
     parser.add_argument("--not-run", nargs="+", default=[], metavar="RITM=WHY",
                         help="leave these tickets out, each with its reason; they are listed as not run")
     parser.add_argument("--data-diff-ok", nargs="*", default=None, metavar="PATH",
                         help="foundry: data files allowed to differ from the snapshot (each must be named)")
+    parser.add_argument("--agent-version", metavar="N", help="foundry: refuse unless the published drafter is this version")
+    parser.add_argument("--max-attempts", type=int, default=3, help="tries per ticket when the deployment throttles")
+    parser.add_argument("--pace-tokens", type=int, default=24_000,
+                        help="estimated quota use allowed per 60 seconds (default 80%% of the 30,000 TPM deployment); "
+                             "an estimate, not a guarantee: throttling is still retried")
+    parser.add_argument("--reserve-per-call", type=int, default=8_000,
+                        help="estimated quota one model call reserves (prompt plus output allowance); an assumption, "
+                             "not read from Azure")
+    parser.add_argument("--stop-after", type=int, default=3, help="stop after this many tickets in a row fail on infrastructure")
+    parser.add_argument("--stop-on-failure", action="store_true",
+                        help="trial: stop after the first ticket that is not answered and passed")
+    parser.add_argument("--min-gap", type=float, default=60, help="foundry: least seconds between the starts of two attempts; stand-ins make no calls")
     args = parser.parse_args(argv)
-    not_run, replies = [], []
+    not_run, replies, attempts = [], [], []
+    agent, status = None, "running"
+
+    def record() -> dict:
+        """Everything the run has so far, as saved to --out."""
+        inner = getattr(agent, "inner", agent)
+        return {"agent": args.agent, "split": args.split, "status": status,
+                "agent_version": getattr(inner, "version", None), "snapshot": getattr(inner, "snapshot", None),
+                "replies": replies, "attempts": attempts, "calls": [vars(c) for c in _calls(inner)], "not_run": not_run}
+
+    def progress(event: dict):
+        """Print one line per ticket and save the run so far."""
+        detail = event.get("outcome") if event["status"] == "scored" else event.get("why")
+        tries = f" after {event['attempts']} attempts" if event["attempts"] > 1 else ""
+        print(f"[{event['done']}/{event['total']}] {event['number']} {event['status']}: {detail}{tries}",
+              file=sys.stderr, flush=True)
+        if args.out:
+            _save(args.out, record())
+
+    def interrupted(signum, frame):
+        """Treat SIGTERM like Ctrl-C, so the run stops between attempts and keeps what finished."""
+        raise KeyboardInterrupt
+
+    before = signal.signal(signal.SIGTERM, interrupted)
     try:
         if args.agent == "perfect":
             keys = {r.number: r.expected for r in load_requests(args.split, args.allow_test_split)}
@@ -330,32 +474,74 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"refused: {error} (a differing data file can be named with --data-diff-ok, and each ticket "
                       "that depends on it left out with --not-run)")
                 return 2
+            if args.agent_version and str(agent.version) != args.agent_version:
+                print(f"refused: the published drafter is agent version {agent.version}, but this run requires "
+                      f"version {args.agent_version}; nothing was sent")
+                return 2
         else:
             agent = always_stop
         skip = dict(entry.split("=", 1) for entry in args.not_run)
         results = run(agent, args.split, args.allow_test_split, args.reviewed_only, args.token_budget, not_run, replies, skip,
-                      set(args.only) if args.only else None)
+                      set(args.only) if args.only else None, attempts=attempts, max_attempts=args.max_attempts,
+                      pace_tokens=args.pace_tokens, reserve_per_call=args.reserve_per_call, stop_after=args.stop_after,
+                      progress=progress, min_gap=args.min_gap if args.agent == "foundry" else 0,
+                      on_attempt=lambda attempt: _save(args.out, record()) if args.out else None,
+                      stop_on_failure=args.stop_on_failure)
     except PermissionError as error:
         print(f"refused: {error} (command line: --allow-test-split)")
         return 2
+    finally:
+        signal.signal(signal.SIGTERM, before)
+    reasons = {why for _, why in not_run}
+    status = ("interrupted" if "run interrupted" in reasons
+              else "stopped" if any(why.startswith("run stopped") for why in reasons) else "complete")
     report = format_report(results, args.split, args.agent)
     if not_run:
         report += "\n\nNot run\n" + "\n".join(f"  {number}  {why}" for number, why in not_run)
+    report += "\n\n" + coverage(results, not_run)
     inner = getattr(agent, "inner", agent)
+    if getattr(inner, "version", None):
+        report += f"\n\nAgent version: {inner.version}"
     if getattr(inner, "snapshot", None):
         now = inner.pointer_now()
         report += f"\n\nSnapshot pinned for every tool call: {inner.snapshot}"
         if now != inner.snapshot:
             report += f"\ncurrent.json now names {now}: main moved during the run, and the run kept the pinned snapshot"
-    calls = getattr(inner, "calls", [])
+    calls = _calls(inner)
     if calls:
         report += (f"\n\nTokens: {sum(c.input_tokens for c in calls)} in, {sum(c.output_tokens for c in calls)} out, "
                    f"over {len(calls)} calls; tool calls: {sum(len(c.tools) for c in calls)}")
+    if status != "complete":
+        report += f"\n\nRun {status}: the sheet covers only the tickets answered before it stopped"
     print(report)
     if args.out:
-        args.out.write_text(json.dumps({"agent": args.agent, "split": args.split, "replies": replies,
-                                        "calls": [vars(c) for c in calls], "not_run": not_run}, indent=2) + "\n")
-    return 0
+        _save(args.out, record())
+    return {"complete": 0, "stopped": 3, "interrupted": 130}[status]
+
+
+def coverage(results: list[TicketResult], not_run: list) -> str:
+    """How many tickets were answered and scored, and why each of the others was not, kept apart from wrong answers."""
+    total = len(results) + len(not_run)
+    rows = {"Answered and scored": len(results), "Throttled (rate limit)": 0, "Other infrastructure error": 0,
+            "Run stopped or interrupted": 0, "Left out by design or selection": 0}
+    for _, why in not_run:
+        if why.startswith("infrastructure: rate_limit_exceeded"):
+            rows["Throttled (rate limit)"] += 1
+        elif why.startswith("infrastructure:"):
+            rows["Other infrastructure error"] += 1
+        elif why == "run interrupted" or why.startswith("run stopped"):
+            rows["Run stopped or interrupted"] += 1
+        else:
+            rows["Left out by design or selection"] += 1
+    return "Coverage (wrong answers are in the sheet above, never here)\n" + "\n".join(
+        f"  {label:<34}{n:>3} / {total}" for label, n in rows.items())
+
+
+def _save(path: Path, record: dict):
+    """Write the run so far to path, through a temporary file, so a stop never leaves half a file."""
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(record, indent=2, default=str) + "\n")
+    os.replace(tmp, path)
 
 
 if __name__ == "__main__":

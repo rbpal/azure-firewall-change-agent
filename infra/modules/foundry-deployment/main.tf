@@ -1,5 +1,6 @@
-# One model deployment on a Foundry resource. Capacity is in units: one unit
-# is 1,000 tokens and 1 request per minute, so a small capacity caps spend.
+# One model deployment on a Foundry resource. Capacity is a throughput limit in
+# units: one unit allows 1,000 tokens and 1 request per minute. Billing is per
+# token, so capacity does not cap spend.
 resource "azurerm_cognitive_deployment" "this" {
   name                   = var.name
   cognitive_account_id   = var.foundry_id

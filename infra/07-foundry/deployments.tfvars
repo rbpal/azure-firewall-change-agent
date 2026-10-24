@@ -6,14 +6,20 @@
 #   gpt-6-luna    $0.10 input / $0.50 output  - the agent
 #   gpt-5.4-mini  $0.75 input / $4.50 output  - the judge for Foundry's quality checks
 # The judge is a different model from the agent, so it does not grade itself.
-# Capacity caps spend: one unit is 1,000 tokens and 1 request per minute.
+# Capacity is a throughput limit, not a spending cap: one unit allows 1,000
+# tokens and 1 request per minute. Billing is per token, so the same run costs
+# the same at any capacity; spend is watched by budget-fwagentic-monthly.
+# gpt-6-luna-agent went from 30 to 60 units on 2026-10-24: validation runs at 30
+# hit the 30,000-token limit on 2026-10-23 (98 throttled requests) and on
+# 2026-10-24 (one ticket throttled on all 3 attempts). 60 of the
+# subscription's 250 GlobalStandard gpt-6-luna units in eastus2.
 # Versions are pinned and never auto-upgraded, so eval scores refer to one model.
 deployments = {
   "gpt-6-luna-agent" = {
     model_name    = "gpt-6-luna"
     model_version = "2026-09-22"
     sku_name      = "GlobalStandard"
-    capacity      = 30
+    capacity      = 60
   }
   "gpt-5.4-mini-judge" = {
     model_name    = "gpt-5.4-mini"

@@ -30,8 +30,12 @@ Safety rules:
    overwrites an edit it did not make.
 4. The draft record (reply, keys, file bytes before and after) is kept outside the
    repo, under the user's state folder, so it can never be committed.
-5. Every ticket is assumed approved in ServiceNow before it arrives. An edit may not
-   change the ticket's state or approvals, so review can never bypass them.
+5. Every ticket is assumed approved in ServiceNow before it arrives. An engineer's edit is
+   an authorized revision and may widen the ticket; the engineer obtains any approval it
+   needs outside this workflow (RB-01-8). An edit may not change the ticket's state or
+   approval records. Each edit is audited: number, engineer, time, note, every value before
+   and after, and the ticket version before and after; the agent receives these with the
+   acceptance.
 6. A malformed or incomplete ticket is kept, as awaiting_review, and never reaches
    the agent. Only an engineer's edit can clear an invalid or missing address; the
    workflow never picks a reading, normalises a prefix or fills in an address.
@@ -258,16 +262,25 @@ def edit(repo: Path, number: str, ticket_path: str, engineer: str, note: str) ->
     for field in ("state", "approvals"):
         if new.get(field) != record["ticket"].get(field):
             raise Refused(f"{number}: an edit may not change {field}; ServiceNow approvals are not the engineer's to edit")
-    old = record["ticket"]
+    old, before = record["ticket"], record["ticket_version"]
     changes = {k: {"before": old.get(k), "after": new.get(k)} for k in sorted(set(old) | set(new)) if old.get(k) != new.get(k)}
     findings = intake_findings(repo, new)
     record.update(ticket=new, ticket_version=ticket_version(new), findings=findings, missing=[], status="awaiting_review",
                   reply=None)
     record.pop("review", None)  # an acceptance covers the version it was given for, never an edited one
-    record["history"].append({"at": _now(), "action": "edit", "engineer": engineer, "note": note, "changes": changes,
-                              "ticket_version": record["ticket_version"]})
+    record["history"].append({"at": _now(), "action": "edit", "number": number, "engineer": engineer, "note": note,
+                              "changes": changes, "ticket_version_before": before,
+                              "ticket_version_after": record["ticket_version"]})
     save_record(repo, record)
     return draft_note(record)
+
+
+EDIT_AUDIT = ("number", "at", "engineer", "note", "changes", "ticket_version_before", "ticket_version_after")
+
+
+def edits(record: dict) -> list[dict]:
+    """The engineer's edits of this ticket, oldest first, as the agent receives them with the acceptance."""
+    return [{k: h.get(k) for k in EDIT_AUDIT} for h in record["history"] if h["action"] == "edit"]
 
 
 def accept(repo: Path, number: str, version: str, engineer: str, reason: str, planned_path: str | None,
@@ -292,9 +305,10 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
         raise Refused(f"{number}: the planned-address record does not fit the ticket:\n  " + "\n  ".join(errors))
     missing = missing_spoke_files(repo, record["ticket"], planned)
     review = {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": record["ticket_version"],
-              "accepted": [f["code"] for f in record["findings"]], "planned": planned}
+              "accepted": [f["code"] for f in record["findings"]], "planned": planned, "edits": edits(record)}
     reply, source = (None, None) if missing else agent_reply(repo, record["ticket"], review, reply_path)
-    record["history"].append({"at": _now(), "action": "accept", **review, **({"agent": source} if source else {})})
+    record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"},
+                              **({"agent": source} if source else {})})
     record["review"] = review  # the engineer_review a real agent receives with the ticket
     record["missing"] = missing
     if missing:

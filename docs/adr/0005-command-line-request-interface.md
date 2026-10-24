@@ -24,6 +24,8 @@ A Python command-line tool, `fwagent`, run on the engineer's laptop.
 
 Amended 2026-10-20: the workflow never rejects a ticket on its own. Every ticket waits for the engineer to confirm its details and accept its exact version before the agent runs; problems wait the same way, and the engineer rejects, edits or accepts (`edit` and `accept` added; RB-01-8). The final review of the draft (`approve`) is unchanged.
 
+Amended 2026-10-24: an engineer's `edit` is an authorized revision of the ticket and may widen its scope; the engineer obtains any approval it needs outside this workflow. The original approvals do not have to cover the revised values. Each edit is recorded with the ticket number, engineer, time, note, every value before and after, and the ticket version before and after, and the agent receives that record with the acceptance. Every other check still runs, and only acceptance of the revised version lets the agent draft (RB-01-8).
+
 The tool signs in with the engineer's own `az login`. The draft shows up as a normal diff in VS Code.
 
 ## Why

@@ -11,7 +11,7 @@ A rule that exists only in the live policy does not count. It was added outside 
 
 ## RB-01-2 — Take the ranges from the approved ticket
 
-The ticket is already approved, and that approval covers which systems may talk to each other. Do not re-check it or go back to the partner. Take the source, destination and ports from the ticket exactly as approved. Never widen, narrow or swap them.
+The ticket is already approved, and that approval covers which systems may talk to each other. Do not re-check it or go back to the partner. Take the source, destination and ports from the ticket exactly as approved. Never widen, narrow or swap them. When the engineer has revised the ticket (RB-01-8), its revised values are the approved values.
 
 Put the ticket's addresses into the rule as given, in the ticket's type (STD-COLL-03). A CIDR on the ticket goes into the rule as that CIDR. An IP group goes in only when the ticket names it, and then by name. The two never mix: never put a group in place of a CIDR, or a CIDR in place of a group. Groups are approved through their own process. If the named group does not exist, escalate rather than create it.
 
@@ -72,7 +72,7 @@ Code checks the ticket before the agent sees it. A malformed or incomplete ticke
 The engineer then decides:
 
 - **Reject.** The request closes and nothing is implemented.
-- **Edit.** The engineer supplies the corrected ticket. Every check runs again on it, and it waits for acceptance of the new version; the draft then uses only the confirmed values. The edit and its author are recorded. An edit never changes the ticket's state or approvals.
+- **Edit.** The engineer supplies the revised ticket. An engineer's edit is an authorized revision: it may correct a value or change the request's scope, such as adding a source or a site. The engineer is responsible for any approval the revision needs outside this workflow. The original approvals do not have to cover the revised values, and nothing flags or stops a request only because the engineer changed or widened it. Every check runs again on the revised ticket, and it waits for acceptance of the new version; the draft then uses only the revised values. A revised address outside the address plan is still outside it, and every other check still applies. Each edit is recorded: the ticket number, the engineer, the time, the note, every changed value before and after, and the ticket version before and after. An edit never changes the ticket's state or approval records; the original ticket is kept, and no approval is added.
 - **Accept.** The engineer approves the request as it stands, with a reason; the name, time and reason are recorded. Accept is possible only for `wider_than_plan`, `planned_address`, `address_not_in_plan` and `skip_approval_requested`. An unknown or planned address also needs the engineer's record of its CIDR, environment, site, firewall policy and placement. The draft still passes every scope check, so acceptance never adds an address or a site.
 
 An invalid, missing or contradictory value can only be cleared by an edit with a valid value. Acceptance alone never makes it executable, and the agent never invents a correction.

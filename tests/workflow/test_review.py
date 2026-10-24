@@ -8,6 +8,7 @@ import ipaddress
 import json
 import random
 import re
+from pathlib import Path
 
 import pytest
 import yaml
@@ -371,6 +372,109 @@ def test_an_edit_is_saved_without_the_agent(repo, tmp_path):
     fixed, _ = ticket_with(tmp_path, "fixed", cidr="10.102.15.0/24")
     assert run(repo, "edit", ADD, fixed, "--engineer", ENGINEER, "--note", "x") == cli.REVIEW
     assert cli.load_record(repo, ADD)["ticket"]["sources"][0]["cidr"] == "10.102.15.0/24"
+
+
+# An engineer's edit is an authorized revision (RB-01-8): it may widen the ticket, and every edit is audited.
+
+DR_SOURCE = {"environment": "stage", "site": "dr", "cidr": "10.103.15.0/24"}  # rprt at stage DR, in the plan
+
+
+def widened(tmp_path, name="widened"):
+    """RITM0011041 revised by the engineer to add stage DR and its rprt source; return the file path and the ticket."""
+    t = copy.deepcopy(request(ADD)[0])
+    t["change_sites"] = {"stage": ["primary", "dr"]}
+    t["sources"] = t["sources"] + [DR_SOURCE]
+    path = tmp_path / f"{name}.yaml"
+    path.write_text(yaml.safe_dump(t))
+    return str(path), t
+
+
+def widened_reply(tmp_path):
+    """The labelled stage primary rule plus the same rule at stage DR from its own source."""
+    rule = request(ADD)[1]["rules"][0]
+    dr = {**rule, "env_site": "stage-centralus", "sources": [DR_SOURCE["cidr"]]}
+    return reply_file(tmp_path, "widened-reply", {"outcome": "draft", "rules": [rule, dr]})
+
+
+def test_an_edit_that_widens_the_source_scope_is_accepted_and_drafted_as_an_authorized_revision(repo, tmp_path):
+    ticket, _ = files(tmp_path, ADD)
+    run(repo, "submit", ticket)
+    submitted = cli.load_record(repo, ADD)["ticket"]
+    path, revised = widened(tmp_path)
+    assert run(repo, "edit", ADD, path, "--engineer", ENGINEER, "--note", "Requester added stage DR") == cli.REVIEW
+    record = cli.load_record(repo, ADD)
+    assert record["findings"] == [] and record["status"] == "awaiting_review"  # a wider scope is not a finding
+    assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "checked",
+               "--reply", widened_reply(tmp_path)) == cli.DONE
+    record = cli.load_record(repo, ADD)
+    assert record["status"] == "drafted" and record["ticket"] == revised
+    assert sorted(record["files"]) == sorted([ADD_FILE, ADD_FILE.replace("stage-eastus2", "stage-centralus")])
+    assert record["original_ticket"] == submitted  # the original is kept
+    assert record["ticket"]["approvals"] == submitted["approvals"]  # no approval is added or changed
+
+
+def test_every_edit_is_audited_with_its_note_values_and_both_versions(repo, tmp_path):
+    ticket, _ = files(tmp_path, ADD)
+    run(repo, "submit", ticket)
+    first = cli.load_record(repo, ADD)["ticket_version"]
+    path, _ = widened(tmp_path)
+    run(repo, "edit", ADD, path, "--engineer", ENGINEER, "--note", "Requester added stage DR")
+    second = cli.load_record(repo, ADD)["ticket_version"]
+    t = yaml.safe_load(Path(path).read_text())
+    t["ports"] = ["8443"]
+    Path(path).write_text(yaml.safe_dump(t))
+    run(repo, "edit", ADD, path, "--engineer", "Ari Gomez", "--note", "Port per requester")
+    record = cli.load_record(repo, ADD)
+    edits = [h for h in record["history"] if h["action"] == "edit"]
+    assert [(e["number"], e["engineer"], e["note"]) for e in edits] == [
+        (ADD, ENGINEER, "Requester added stage DR"), (ADD, "Ari Gomez", "Port per requester")]
+    assert [(e["ticket_version_before"], e["ticket_version_after"]) for e in edits] == [
+        (first, second), (second, record["ticket_version"])]
+    assert all(re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+00:00", e["at"]) for e in edits)
+    assert edits[0]["changes"]["sources"]["after"][-1] == DR_SOURCE
+    assert edits[0]["changes"]["change_sites"] == {"before": {"stage": ["primary"]}, "after": {"stage": ["primary", "dr"]}}
+    assert edits[1]["changes"] == {"ports": {"before": ["443"], "after": ["8443"]}}
+    assert record["original_ticket"]["ports"] == ["443"] and record["original_ticket"]["sources"] == request(ADD)[0]["sources"]
+
+
+def test_the_agent_gets_the_revised_ticket_and_the_engineers_edits(repo, tmp_path, monkeypatch):
+    from tests.workflow.test_agent import foundry
+    monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
+    fake = foundry('{"outcome": "stop_and_ask", "reason": "hub_rule", "rules": []}')
+    monkeypatch.setattr(cli, "live_agent", lambda root: fake)
+    ticket, _ = files(tmp_path, ADD)
+    run(repo, "submit", ticket)
+    first = cli.load_record(repo, ADD)["ticket_version"]
+    path, revised = widened(tmp_path)
+    run(repo, "edit", ADD, path, "--engineer", ENGINEER, "--note", "Requester added stage DR")
+    run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "checked")
+    sent = json.loads(fake.openai.responses.requests[0]["input"])
+    assert sent["ticket"] == revised
+    review = sent["engineer_review"]
+    assert review["decision"] == "accept" and review["ticket_version"] == cli.load_record(repo, ADD)["ticket_version"]
+    [edit] = review["edits"]
+    assert (edit["number"], edit["engineer"], edit["note"]) == (ADD, ENGINEER, "Requester added stage DR")
+    assert edit["ticket_version_before"] == first and edit["ticket_version_after"] == review["ticket_version"]
+    assert edit["changes"]["sources"]["after"] == revised["sources"]
+
+
+def test_an_acceptance_from_before_the_edit_cannot_be_reused_for_the_revised_ticket(repo, tmp_path, capsys):
+    ticket, reply = stop(tmp_path, "wider_than_plan")
+    draft(repo, ticket, reply)  # accepted once, and the agent stopped: the ticket waits again
+    old = version(repo)
+    assert cli.load_record(repo, ADD)["review"]["ticket_version"][:12] == old
+    path, _ = widened(tmp_path)
+    run(repo, "edit", ADD, path, "--engineer", ENGINEER, "--note", "Requester added stage DR")
+    record = cli.load_record(repo, ADD)
+    assert "review" not in record and record["ticket_version"][:12] != old
+    before = snapshot(repo)
+    capsys.readouterr()
+    assert run(repo, "accept", ADD, "--ticket-version", old, "--engineer", ENGINEER, "--reason", "again",
+               "--reply", widened_reply(tmp_path)) == cli.REFUSED
+    assert "read the current review note" in capsys.readouterr().out
+    assert changed(before, repo) == set() and cli.load_record(repo, ADD)["status"] == "awaiting_review"
+    assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "revised",
+               "--reply", widened_reply(tmp_path)) == cli.DONE
 
 
 # Reject: closes the request without implementing it.

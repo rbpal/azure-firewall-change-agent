@@ -383,6 +383,23 @@ def test_a_ticket_throttled_on_every_attempt_is_not_run_and_never_scored():
     assert clock.waits == [60.0, 60.0]  # no wait after the last attempt
 
 
+def test_a_response_returned_as_failed_by_the_rate_limit_is_retried_and_never_written_as_a_reply():
+    # RITM0011003 on 2026-10-24: the outer trace span said OK while the agent itself hit the rate limit
+    from types import SimpleNamespace
+    from workflow.agent import FoundryAgent
+    reply = '{"outcome": "draft", "rules": []}'
+    failed = SimpleNamespace(status="failed", error=SimpleNamespace(code="rate_limit_exceeded", message="throttled"),
+                             output_text=reply, output=[], usage=SimpleNamespace(input_tokens=0, output_tokens=0))
+    openai = SimpleNamespace(responses=SimpleNamespace(create=lambda **kwargs: failed))
+    agent = FoundryAgent(SimpleNamespace(), openai, "2", "c" * 40)
+    clock, attempts, not_run, replies = Clock(), [], [], []
+    results = run(agent, only={"RITM0011003"}, attempts=attempts, not_run=not_run, replies=replies, max_attempts=3,
+                  sleep=clock.sleep, clock=clock, jitter=lambda: 0.0)
+    assert results == [] and replies == []
+    assert [a["kind"] for a in attempts] == ["rate_limit"] * 3
+    assert ("RITM0011003", "infrastructure: rate_limit_exceeded on all 3 attempts") in not_run
+
+
 def test_other_infrastructure_errors_are_not_retried_and_never_scored():
     from workflow.agent import InfraError
     attempts, not_run = [], []

@@ -162,8 +162,8 @@ def read(commit):
 class FakeResponses:
     """Stands in for openai.responses: returns one canned response and records each request."""
 
-    def __init__(self, text, fail=None, calls=None):
-        self.text, self.fail, self.requests = text, fail, []
+    def __init__(self, text, fail=None, calls=None, **fields):
+        self.text, self.fail, self.requests, self.fields = text, fail, [], fields
         self.calls = [mcp_call("locate_address_for_env_site", read(SNAP))] if calls is None else calls
 
     def create(self, **kwargs):
@@ -171,12 +171,12 @@ class FakeResponses:
         if self.fail:
             raise self.fail
         return SimpleNamespace(output_text=self.text, usage=SimpleNamespace(input_tokens=1200, output_tokens=80),
-                               output=[*self.calls, SimpleNamespace(type="message")])
+                               output=[*self.calls, SimpleNamespace(type="message")], **self.fields)
 
 
-def foundry(text, fail=None, calls=None):
-    """A FoundryAgent on fake clients, pinned to version 7 and snapshot SNAP."""
-    return FoundryAgent(SimpleNamespace(), SimpleNamespace(responses=FakeResponses(text, fail, calls)), "7", SNAP)
+def foundry(text, fail=None, calls=None, **fields):
+    """A FoundryAgent on fake clients, pinned to version 7 and snapshot SNAP; fields are extra response fields."""
+    return FoundryAgent(SimpleNamespace(), SimpleNamespace(responses=FakeResponses(text, fail, calls, **fields)), "7", SNAP)
 
 
 def test_a_call_sends_only_the_ticket_and_review_to_the_pinned_version_and_records_its_use():
@@ -239,6 +239,51 @@ def test_an_invalid_reply_is_a_model_error_not_an_infrastructure_error():
     with pytest.raises(AgentError) as raised:
         foundry('{"outcome": "stop_and_ask", "rules": []}')({"number": "RITM0011033"})  # no reason, as 0033 replied
     assert not isinstance(raised.value, agent_mod.InfraError) and "reason" in str(raised.value)
+
+
+def error(code):
+    """The error object a finished but failed response carries."""
+    return SimpleNamespace(code=code, message=f"{code} message")
+
+
+def test_a_returned_response_that_failed_on_the_rate_limit_is_rate_limited_never_a_reply():
+    # the service can answer without raising and mark the response failed; its text must never be scored
+    a = foundry(STOP, status="failed", error=error("rate_limit_exceeded"))
+    with pytest.raises(agent_mod.RateLimited, match="rate_limit_exceeded") as raised:
+        a({"number": "RITM0011003"})
+    assert raised.value.retry_after is None
+    call = a.calls[0]
+    assert "status failed" in call.error and "rate_limit_exceeded" in call.error
+    assert (call.input_tokens, call.output_tokens) == (1200, 80)  # what the service reports is still counted
+
+
+@pytest.mark.parametrize("status, code", [("failed", "server_error"), ("failed", None), ("cancelled", None),
+                                          ("in_progress", None), ("queued", None)])
+def test_a_returned_response_the_service_did_not_finish_is_an_infrastructure_error(status, code):
+    a = foundry(STOP, status=status, error=error(code) if code else None)
+    with pytest.raises(agent_mod.InfraError, match=f"status {status}") as raised:
+        a({"number": "RITM0011003"})
+    assert not isinstance(raised.value, agent_mod.RateLimited) and f"status {status}" in a.calls[0].error
+
+
+def test_a_returned_response_failed_on_its_content_is_the_agents_failure_not_infrastructure():
+    a = foundry(STOP, status="failed", error=error("invalid_prompt"))
+    with pytest.raises(AgentError, match="invalid_prompt") as raised:
+        a({"number": "RITM0011003"})
+    assert not isinstance(raised.value, agent_mod.InfraError)
+
+
+def test_an_incomplete_response_is_refused_even_when_its_text_is_a_valid_reply():
+    a = foundry(STOP, status="incomplete", incomplete_details=SimpleNamespace(reason="max_output_tokens"))
+    with pytest.raises(AgentError, match="incomplete: max_output_tokens") as raised:
+        a({"number": "RITM0011003"})
+    assert not isinstance(raised.value, agent_mod.InfraError)
+    assert a.calls[0].error.startswith("the agent's response is incomplete: max_output_tokens")
+
+
+@pytest.mark.parametrize("fields", [{"status": "completed", "error": None}, {}], ids=["completed", "no status field"])
+def test_a_completed_response_is_still_read_as_a_reply(fields):
+    assert foundry(STOP, **fields)({"number": "RITM0011003"})["reason"] == "hub_rule"
 
 
 def test_a_controlled_dns_condition_is_refused_without_a_call():

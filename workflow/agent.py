@@ -96,6 +96,32 @@ def failed_call(error: Exception) -> InfraError:
     return RateLimited(message, retry_after=wait)
 
 
+SERVICE_CODES = {"server_error", "vector_store_timeout"}  # failed responses that are the service's fault, not the agent's
+
+
+def unfinished(response) -> AgentError | None:
+    """The error for a response the service returned without finishing it, or None when it completed.
+
+    The service can answer without raising and mark the response failed, incomplete or still running; its
+    text is then never read as a reply. A rate limit is RateLimited, so it is retried; any other service
+    failure or an unfinished run is InfraError; a failure on the request's content, or a reply cut short
+    (incomplete), is the agent's own failure. A response with no status field counts as completed.
+    """
+    status = getattr(response, "status", None)
+    if status in (None, "completed"):
+        return None
+    code = getattr(getattr(response, "error", None), "code", None)
+    if status == "incomplete":
+        reason = getattr(getattr(response, "incomplete_details", None), "reason", None)
+        return AgentError(f"the agent's response is incomplete: {reason or 'no reason given'}")
+    message = f"the agent's response has status {status}" + (f": {code}" if code else "")
+    if code == "rate_limit_exceeded":
+        return RateLimited(message)
+    if status == "failed" and code and code not in SERVICE_CODES:
+        return AgentError(message)
+    return InfraError(message)
+
+
 def instructions(repo: Path) -> str:
     """What the agent is told on every call: agents/drafter.md, then each standard and runbook page."""
     parts = [(AGENTS / "drafter.md").read_text().strip()]
@@ -312,6 +338,10 @@ class FoundryAgent:
         usage = getattr(response, "usage", None)
         call.input_tokens = getattr(usage, "input_tokens", 0) or 0
         call.output_tokens = getattr(usage, "output_tokens", 0) or 0
+        refused = unfinished(response)
+        if refused is not None:
+            call.error = str(refused)
+            raise refused
         call.tools = [getattr(item, "name", "?") for item in getattr(response, "output", []) or []
                       if getattr(item, "type", "") == "mcp_call"]
         read = tool_commits(response)

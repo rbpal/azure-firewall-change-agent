@@ -196,8 +196,10 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
     """Hand each ticket to the agent, score each reply, and return one result per scored ticket.
 
     reviewed_only leaves out labels still pending review. An agent with controlled_dns = False
-    (its DNS tool runs in Azure) does not get requests with a dns: block. token_budget stops the
-    run before a ticket once the agent's recorded tokens reach it. skip maps ticket numbers the
+    (its DNS tool runs in Azure) does not get requests with a dns: block. token_budget is a stopping
+    threshold, not a spending cap: no new ticket starts once the agent's recorded tokens reach it, but the
+    ticket already running, with its retries, can go past it, and a failed call the service reports no use
+    for adds nothing to the count. skip maps ticket numbers the
     caller leaves out to the reason, such as a snapshot that lacks the ticket's rule. only, when given, runs just
     those ticket numbers. Each left-out ticket is appended to not_run as (number, why), never scored and never
     written as a reply; each reply goes to replies, so nothing vanishes.
@@ -418,7 +420,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-test-split", action="store_true", help="unseal the test split")
     parser.add_argument("--reviewed-only", action="store_true", help="leave out labels still pending review")
     parser.add_argument("--only", nargs="+", metavar="RITM", help="run only these ticket numbers")
-    parser.add_argument("--token-budget", type=int, help="stop before a ticket once this many tokens are used")
+    parser.add_argument("--token-budget", type=int,
+                        help="a stopping threshold, not a spending cap: no new ticket starts once the recorded tokens "
+                             "reach this; the ticket already running, with its retries, can go past it")
     parser.add_argument("--out", type=Path, help="write each reply, attempt and the token use to this JSON file, "
                                                  "rewritten after every ticket")
     parser.add_argument("--not-run", nargs="+", default=[], metavar="RITM=WHY",

@@ -9,6 +9,7 @@ from gateway import run
 from tools.dns_lookup_for_fqdn import dns_lookup_for_fqdn
 from tools.duplicate_rule_check import duplicate_rule_check
 from tools.locate_address_for_env_site import locate_address_for_env_site
+from tools.resolve_env_site import resolve_env_site
 from tools.whoami import whoami
 
 app = func.FunctionApp()
@@ -58,6 +59,25 @@ def locate_address_for_env_site_tool(context: str) -> str:
 
 @app.mcp_tool_trigger(
     arg_name="context",
+    tool_name="resolve_env_site",
+    description=("Give the env-site name, such as prod-centralus, for an environment and an Azure site "
+                 "(primary or dr), with that env-site's region, hub firewall, policy and public IP. Use it "
+                 "when the ticket gives no internal address for a selected site. Reads routing from the copy "
+                 "of main (the pinned snapshot, else the latest) and names the commit it read. Answers "
+                 "resolved false, with the pairs routing lists, when there is not exactly one match."),
+    tool_properties=json.dumps([
+        {"propertyName": "environment", "propertyType": "string",
+         "description": "The ticket's environment, such as prod."},
+        {"propertyName": "site", "propertyType": "string",
+         "description": "The ticket's Azure site: primary or dr."},
+    ]),
+)
+def resolve_env_site_tool(context: str) -> str:
+    return run(context, resolve_env_site, snapshot=True)
+
+
+@app.mcp_tool_trigger(
+    arg_name="context",
     tool_name="duplicate_rule_check",
     description=("Check whether an existing firewall rule in one env-site already allows all of a new rule's "
                  "traffic. Lists each match as duplicate or covers, with its key, file and commit. "
@@ -68,8 +88,14 @@ def locate_address_for_env_site_tool(context: str) -> str:
         {"propertyName": "type", "propertyType": "string",
          "description": "The new rule's type: network, application or dnat."},
         {"propertyName": "rule", "propertyType": "object",
-         "description": ("The new rule's fields, such as protocols, source_addresses or source_ip_groups, "
-                         "destination_addresses, destination_fqdns and destination_ports.")},
+         "description": ("The new rule's fields, each a list of strings except the dnat fields destination_address, "
+                         "translated_address and translated_port, which are single strings. network: protocols such as "
+                         "[\"TCP\"], source_addresses or source_ip_groups, destination_addresses, destination_ip_groups "
+                         "or destination_fqdns, and destination_ports such as [\"443\"]. application: protocols with the "
+                         "port inside, such as [\"Https:443\"], source_addresses or source_ip_groups, and "
+                         "destination_fqdns such as [\"api.example.com\"] (a hostname, never a URL); no "
+                         "destination_ports. dnat: protocols, source_addresses or source_ip_groups, "
+                         "destination_address, destination_ports, translated_address and translated_port.")},
     ]),
 )
 def duplicate_rule_check_tool(context: str) -> str:

@@ -35,6 +35,11 @@ ALLOWED_KEYS = {
     "dnat": {"protocols", "source_addresses", "source_ip_groups", "destination_address",
              "destination_ports", "translated_address", "translated_port"},
 }
+# Said back to the agent when it sends an application rule in the network shape (2026-10-25: 25 of
+# 291 tool calls in the v3 validation run were refused for argument shape).
+APP_PORTS_HINT = "; an application rule gives each port inside its protocol, such as protocols [\"Https:443\"]"
+PROTOCOLS_HINT = (", such as [\"Https:443\"] for an application rule or [\"TCP\"] for a network rule; "
+                  "never objects")
 ANY = "*"
 ALL_PORTS = (1, 65535)
 EVERYWHERE = ipaddress.IPv4Network("0.0.0.0/0")
@@ -44,7 +49,7 @@ def _strings(rule: dict, key: str) -> list[str]:
     """Return a list field of a rule, or an empty list. Refuse anything that is not a list of strings."""
     value = rule.get(key, [])
     if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
-        raise BadArguments(f"{key} must be a list of non-empty strings")
+        raise BadArguments(f"{key} must be a list of non-empty strings" + (PROTOCOLS_HINT if key == "protocols" else ""))
     return [v.strip() for v in value]
 
 
@@ -188,7 +193,8 @@ def _check_new_rule(new_type, rule) -> dict:
         raise BadArguments("rule must be an object with the new rule's fields")
     extra = set(rule) - ALLOWED_KEYS[new_type]
     if extra:
-        raise BadArguments(f"fields not used by a {new_type} rule: {sorted(extra)}")
+        raise BadArguments(f"fields not used by a {new_type} rule: {sorted(extra)}"
+                           + (APP_PORTS_HINT if new_type == "application" and "destination_ports" in extra else ""))
     clean = {}
     for key in rule:
         if key in ("destination_address", "translated_address", "translated_port"):

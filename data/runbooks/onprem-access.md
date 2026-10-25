@@ -28,7 +28,7 @@ Use a network rule; on-prem flows name addresses, not hostnames. Name it by STD-
 
 ## RB-05-5 — Escalate instead of drafting when
 
-Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
+Each item gives the reason code the reply carries when it stops. Every stop carries a code.
 
 - an on-prem CIDR is not in the address plan's on-prem list: `address_not_in_plan`
 - an on-prem CIDR is wider than its user subnet, such as a `/23` where the plan lists a `/24`: `wider_than_plan` (RB-01-6). A narrower CIDR inside one subnet, such as a `/25` or a single host `/32`, is drafted as given

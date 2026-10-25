@@ -45,14 +45,15 @@ AGENT_NAME = "fwagent-drafter"
 DEFAULT_MODEL = "gpt-6-luna-agent"
 DEFAULT_CONNECTION = "mcp-fwagentic-tools"
 MCP_URL = "https://func-fwagentic-dev.azurewebsites.net/runtime/webhooks/mcp"
-TOOLS = ["locate_address_for_env_site", "duplicate_rule_check", "dns_lookup_for_fqdn"]  # whoami is diagnostic only
+TOOLS = ["locate_address_for_env_site", "resolve_env_site", "duplicate_rule_check", "dns_lookup_for_fqdn"]  # whoami is diagnostic only
 AGENTS = Path(__file__).resolve().parent.parent / "agents"
 GUIDANCE = ("data/standards", "data/runbooks")
 REPLY_SCHEMA = json.loads((AGENTS / "reply.schema.json").read_text())
 FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.S)
 SNAPSHOT_HEADER = "X-Fwagent-Snapshot"
 COMMIT = re.compile(r"[0-9a-f]{40}")
-READS_MAIN = {"locate_address_for_env_site", "duplicate_rule_check"}  # their answers name the commit they read
+RAW_LIMIT = 20_000  # characters of an invalid reply kept for diagnosis; a valid reply is far shorter
+READS_MAIN = {"locate_address_for_env_site", "resolve_env_site", "duplicate_rule_check"}  # their answers name the commit they read
 DATA = ("data/network", "infra/envs")  # what the sync job copies, and what a draft is written into
 SNAPSHOT_ACCOUNT = "stfwagentfuncdev"
 SNAPSHOT_CONTAINER = "network-snapshot"
@@ -60,6 +61,11 @@ SNAPSHOT_CONTAINER = "network-snapshot"
 
 class AgentError(Exception):
     """The agent's call failed or its reply is not a valid reply; nothing is written."""
+
+    def __init__(self, message: str, raw: str | None = None):
+        """Keep the message and, for an invalid reply, the agent's raw text (cut to RAW_LIMIT) for diagnosis."""
+        super().__init__(message)
+        self.raw = raw
 
 
 class InfraError(AgentError):
@@ -132,7 +138,7 @@ def instructions(repo: Path) -> str:
 
 
 def definition(text: str, snapshot: str, model: str = DEFAULT_MODEL, connection: str = DEFAULT_CONNECTION) -> dict:
-    """The prompt agent: model, instructions, and the three read tools over MCP, pinned to one snapshot, with no approval step."""
+    """The prompt agent: model, instructions, and the four read tools over MCP, pinned to one snapshot, with no approval step."""
     if not COMMIT.fullmatch(snapshot or ""):
         raise AgentError(f"the snapshot must be a full commit SHA, not {snapshot!r}")
     return {"kind": "prompt", "model": model, "instructions": text,
@@ -262,11 +268,12 @@ def parse_reply(text: str) -> dict:
     try:
         reply = json.loads(body)
     except ValueError as error:
-        raise AgentError(f"the agent's reply is not JSON: {body[:200]!r}") from error
+        raise AgentError(f"the agent's reply is not JSON: {body[:200]!r}", raw=(text or "")[:RAW_LIMIT]) from error
     problems = sorted(jsonschema.Draft202012Validator(REPLY_SCHEMA).iter_errors(reply), key=lambda e: list(e.path))
     if problems:
         raise AgentError("the agent's reply does not fit agents/reply.schema.json:\n  "
-                         + "\n  ".join(f"{'/'.join(map(str, p.path)) or '(top)'}: {p.message}" for p in problems[:10]))
+                         + "\n  ".join(f"{'/'.join(map(str, p.path)) or '(top)'}: {p.message}" for p in problems[:10]),
+                         raw=(text or "")[:RAW_LIMIT])
     return reply
 
 
@@ -279,6 +286,8 @@ class Call:
     tools: list[str] = field(default_factory=list)
     commits: list[str | None] = field(default_factory=list)
     error: str | None = None
+    response_id: str | None = None  # finds the call's trace in Application Insights (gen_ai.response.id)
+    raw_reply: str | None = None  # the agent's text when it was not a valid reply, cut to RAW_LIMIT
 
 
 def connect(endpoint: str):
@@ -335,6 +344,7 @@ class FoundryAgent:
         except Exception as error:
             call.error = f"{type(error).__name__}: {error}"
             raise failed_call(error) from error
+        call.response_id = getattr(response, "id", None)
         usage = getattr(response, "usage", None)
         call.input_tokens = getattr(usage, "input_tokens", 0) or 0
         call.output_tokens = getattr(usage, "output_tokens", 0) or 0
@@ -353,5 +363,5 @@ class FoundryAgent:
         try:
             return parse_reply(getattr(response, "output_text", ""))
         except AgentError as error:
-            call.error = str(error).splitlines()[0]
+            call.error, call.raw_reply = str(error).splitlines()[0], error.raw
             raise

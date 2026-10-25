@@ -31,7 +31,7 @@ Delete the rule's entry. The workflow code then renumbers the rules after it in 
 
 ## RB-03-5 — Escalate instead of drafting when
 
-Each item gives the reason code the reply carries when it stops. An item marked *no code yet* has none; the reply stops and says why in words.
+Each item gives the reason code the reply carries when it stops. Every stop carries a code.
 
 - a matching rule also allows other traffic the ticket does not mention (`duplicate_rule_check` says `covers`): `rule_allows_more`
 - the rule is in the `hub` group, which serves every spoke: `hub_rule`

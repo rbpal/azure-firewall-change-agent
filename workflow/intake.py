@@ -24,14 +24,18 @@ from pathlib import Path
 
 import yaml
 
+from workflow.bypass import CODE as BYPASS, bypass_message, bypass_requests
 from workflow.tickets import ticket_errors
+from workflow.urls import CODE as URL_PORT, url_conflicts
 
 ADDRESS_PLAN = "data/network/address-plan.yaml"
 SIDES = ("sources", "destination")
 
 # Findings an engineer may accept as they stand. Every other code needs an edit, because
 # the ticket is malformed or contradicts itself and accepting it would leave a guess.
-ACCEPTABLE = {"wider_than_plan", "planned_address", "address_not_in_plan", "skip_approval_requested"}
+# skip_approval_requested is never acceptable: a request to bypass the review, an approval
+# or a required check is a mandatory stop that only an edit clears (workflow/bypass.py).
+ACCEPTABLE = {"wider_than_plan", "planned_address", "address_not_in_plan"}
 NEEDS_PLANNED = {"planned_address", "address_not_in_plan"}  # accepting these needs the engineer's planned-address record
 
 # ASCII digits only, matched against the whole text: \d would accept other scripts' digits
@@ -133,4 +137,6 @@ def intake_findings(repo: Path, ticket: dict) -> list[dict]:
         path = error.split(":", 1)[0]
         if not any(path == w or path.startswith(w + "/") for w in explained):
             out.append(finding("invalid_ticket", path, error))
+    out += [finding(URL_PORT, c["where"], c["message"]) for c in url_conflicts(ticket)]
+    out += [finding(BYPASS, m["where"], bypass_message(m), phrases=m["phrases"]) for m in bypass_requests(ticket)]
     return out

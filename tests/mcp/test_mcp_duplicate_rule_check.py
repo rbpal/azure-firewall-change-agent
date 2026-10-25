@@ -331,3 +331,30 @@ def test_gateway_returns_the_matches(allowed_context):
 def test_gateway_turns_a_bad_rule_into_bad_arguments(allowed_context):
     context = allowed_context({"env_site": "dev-eastus2", "type": "nope", "rule": AMQPS})
     assert json.loads(gateway.run(context, duplicate_rule_check, source=REAL))["error"] == "bad_arguments"
+
+
+# ---- argument hints: what the agent is told when it sends an application rule in the network shape
+
+def test_ports_outside_the_protocol_of_an_application_rule_are_refused_with_the_shape_to_use():
+    # 2026-10-25, v3 validation: 25 of 291 tool calls were refused for argument shape, as here.
+    rule = {"protocols": ["Https"], "source_addresses": ["10.106.20.0/24"], "destination_fqdns": ["api.litware.example"],
+            "destination_ports": ["443"]}
+    with pytest.raises(BadArguments, match=r"fields not used by a application rule: \['destination_ports'\]; "
+                                           r"an application rule gives each port inside its protocol, "
+                                           r'such as protocols \["Https:443"\]'):
+        check(rule, "application")
+
+
+def test_protocols_given_as_objects_are_refused_with_an_example():
+    rule = {"protocols": [{"protocol": "Https", "port": 443}], "source_addresses": ["10.106.20.0/24"],
+            "destination_fqdns": ["api.litware.example"]}
+    with pytest.raises(BadArguments, match=r'protocols must be a list of non-empty strings, such as \["Https:443"\] '
+                                           r'for an application rule or \["TCP"\] for a network rule; never objects'):
+        check(rule, "application")
+
+
+def test_a_network_rule_with_an_unknown_field_gets_no_application_hint():
+    with pytest.raises(BadArguments) as raised:
+        check({"protocols": ["TCP"], "source_addresses": ["10.100.14.0/24"], "destination_addresses": ["203.0.113.16/28"],
+               "destination_ports": ["5671"], "translated_port": "5671"})
+    assert "inside its protocol" not in str(raised.value)

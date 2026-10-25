@@ -158,7 +158,8 @@ def test_an_ip_group_in_place_of_the_tickets_cidr_fails():
     """ipg-xfer-lab holds exactly 10.106.20.0/24, but the ticket gave the CIDR, so the group is not approved."""
     score = score_least_privilege(HOSTNAME, reply(HOSTNAME, sources=["ipg-xfer-lab"]))
     assert score.result == "fail"
-    assert score.excess == ["lab-eastus2/xfer/allow-xfer-app-rules: sources ipg-xfer-lab is an IP group the ticket does not give (STD-COLL-03)"]
+    assert score.excess == ["lab-eastus2/xfer/allow-xfer-app-rules: sources ipg-xfer-lab is an IP group the labelled rule "
+                            "does not approve; the labelled rule approves 10.106.20.0/24 (STD-COLL-03)"]
 
 
 def test_the_ip_group_the_label_names_passes():
@@ -177,7 +178,7 @@ def test_an_ip_group_in_place_of_the_tickets_destination_cidr_fails():
     """The same rule for destinations: a partner group is not the partner CIDR the ticket approved."""
     score = score_least_privilege(NETWORK, reply(NETWORK, destinations=["ipg-partner-proseware"]))
     assert score.result == "fail"
-    assert any("ipg-partner-proseware is an IP group the ticket does not give" in line for line in score.excess)
+    assert any("ipg-partner-proseware is an IP group the labelled rule does not approve" in line for line in score.excess)
 
 
 def test_the_cidr_in_place_of_the_labelled_destination_group_fails():

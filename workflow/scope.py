@@ -60,7 +60,9 @@ from urllib.parse import urlsplit
 
 import yaml
 
+from workflow.bypass import check_no_bypass
 from workflow.rule_index import next_index
+from workflow.urls import CODE as URL_PORT, url_conflicts
 from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_type, spoke_path
 from workflow.tickets import SCHEMA_PATH
 
@@ -199,7 +201,7 @@ def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
     """Every reply address, protocol or port the ticket does not approve at that rule's env-site, and every open DNAT add."""
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
     removal = reply.get("action") == "remove"
-    errors = []
+    errors = [f"{c['where']}: {URL_PORT}: {c['message']}" for c in url_conflicts(ticket)]  # never a guessed port
     if not removal and all(_onprem(a) for a in ticket["sources"] + ticket["destination"]):
         errors.append("every source and destination on the ticket is on-prem, so it has no Azure address; a rule goes at "
                       "the env-site of the ticket's Azure address (RB-05-4, RB-05-5 both_ends_onprem)")
@@ -242,6 +244,7 @@ def selected_env_sites(repo: Path, ticket: dict) -> set[str]:
 
 def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None) -> list[tuple[Path, str, str]]:
     """Work out every changed file in memory, starting from `base` texts where given; return (path, new text, key) per rule."""
+    check_no_bypass(ticket)  # every write path passes here, whatever called it
     if reply.get("outcome") != "draft":
         return []
     removal = reply.get("action") == "remove"

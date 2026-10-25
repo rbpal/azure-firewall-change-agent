@@ -142,7 +142,9 @@ def _address_outside(value, approved: list[str]) -> str:
         if _plain(value) in {_plain(a) for a in approved}:
             return ""
         kind = "an IP group" if _plain(value).startswith("ipg-") else "a name"
-        return f"is {kind} the ticket does not give (STD-COLL-03)"
+        hint = "; a rule takes a URL's hostname, not the URL" if "://" in value else ""
+        return (f"is {kind} the labelled rule does not approve; the labelled rule approves "
+                f"{', '.join(map(str, approved)) or 'nothing'}{hint} (STD-COLL-03)")
     for a in approved:
         other = _network(a)
         if other is not None and other.version == net.version and net.subnet_of(other):

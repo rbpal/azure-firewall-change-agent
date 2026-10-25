@@ -35,6 +35,12 @@ CODED_2026_10_21 = {  # the escalations that had no code, each with a validation
     "rule_allows_more", "hub_rule", "ip_group_change_requested", "partial_site_match",  # RB-03-5
 }
 STOP_REASONS |= CODED_2026_10_21
+CODED_2026_10_25 = {  # coded after the v3 validation run; no validation case yet (a label change, reported apart)
+    "url_port_conflict", "env_site_not_found",  # RB-01-6
+    "dnat_protocol_not_supported",  # RB-02-5
+    "partner_not_listed", "rule_shared_with_partner",  # RB-04-5, which also uses hub_rule
+}
+STOP_REASONS |= CODED_2026_10_25
 RUNBOOKS = make_requests.REPO / "data" / "runbooks"
 RULE_FIELDS = {"env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"}
 DNAT_FIELDS = RULE_FIELDS | {"translated_address", "translated_port"}  # inbound rules also name the internal host
@@ -248,7 +254,7 @@ def test_every_label_reason_is_documented():
     assert reasons <= documented_codes()
 
 
-UNCODED_ESCALATIONS = 4  # 2026-10-21, was 15; lower it as each escalation gets a code, never raise it
+UNCODED_ESCALATIONS = 0  # 2026-10-25, was 4 (2026-10-21, was 15): every stop now carries a code; never raise it
 
 
 def test_uncoded_escalations_only_shrink():
@@ -299,8 +305,16 @@ def test_an_engineer_review_block_holds_the_decision_and_never_the_answer(path):
 def test_every_eval_ticket_passes_intake(path):
     # Intake cases (invalid prefix, host bits, missing address, schema errors) are software tests in
     # tests/workflow/test_review.py; the agent never sees them, so no eval request may hold one.
+    # One exception: a ticket asking to bypass the review is stopped by code before any agent call in the
+    # workflow (workflow/bypass.py). It stays in the eval, which calls the agent directly, so the agent's own
+    # skip_approval_requested stop is still measured; its label must expect exactly that stop.
     from workflow.intake import intake_findings
-    assert intake_findings(make_requests.REPO, load(path)["ticket"]) == []
+    request = load(path)
+    findings = intake_findings(make_requests.REPO, request["ticket"])
+    bypass = [f for f in findings if f["code"] == "skip_approval_requested"]
+    assert findings == bypass
+    assert not bypass or (request["expected"]["outcome"], request["expected"].get("reason")) == \
+        ("stop_and_ask", "skip_approval_requested")
 
 
 def test_every_accepted_category_is_a_draft_and_every_review_stop_has_no_acceptance():

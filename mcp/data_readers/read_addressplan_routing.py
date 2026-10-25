@@ -147,3 +147,27 @@ def load_hubs(source: Source) -> dict[str, Hub]:
         except (KeyError, TypeError) as exc:
             raise NetworkDataError(f"routing entry {env_site!r} has no firewall or policy: {exc}") from exc
     return hubs
+
+
+@dataclass(frozen=True)
+class Place:
+    """Where one env-site is: its environment, its Azure site (primary or dr) and its region."""
+
+    env_site: str
+    environment: str
+    site: str
+    region: str | None = None
+
+
+def load_places(source: Source) -> list[Place]:
+    """Read routing.yaml: each env-site's environment, site and region, in file order."""
+    data = yaml.safe_load(source.read(ROUTING))
+    sites = data.get("env_sites") if isinstance(data, dict) else None
+    if not isinstance(sites, dict) or not sites:
+        raise NetworkDataError("routing has no env_sites")
+    out = []
+    for env_site, site in sites.items():
+        if not isinstance(site, dict) or not isinstance(site.get("environment"), str) or not isinstance(site.get("site"), str):
+            raise NetworkDataError(f"routing entry {env_site!r} has no environment or site")
+        out.append(Place(env_site=env_site, environment=site["environment"], site=site["site"], region=site.get("region")))
+    return out

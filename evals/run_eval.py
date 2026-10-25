@@ -297,7 +297,8 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
             verdict = score_reply(request.expected, reply)
             outcome = reply.get("outcome", "?") if isinstance(reply, dict) else "?"
         if replies is not None:
-            replies.append({"number": request.number, "reply": reply, "mistakes": verdict.mistakes, "detail": verdict.detail})
+            replies.append({"number": request.number, "reply": reply, "mistakes": verdict.mistakes, "detail": verdict.detail,
+                            **({"raw_reply": error.raw} if kind == "model" and getattr(error, "raw", None) else {})})
         pending = request.expected.get("review") == "pending"
         results.append(TicketResult(request.number, request.category, request.expected["outcome"], outcome, verdict, pending,
                                     request.engineer_review is not None))

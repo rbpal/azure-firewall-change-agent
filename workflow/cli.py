@@ -50,6 +50,11 @@ Safety rules:
    destination, protocol, ports, URL or hostname); accept on the exact version is
    the only way to the agent, and fix reruns it only on a draft acceptance produced.
    The final review of the draft (approve) is a separate, later step.
+10. A ticket whose text asks to skip the engineer review, an approval or a required check
+   is a mandatory stop, skip_approval_requested (workflow/bypass.py). submit and edit
+   flag it; accept checks the stored ticket again before any agent call and refuses;
+   every draft write checks it once more. The engineer cannot accept it: an edit that
+   removes the request makes a new version, which then needs its own acceptance.
 
 Not built here: Prompt Shields (Step 04 Task 07), Tier 1 and terraform plan on the
 draft note (Step 04 Task 06), the ticket adapter that writes work notes and closes
@@ -70,6 +75,7 @@ from pathlib import Path
 import yaml
 
 from workflow.agent import AgentError, FoundryAgent
+from workflow.bypass import BypassRequested, bypass_message, bypass_requests, check_no_bypass
 from workflow.intake import NEEDS_PLANNED, finding, intake_findings, ticket_version
 from workflow.planned import check_planned, missing_spoke_files
 from workflow.scope import BackupsRemainError, PartialWriteError, check_no_backups, plan_writes, write_all
@@ -289,6 +295,29 @@ def acceptance(version: str, engineer: str, reason: str, accepted=(), planned=()
             "accepted": list(accepted), "planned": list(planned), "edits": list(edit_log)}
 
 
+def _refuse_bypass(repo: Path, record: dict, engineer: str | None) -> None:
+    """Check the stored ticket again; on a bypass request, hold it for an edit, record the refusal and refuse."""
+    matches = bypass_requests(record["ticket"])
+    if not matches:
+        return
+    kept = [f for f in record["findings"] if f["code"] != BypassRequested.code]  # older records may lack the finding
+    record["findings"] = kept + [finding(BypassRequested.code, m["where"], bypass_message(m), phrases=m["phrases"])
+                                 for m in matches]
+    record["history"].append({"at": _now(), "action": "refused", "code": BypassRequested.code, "engineer": engineer,
+                              "ticket_version": record["ticket_version"]})
+    save_record(repo, record)
+    raise Refused(f"{BypassRequested(record['number'], matches)} Nothing was sent to the agent and nothing was written.")
+
+
+def _keep_invalid_reply(repo: Path, record: dict, refused: Refused) -> None:
+    """When the agent's reply was not valid, keep its raw text in the record's history for diagnosis; change nothing else."""
+    cause = refused.__cause__
+    if isinstance(cause, AgentError) and cause.raw:
+        record["history"].append({"at": _now(), "action": "agent_error", "error": str(cause).splitlines()[0],
+                                  "raw_reply": cause.raw, "ticket_version": record["ticket_version"]})
+        save_record(repo, record)
+
+
 def accept(repo: Path, number: str, version: str, engineer: str, reason: str, planned_path: str | None,
            reply_path: str | None) -> str:
     """Record the engineer's acceptance of one ticket version, then let the agent draft within the ticket's own scope."""
@@ -298,6 +327,7 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     if len(version) < 12 or not record["ticket_version"].startswith(version):
         raise Refused(f"{number}: the ticket is version {record['ticket_version'][:12]}, not {version!r}; "
                       "read the current review note before accepting")
+    _refuse_bypass(repo, record, engineer)
     blocking = [f for f in record["findings"] if not f["acceptable"]]
     if blocking:
         raise Refused(f"{number}: cannot be accepted while these need an edit with a valid value:\n  "
@@ -312,7 +342,11 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     missing = missing_spoke_files(repo, record["ticket"], planned)
     review = acceptance(record["ticket_version"], engineer, reason, [f["code"] for f in record["findings"]], planned,
                         edits(record))
-    reply, source = (None, None) if missing else agent_reply(repo, record["ticket"], review, reply_path)
+    try:
+        reply, source = (None, None) if missing else agent_reply(repo, record["ticket"], review, reply_path)
+    except Refused as error:
+        _keep_invalid_reply(repo, record, error)
+        raise
     record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"},
                               **({"agent": source} if source else {})})
     record["review"] = review  # the engineer_review a real agent receives with the ticket
@@ -363,6 +397,7 @@ def approve(repo: Path, number: str) -> str:
     record = load_record(repo, number)
     _drafted(record)
     _unchanged_since_draft(repo, record)
+    check_no_bypass(record["ticket"])  # a draft from before this check existed cannot be approved past it
     record["status"] = "approved"
     record["history"].append({"at": _now(), "action": "approve"})
     save_record(repo, record)
@@ -416,7 +451,7 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     except (BackupsRemainError, PartialWriteError) as error:
         print(f"refused: {error}")
         return BACKUPS
-    except (Refused, DraftError) as error:
+    except (Refused, DraftError, BypassRequested) as error:
         print(f"refused: {error}")
         return REFUSED
     except OSError as error:  # write_all put every file back before raising this

@@ -283,6 +283,12 @@ def edits(record: dict) -> list[dict]:
     return [{k: h.get(k) for k in EDIT_AUDIT} for h in record["history"] if h["action"] == "edit"]
 
 
+def acceptance(version: str, engineer: str, reason: str, accepted=(), planned=(), edit_log=()) -> dict:
+    """The engineer's recorded acceptance of one ticket version, as accept saves it and the agent receives it."""
+    return {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": version,
+            "accepted": list(accepted), "planned": list(planned), "edits": list(edit_log)}
+
+
 def accept(repo: Path, number: str, version: str, engineer: str, reason: str, planned_path: str | None,
            reply_path: str | None) -> str:
     """Record the engineer's acceptance of one ticket version, then let the agent draft within the ticket's own scope."""
@@ -304,8 +310,8 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     if errors:
         raise Refused(f"{number}: the planned-address record does not fit the ticket:\n  " + "\n  ".join(errors))
     missing = missing_spoke_files(repo, record["ticket"], planned)
-    review = {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": record["ticket_version"],
-              "accepted": [f["code"] for f in record["findings"]], "planned": planned, "edits": edits(record)}
+    review = acceptance(record["ticket_version"], engineer, reason, [f["code"] for f in record["findings"]], planned,
+                        edits(record))
     reply, source = (None, None) if missing else agent_reply(repo, record["ticket"], review, reply_path)
     record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"},
                               **({"agent": source} if source else {})})

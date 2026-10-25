@@ -80,8 +80,11 @@ MUTATIONS = [
     Mutation("unseal the test split", RUN, 'if split == "test" and not allow_test:', "if False:"),
     Mutation("count a category ticket twice", RUN, "row[1] += 1", "row[1] += 2"),
     Mutation("hide labels pending review", RUN, 'pending = request.expected.get("review") == "pending"', "pending = False"),
-    Mutation("drop the engineer's review decision", RUN, "        if request.engineer_review is not None:",
-             "        if False:"),
+    Mutation("drop the engineer's review decision", RUN, "    review = request.engineer_review",
+             "    review = None"),
+    Mutation("send a first-pass ticket with no acceptance", RUN, "        return first_pass_review(request.ticket)",
+             "        return None"),
+    Mutation("hide failed service calls from the headline", RUN, "    attempted = n + failed", "    attempted = n"),
     Mutation("accept a review for another ticket version", RUN,
              'if review is not None and review.get("ticket_version") != ticket_version(data["ticket"]):', "if False:"),
 ]

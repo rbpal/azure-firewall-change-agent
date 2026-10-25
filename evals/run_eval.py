@@ -13,7 +13,9 @@ tested with stand-in agents before the real agent exists (Step 04 Task 03).
 Safety rule: the agent receives a copy of the `ticket:` block only, never the
 answer key. A request that tests the engineer-review path also carries a
 `engineer_review:` block, the engineer's recorded decision; the agent gets a copy of that
-too, as the workflow would give it, and still never the answer key. A request with a
+too, as the workflow would give it, and still never the answer key. Every other request
+gets the acceptance accept records for a ticket with no findings, because the workflow
+never calls the agent without one. A request with a
 `dns:` block fixes what DNS does for a named host (a timeout or SERVFAIL); the agent
 gets a resolver for its DNS tool that behaves that way, never the block itself, and
 every other name is NXDOMAIN, as the reserved .example names are in real DNS.
@@ -45,6 +47,7 @@ import yaml
 
 from evals.abstention import score_abstention
 from workflow.agent import InfraError, RateLimited
+from workflow.cli import acceptance
 from workflow.intake import ticket_version
 from evals.least_privilege import score_least_privilege
 from evals.stand_in_agents import Agent, always_stop, perfect
@@ -58,6 +61,8 @@ DNS_FAULTS = {  # what dnspython raises, so the tool fails exactly as it would i
     "servfail": lambda: dns.resolver.NoNameservers(),
 }
 SPLITS = ("validation", "test")
+# What the engineer checks before accepting a ticket with no findings (workflow/cli.py rule 9).
+FIRST_PASS_REASON = "Checked source, destination, protocol, ports and URL against the ticket"
 OUTCOMES = ("draft", "already_allowed", "stop_and_ask")
 MISTAKES = (
     "missed_stop",
@@ -236,9 +241,7 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
             not_run.append((request.number, why))
             report(done, {"number": request.number, "status": "not_run", "attempts": 0, "why": why})
             continue
-        extra = {}
-        if request.engineer_review is not None:
-            extra["engineer_review"] = copy.deepcopy(request.engineer_review)
+        extra = {"engineer_review": copy.deepcopy(review_for(request))}
         if request.dns is not None:
             extra["dns_lookup"] = controlled_dns(request.dns)
         tries = 0
@@ -303,6 +306,20 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
         if stop_on_failure and not verdict.complete:
             stopped = f"run stopped: {request.number} did not pass"
     return results
+
+
+def review_for(request: Request) -> dict:
+    """The acceptance the agent receives with this request, in exactly the shape accept records it."""
+    review = request.engineer_review
+    if review is None:  # production never calls the agent without a recorded acceptance
+        return first_pass_review(request.ticket)
+    return acceptance(review["ticket_version"], review["engineer"], review["reason"], review.get("accepted", ()),
+                      review.get("planned", ()), review.get("edits", ()))
+
+
+def first_pass_review(ticket: dict) -> dict:
+    """The acceptance accept records for a ticket with no findings, by the engineer it is assigned to."""
+    return acceptance(ticket_version(ticket), ticket.get("assigned_to"), FIRST_PASS_REASON)
 
 
 def _calls(agent) -> list:
@@ -376,13 +393,21 @@ def _by_category(results: list[TicketResult]) -> dict[str, tuple[int, int]]:
     return {k: (v[0], v[1]) for k, v in sorted(table.items())}
 
 
-def format_report(results: list[TicketResult], split: str, agent_name: str) -> str:
-    """Render the score sheet: headline, mistake counts, categories, then one line per ticket."""
+def format_report(results: list[TicketResult], split: str, agent_name: str, not_run: list = ()) -> str:
+    """Render the score sheet: completion first, then pass rates, mistake counts, categories and one line per ticket."""
     s = summarise(results)
     n, stops = s["tickets"], s["stops"]
     m = s["mistakes"]
+    c = _coverage_counts(results, not_run)
+    failed = c["Throttled (rate limit)"] + c["Other infrastructure error"]
+    attempted = n + failed
     lines = [
         f"Tier 2 eval · {split} split · {n} tickets · agent: {agent_name}",
+        "",
+        f"Answered and scored               {n:>3} / {attempted} attempted   ({failed} failed service calls: "
+        f"{c['Throttled (rate limit)']} throttled, {c['Other infrastructure error']} other)",
+        f"Not attempted                     {len(not_run) - failed:>3}   (left out, or not reached after a stop)",
+        f"Passed and complete, of attempted {s['complete']:>3} / {attempted}   (a failed service call is never a pass)",
         "",
         f"Passed and complete               {s['complete']:>3} / {n}",
         f"Passed but incomplete             {s['incomplete']:>3} / {n}   (allows less than approved)",
@@ -499,7 +524,7 @@ def main(argv: list[str] | None = None) -> int:
     reasons = {why for _, why in not_run}
     status = ("interrupted" if "run interrupted" in reasons
               else "stopped" if any(why.startswith("run stopped") for why in reasons) else "complete")
-    report = format_report(results, args.split, args.agent)
+    report = format_report(results, args.split, args.agent, not_run)
     if not_run:
         report += "\n\nNot run\n" + "\n".join(f"  {number}  {why}" for number, why in not_run)
     report += "\n\n" + coverage(results, not_run)
@@ -526,6 +551,13 @@ def main(argv: list[str] | None = None) -> int:
 def coverage(results: list[TicketResult], not_run: list) -> str:
     """How many tickets were answered and scored, and why each of the others was not, kept apart from wrong answers."""
     total = len(results) + len(not_run)
+    rows = _coverage_counts(results, not_run)
+    return "Coverage (wrong answers are in the sheet above, never here)\n" + "\n".join(
+        f"  {label:<34}{n:>3} / {total}" for label, n in rows.items())
+
+
+def _coverage_counts(results: list[TicketResult], not_run) -> dict[str, int]:
+    """Every ticket counted once: answered and scored, or the kind of reason it was not."""
     rows = {"Answered and scored": len(results), "Throttled (rate limit)": 0, "Other infrastructure error": 0,
             "Run stopped or interrupted": 0, "Left out by design or selection": 0}
     for _, why in not_run:
@@ -537,8 +569,7 @@ def coverage(results: list[TicketResult], not_run: list) -> str:
             rows["Run stopped or interrupted"] += 1
         else:
             rows["Left out by design or selection"] += 1
-    return "Coverage (wrong answers are in the sheet above, never here)\n" + "\n".join(
-        f"  {label:<34}{n:>3} / {total}" for label, n in rows.items())
+    return rows
 
 
 def _save(path: Path, record: dict):

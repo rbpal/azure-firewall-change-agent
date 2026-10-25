@@ -4,7 +4,8 @@ import copy
 
 import pytest
 
-from evals.run_eval import TicketResult, Verdict, format_report, load_requests, main, run, summarise
+from evals.run_eval import (FIRST_PASS_REASON, TicketResult, Verdict, first_pass_review, format_report,
+                             load_requests, main, review_for, run, summarise)
 from evals.stand_in_agents import always_stop, perfect
 
 REQUESTS = load_requests("validation")
@@ -65,7 +66,8 @@ def test_the_agent_sees_a_copy_of_the_ticket_and_never_the_answer_key():
     results = run(spy)
     assert len(seen) == 66
     assert seen == [set(r.ticket) for r in REQUESTS]
-    assert reviews == [r.engineer_review for r in REQUESTS]  # the engineer's decision, when there is one
+    # The engineer's decision when the request has one, else the acceptance of a ticket with no findings.
+    assert reviews == [review_for(r) for r in REQUESTS]
     assert any(reviews), "no request carries an engineer_review block, so this check proves nothing"
     assert {r.number: r.engineer_review for r in load_requests("validation")} == \
         {r.number: r.engineer_review for r in REQUESTS}  # vandalising the copy did not reach the file
@@ -187,6 +189,84 @@ def test_first_pass_and_after_review_tickets_are_counted_apart():
     report = format_report(results, "validation", "perfect")
     assert "First pass, passed and complete    64 / 64" in report
     assert "After engineer review, passed       2 / 2" in report
+
+
+def test_every_ticket_reaches_the_agent_with_an_acceptance_of_its_exact_version():
+    """No ticket is sent with engineer_review null: first-pass tickets get an acceptance with nothing accepted."""
+    reviews = {}
+
+    def spy(ticket, engineer_review=None, dns_lookup=None):
+        """Record the acceptance each ticket arrives with."""
+        reviews[ticket["number"]] = engineer_review
+        return {"outcome": "stop_and_ask", "reason": "free_text_conflict", "rules": []}
+
+    run(spy)
+    from workflow.intake import ticket_version
+    assert len(reviews) == 66 and None not in reviews.values()
+    first_pass = [r for r in REQUESTS if r.engineer_review is None]
+    assert len(first_pass) == 64
+    for r in first_pass:
+        review = reviews[r.number]
+        assert review["decision"] == "accept" and review["ticket_version"] == ticket_version(r.ticket), r.number
+        assert review["engineer"] == r.ticket["assigned_to"] and review["reason"] == FIRST_PASS_REASON
+        assert review["accepted"] == review["planned"] == review["edits"] == [], r.number
+
+
+def test_a_first_pass_acceptance_is_exactly_what_accept_sends_the_agent(tmp_path, monkeypatch):
+    """Submit and accept a no-findings ticket through the workflow; the agent's review equals the runner's."""
+    import yaml
+    import workflow.cli as cli
+    request = next(r for r in REQUESTS if r.engineer_review is None and not r.dns)
+    path = tmp_path / f"{request.number}.yaml"
+    path.write_text(yaml.safe_dump(request.ticket, sort_keys=False))
+    monkeypatch.setenv("FWAGENT_STATE_DIR", str(tmp_path / "state"))
+    sent = []
+
+    def capture(repo, ticket, review, reply_path):
+        """Keep what the agent would receive, then stop before any file is drafted."""
+        sent.append(copy.deepcopy(review))
+        raise cli.Refused("captured")
+
+    monkeypatch.setattr(cli, "agent_reply", capture)
+    cli.submit(cli.REPO, str(path))
+    version = cli.load_record(cli.REPO, request.number)["ticket_version"]
+    with pytest.raises(cli.Refused, match="captured"):
+        cli.accept(cli.REPO, request.number, version[:12], request.ticket["assigned_to"], FIRST_PASS_REASON, None, None)
+    assert sent == [first_pass_review(request.ticket)]
+
+
+@pytest.mark.parametrize("number", [r.number for r in REQUESTS if r.engineer_review is not None])
+def test_an_after_review_acceptance_is_what_production_sends_after_the_agent_stops(number, tmp_path, monkeypatch):
+    """Walk the workflow: submit, accept, the agent stops on the accepted code, accept again; the second review matches."""
+    import yaml
+    import workflow.cli as cli
+    request = next(r for r in REQUESTS if r.number == number)
+    recorded = request.engineer_review
+    path = tmp_path / f"{number}.yaml"
+    path.write_text(yaml.safe_dump(request.ticket, sort_keys=False))
+    planned = tmp_path / "planned.yaml"
+    planned.write_text(yaml.safe_dump(recorded["planned"]))
+    monkeypatch.setenv("FWAGENT_STATE_DIR", str(tmp_path / "state"))
+    sent = []
+
+    def agent(repo, ticket, review, reply_path):
+        """First call: stop on the code the engineer later accepts. Second call: keep the review and stop the test."""
+        sent.append(copy.deepcopy(review))
+        if len(sent) == 1:
+            return {"outcome": "stop_and_ask", "reason": recorded["accepted"][0], "rules": [],
+                    "explanation": "stand-in stop"}, "replay"
+        raise cli.Refused("captured")
+
+    monkeypatch.setattr(cli, "agent_reply", agent)
+    cli.submit(cli.REPO, str(path))
+    version = cli.load_record(cli.REPO, number)["ticket_version"]
+    assert cli.load_record(cli.REPO, number)["findings"] == []  # submit finds nothing; the agent raises the finding
+    cli.accept(cli.REPO, number, version[:12], recorded["engineer"], FIRST_PASS_REASON, None, None)
+    assert cli.load_record(cli.REPO, number)["status"] == "awaiting_review"
+    with pytest.raises(cli.Refused, match="captured"):
+        cli.accept(cli.REPO, number, version[:12], recorded["engineer"], recorded["reason"],
+                   str(planned) if recorded["planned"] else None, None)
+    assert sent[1] == review_for(request)
 
 
 def test_an_acceptance_for_another_ticket_version_is_refused(tmp_path, monkeypatch):
@@ -547,6 +627,65 @@ def test_coverage_separates_answered_tickets_from_throttled_and_other_not_run():
     assert "Other infrastructure error          1 / 8" in text
     assert "Run stopped or interrupted          1 / 8" in text
     assert "Left out by design or selection     2 / 8" in text
+
+
+def test_the_sheet_leads_with_completion_so_failed_calls_cannot_hide_behind_the_pass_rate():
+    """3 answered and passed, 2 failed calls, 1 left out: the headline says 3 of 5 attempted, not 3 of 3."""
+    results = run(perfect(KEYS))[:3]
+    not_run = [("A", "infrastructure: rate_limit_exceeded on all 3 attempts"),
+               ("B", "infrastructure: the agent call failed: AuthenticationError: 401"),
+               ("E", "not selected with --only")]
+    report = format_report(results, "validation", "x", not_run)
+    head = report.split("Passed and complete               ")[0]
+    assert "Answered and scored                 3 / 5 attempted   (2 failed service calls: 1 throttled, 1 other)" in head
+    assert "Not attempted                       1" in head
+    assert "Passed and complete, of attempted   3 / 5   (a failed service call is never a pass)" in head
+    assert "Passed and complete                 3 / 3" in report  # the rate on answered tickets stays, below it
+
+
+WRITE_WATCH = """
+import hashlib, os, sys
+from pathlib import Path
+writes = []
+def hook(event, args):
+    if event == "open" and args[1] is not None and any(c in str(args[1]) for c in "wax+"):
+        writes.append(("open", str(args[0])))
+    elif event == "os.open" and args[2] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND):
+        writes.append(("os.open", str(args[0])))
+    elif event in ("os.mkdir", "os.rename", "os.replace", "os.remove", "os.rmdir", "os.truncate", "shutil.copyfile"):
+        writes.append((event, str(args[0])))
+def tree():
+    return {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+            for root in ("infra/envs", "data/network") for p in sorted(Path(root).rglob("*")) if p.is_file()}
+before = tree()
+sys.addaudithook(hook)
+import evals.run_eval as runner
+print("IMPORT", writes)
+if sys.argv[1] == "run":
+    from evals.stand_in_agents import always_stop, perfect
+    keys = {r.number: r.expected for r in runner.load_requests("validation")}
+    for agent in (perfect(keys), always_stop):
+        assert len(runner.run(agent)) == 66
+print("ALL", writes)
+print("SAME", tree() == before and len(before) > 0)
+"""
+
+
+@pytest.mark.parametrize("mode", ["import", "run"])
+def test_importing_the_runner_and_running_it_writes_no_file(mode, tmp_path):
+    """Watch every file write while the runner is imported, then run over all 66 tickets: none, and no tfvars change."""
+    import os
+    import subprocess
+    import sys
+    from evals.run_eval import REQUESTS
+    repo = REQUESTS.parents[1]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("FWAGENT_")}
+    env.update(PYTHONDONTWRITEBYTECODE="1", HOME=str(tmp_path))  # no .pyc files; a default state folder would land here
+    out = subprocess.run([sys.executable, "-c", WRITE_WATCH, mode], cwd=repo, env=env, capture_output=True, text=True,
+                         timeout=300)
+    assert out.returncode == 0, out.stderr
+    assert "IMPORT []" in out.stdout and "ALL []" in out.stdout and "SAME True" in out.stdout, out.stdout
+    assert not any(tmp_path.iterdir())  # no state folder, nothing under the home folder
 
 
 def test_the_foundry_run_refuses_an_agent_version_other_than_the_one_required(monkeypatch, capsys):

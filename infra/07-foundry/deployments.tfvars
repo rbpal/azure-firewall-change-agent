@@ -11,15 +11,17 @@
 # the same at any capacity; spend is watched by budget-fwagentic-monthly.
 # gpt-6-luna-agent went from 30 to 60 units on 2026-10-24: validation runs at 30
 # hit the 30,000-token limit on 2026-10-23 (98 throttled requests) and on
-# 2026-10-24 (one ticket throttled on all 3 attempts). 60 of the
-# subscription's 250 GlobalStandard gpt-6-luna units in eastus2.
+# 2026-10-24 (one ticket throttled on all 3 attempts). It went from 60 to 200
+# on 2026-10-25: the validation run at 60 answered 6 tickets, then 3 in a row
+# were throttled on all 3 attempts. 200 of the subscription's 250
+# GlobalStandard gpt-6-luna units in eastus2.
 # Versions are pinned and never auto-upgraded, so eval scores refer to one model.
 deployments = {
   "gpt-6-luna-agent" = {
     model_name    = "gpt-6-luna"
     model_version = "2026-09-22"
     sku_name      = "GlobalStandard"
-    capacity      = 60
+    capacity      = 200
   }
   "gpt-5.4-mini-judge" = {
     model_name    = "gpt-5.4-mini"

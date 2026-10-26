@@ -1,0 +1,266 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reply"
+  ],
+  "properties": {
+    "reply": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/draft_add"
+        },
+        {
+          "$ref": "#/$defs/draft_remove"
+        },
+        {
+          "$ref": "#/$defs/already_allowed"
+        },
+        {
+          "$ref": "#/$defs/stop_and_ask"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "draft_add": {
+      "type": "object",
+      "description": "Draft that adds rules. No action, no reason.",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "rules",
+        "explanation"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "draft"
+          ]
+        },
+        "rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "explanation": {
+          "type": "string"
+        }
+      }
+    },
+    "draft_remove": {
+      "type": "object",
+      "description": "Draft that removes rules. action is remove; no reason.",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "action",
+        "rules",
+        "explanation"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "draft"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "remove"
+          ]
+        },
+        "rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "explanation": {
+          "type": "string"
+        }
+      }
+    },
+    "already_allowed": {
+      "type": "object",
+      "description": "Existing rules already allow the traffic. No action, no reason.",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "rules",
+        "explanation"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "already_allowed"
+          ]
+        },
+        "rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "explanation": {
+          "type": "string"
+        }
+      }
+    },
+    "stop_and_ask": {
+      "type": "object",
+      "description": "Stop for the engineer: a reason code and an empty rules list; no action.",
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "reason",
+        "rules",
+        "explanation"
+      ],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "stop_and_ask"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "rules": {
+          "$ref": "#/$defs/rules"
+        },
+        "explanation": {
+          "type": "string"
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/rule"
+          },
+          {
+            "$ref": "#/$defs/dnat_rule"
+          }
+        ]
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "env_site",
+        "spoke",
+        "collection",
+        "name",
+        "sources",
+        "destinations",
+        "ports",
+        "protocol"
+      ],
+      "properties": {
+        "env_site": {
+          "$ref": "#/$defs/env_site"
+        },
+        "spoke": {
+          "type": "string"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protocol": {
+          "type": "string"
+        }
+      }
+    },
+    "dnat_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "env_site",
+        "spoke",
+        "collection",
+        "name",
+        "sources",
+        "destinations",
+        "ports",
+        "protocol",
+        "translated_address",
+        "translated_port"
+      ],
+      "properties": {
+        "env_site": {
+          "$ref": "#/$defs/env_site"
+        },
+        "spoke": {
+          "type": "string"
+        },
+        "collection": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "destinations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "translated_address": {
+          "type": "string"
+        },
+        "translated_port": {
+          "type": "string"
+        }
+      }
+    },
+    "env_site": {
+      "type": "string",
+      "enum": [
+        "lab-eastus2",
+        "lab-centralus",
+        "dev-eastus2",
+        "dev-centralus",
+        "stage-eastus2",
+        "stage-centralus",
+        "prod-eastus2",
+        "prod-centralus"
+      ]
+    }
+  }
+}

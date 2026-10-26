@@ -25,6 +25,11 @@ def _reply_keys(expected):
     return {k: copy.deepcopy(expected[k]) for k in ("outcome", "reason", "action", "rules") if k in expected}
 
 
+def wrapped(reply: dict) -> str:
+    """The agent's text for reply under strict output: {"reply": ...}."""
+    return json.dumps({"reply": reply})
+
+
 # ------------------------------------------------------------ the instructions
 
 def test_instructions_hold_the_header_and_every_standard_and_runbook():
@@ -63,6 +68,9 @@ def test_the_definition_gives_four_read_tools_over_the_project_connection_with_n
                                              "resolve_env_site"]
     assert tool["require_approval"] == "never"
     assert tool["headers"] == {"X-Fwagent-Snapshot": SNAP}  # every tool call of the ticket reads this commit
+    fmt = body["text"]["format"]
+    assert fmt["type"] == "json_schema" and fmt["strict"] is True
+    assert fmt["schema"] == json.loads((REPO / "agents" / "reply.strict.schema.json").read_text())
 
 
 @pytest.mark.parametrize("snapshot", ["", "main", "c" * 39, "C" * 40, "c" * 40 + "\n"])
@@ -102,6 +110,8 @@ def test_an_unchanged_definition_reuses_its_version_and_a_changed_one_makes_a_ne
     assert name == AGENT_NAME and made.model == "gpt-6-luna-agent" and made.instructions == "instructions v2"
     assert made.tools[0].project_connection_id == "mcp-fwagentic-tools" and made.tools[0].require_approval == "never"
     assert made.tools[0].headers == {"X-Fwagent-Snapshot": SNAP}
+    assert made.text.format.strict is True and made.text.format.name == "fwagent_reply"
+    assert made.text.format.schema["properties"] == {"reply": made.text.format.schema["properties"]["reply"]}
     assert metadata["definition_sha"] != sha
 
 
@@ -182,7 +192,8 @@ def foundry(text, fail=None, calls=None, **fields):
 
 def test_a_call_sends_only_the_ticket_and_review_to_the_pinned_version_and_records_its_use():
     data = yaml.safe_load((REQUESTS / "validation" / "validation_RITM0011061.yaml").read_text())
-    a = foundry('{"outcome": "stop_and_ask", "reason": "both_ends_onprem", "rules": []}')
+    a = foundry(wrapped({"outcome": "stop_and_ask", "reason": "both_ends_onprem", "rules": [],
+                         "explanation": "Both ends are on-prem."}))
     reply = a(copy.deepcopy(data["ticket"]))
     sent = a.openai.responses.requests[0]
     assert reply["reason"] == "both_ends_onprem"
@@ -238,7 +249,7 @@ def test_other_failed_calls_are_infrastructure_errors_but_not_rate_limits(fail):
 
 def test_an_invalid_reply_is_a_model_error_not_an_infrastructure_error():
     with pytest.raises(AgentError) as raised:
-        foundry('{"outcome": "stop_and_ask", "rules": []}')({"number": "RITM0011033"})  # no reason, as 0033 replied
+        foundry(wrapped({"outcome": "stop_and_ask", "rules": [], "explanation": "x"}))({"number": "RITM0011033"})  # no reason, as 0033 replied
     assert not isinstance(raised.value, agent_mod.InfraError) and "reason" in str(raised.value)
 
 
@@ -294,7 +305,7 @@ def test_a_controlled_dns_condition_is_refused_without_a_call():
     assert a.openai.responses.requests == []
 
 
-STOP = '{"outcome": "stop_and_ask", "reason": "hub_rule", "rules": []}'
+STOP = wrapped({"outcome": "stop_and_ask", "reason": "hub_rule", "rules": [], "explanation": "The rule is in the hub group."})
 MIXED = {
     "second call read the new commit": [mcp_call("locate_address_for_env_site", read(SNAP)),
                                         mcp_call("duplicate_rule_check", {"matches": [], **read("d" * 40)})],
@@ -495,7 +506,7 @@ def test_accept_without_reply_or_endpoint_refuses_and_calls_nothing(repo, tmp_pa
 def test_accept_with_the_endpoint_drafts_through_the_live_agent_and_records_it(repo, tmp_path, monkeypatch):
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
     data = yaml.safe_load((REQUESTS / "validation" / "validation_RITM0011001.yaml").read_text())
-    fake = foundry(json.dumps(_reply_keys(data["expected"])))
+    fake = foundry(wrapped({**_reply_keys(data["expected"]), "explanation": "Drafted for both selected sites."}))
     monkeypatch.setattr(cli, "live_agent", lambda root: fake)
     _, code = _accept(repo, tmp_path, "RITM0011001")
     record = cli.load_record(repo, "RITM0011001")

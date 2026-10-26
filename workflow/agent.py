@@ -3,7 +3,7 @@
 Example: with FWAGENT_PROJECT_ENDPOINT set,
     agent = FoundryAgent.from_env(REPO)
     reply = agent(ticket, engineer_review=None)
-returns {"outcome": "draft", "rules": [...]} after the model has called
+returns {"outcome": "draft", "rules": [...], "explanation": "..."} after the model has called
 locate_address_for_env_site and duplicate_rule_check on func-fwagentic-dev.
 
 Why: the workflow order is fixed in code (ADR 0004); the model only drafts. Its
@@ -23,9 +23,12 @@ tool answer that read main names that same commit, and only when this repo's
 data/network and infra/envs equal that commit, the files the draft is written into.
 Any mismatch is an AgentError, and nothing is written.
 
-Safety rule: the agent never writes. Its reply is only JSON, checked here against
-agents/reply.schema.json, then by every scope and approval check in
-workflow/scope.py before any file changes. The agent receives the ticket and the
+Safety rule: the agent never writes. Its reply is only JSON. The agent version asks the
+service for strict structured output: one {"reply": ...} object that fits
+agents/reply.strict.schema.json. Code checks that wrapper, then checks the inner reply,
+unchanged, against agents/reply.schema.json, then runs every scope and approval check in
+workflow/scope.py before any file changes. Strict output narrows what the model can
+write; it never replaces these checks. The agent receives the ticket and the
 engineer's recorded acceptance, nothing else: never an answer key.
 """
 
@@ -49,6 +52,10 @@ TOOLS = ["locate_address_for_env_site", "resolve_env_site", "duplicate_rule_chec
 AGENTS = Path(__file__).resolve().parent.parent / "agents"
 GUIDANCE = ("data/standards", "data/runbooks")
 REPLY_SCHEMA = json.loads((AGENTS / "reply.schema.json").read_text())
+STRICT_SCHEMA = json.loads((AGENTS / "reply.strict.schema.json").read_text())
+REPLY_FORMAT = {"type": "json_schema", "name": "fwagent_reply", "strict": True, "schema": STRICT_SCHEMA,
+                "description": ("The reply described in the instructions, wrapped as {\"reply\": ...}. A stop keeps "
+                                "rules as an empty list; action appears only on a draft that removes rules.")}
 FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.S)
 SNAPSHOT_HEADER = "X-Fwagent-Snapshot"
 COMMIT = re.compile(r"[0-9a-f]{40}")
@@ -138,13 +145,14 @@ def instructions(repo: Path) -> str:
 
 
 def definition(text: str, snapshot: str, model: str = DEFAULT_MODEL, connection: str = DEFAULT_CONNECTION) -> dict:
-    """The prompt agent: model, instructions, and the four read tools over MCP, pinned to one snapshot, with no approval step."""
+    """The prompt agent: model, instructions, strict reply format, and the read tools over MCP pinned to one snapshot."""
     if not COMMIT.fullmatch(snapshot or ""):
         raise AgentError(f"the snapshot must be a full commit SHA, not {snapshot!r}")
     return {"kind": "prompt", "model": model, "instructions": text,
             "tools": [{"type": "mcp", "server_label": "fwtools", "server_url": MCP_URL, "allowed_tools": list(TOOLS),
                        "require_approval": "never", "project_connection_id": connection,
-                       "headers": {SNAPSHOT_HEADER: snapshot}}]}
+                       "headers": {SNAPSHOT_HEADER: snapshot}}],
+            "text": {"format": REPLY_FORMAT}}
 
 
 def data_differences(repo: Path, commit: str) -> list[str]:
@@ -244,12 +252,15 @@ def ensure_version(project, body: dict) -> str:
     for v in versions:
         if (getattr(v, "metadata", None) or {}).get("definition_sha") == sha:
             return str(v.version)
-    from azure.ai.projects.models import MCPTool, PromptAgentDefinition
-    tool = body["tools"][0]
+    from azure.ai.projects.models import (MCPTool, PromptAgentDefinition, PromptAgentDefinitionTextOptions,
+                                          TextResponseFormatJsonSchema)
+    tool, fmt = body["tools"][0], body["text"]["format"]
     made = project.agents.create_version(
         AGENT_NAME,
         definition=PromptAgentDefinition(model=body["model"], instructions=body["instructions"],
-                                         tools=[MCPTool(**{k: v for k, v in tool.items() if k != "type"})]),
+                                         tools=[MCPTool(**{k: v for k, v in tool.items() if k != "type"})],
+                                         text=PromptAgentDefinitionTextOptions(format=TextResponseFormatJsonSchema(
+                                             **{k: v for k, v in fmt.items() if k != "type"}))),
         metadata={"definition_sha": sha}, description="Drafts firewall rule changes for one accepted ticket.")
     return str(made.version)
 
@@ -259,21 +270,54 @@ def message(ticket: dict, engineer_review: dict | None) -> str:
     return json.dumps({"ticket": ticket, "engineer_review": engineer_review}, sort_keys=True, default=str)
 
 
-def parse_reply(text: str) -> dict:
-    """Read the agent's text as one reply object that fits agents/reply.schema.json, or raise AgentError."""
+def _load(text: str):
+    """The JSON value in the agent's text, a code fence allowed, or raise AgentError keeping the raw text."""
     body = (text or "").strip()
     fenced = FENCE.match(body)
     if fenced:
         body = fenced.group(1)
     try:
-        reply = json.loads(body)
+        return json.loads(body)
     except ValueError as error:
         raise AgentError(f"the agent's reply is not JSON: {body[:200]!r}", raw=(text or "")[:RAW_LIMIT]) from error
-    problems = sorted(jsonschema.Draft202012Validator(REPLY_SCHEMA).iter_errors(reply), key=lambda e: list(e.path))
-    if problems:
-        raise AgentError("the agent's reply does not fit agents/reply.schema.json:\n  "
-                         + "\n  ".join(f"{'/'.join(map(str, p.path)) or '(top)'}: {p.message}" for p in problems[:10]),
+
+
+def _refuse(value, schema: dict, name: str, text: str) -> None:
+    """Raise AgentError listing up to ten ways value breaks schema; return when it fits."""
+    if not jsonschema.Draft202012Validator(schema).is_valid(value):
+        problems = [f"{'/'.join(map(str, p.path)) or '(top)'}: {p.message}" for p in _problems(value, schema)]
+        raise AgentError(f"the agent's reply does not fit {name}:\n  " + "\n  ".join(problems[:10]),
                          raw=(text or "")[:RAW_LIMIT])
+
+
+def _problems(value, schema: dict) -> list:
+    """The schema errors in value; for the strict wrapper, those of the shape the reply's own outcome claims."""
+    errors = sorted(jsonschema.Draft202012Validator(schema).iter_errors(value), key=lambda e: list(e.path))
+    reply = value.get("reply") if schema is STRICT_SCHEMA and isinstance(value, dict) else None
+    outcome = reply.get("outcome") if isinstance(reply, dict) else None
+    shape = ("draft_remove" if "action" in reply else "draft_add") if outcome == "draft" else outcome
+    if shape not in STRICT_SCHEMA["$defs"]:
+        return errors
+    claimed = {**STRICT_SCHEMA["$defs"][shape], "$defs": STRICT_SCHEMA["$defs"]}
+    inner = sorted(jsonschema.Draft202012Validator(claimed).iter_errors(reply), key=lambda e: list(e.path))
+    for e in inner:
+        e.path.appendleft("reply")
+    return [e for e in errors if list(e.path) != ["reply"]] + inner
+
+
+def parse_reply(text: str) -> dict:
+    """Read text as one reply object that fits agents/reply.schema.json, or raise AgentError."""
+    reply = _load(text)
+    _refuse(reply, REPLY_SCHEMA, "agents/reply.schema.json", text)
+    return reply
+
+
+def parse_agent_text(text: str) -> dict:
+    """Read the agent's text: the strict {"reply": ...} wrapper, then the inner reply, unchanged, by parse_reply's check."""
+    wrapped = _load(text)
+    _refuse(wrapped, STRICT_SCHEMA, "agents/reply.strict.schema.json", text)
+    reply = wrapped["reply"]
+    _refuse(reply, REPLY_SCHEMA, "agents/reply.schema.json", text)
     return reply
 
 
@@ -361,7 +405,7 @@ class FoundryAgent:
             call.error = "tool answers from another revision"
             raise AgentError(f"tool answers are not all from snapshot {self.snapshot[:12]}: " + "; ".join(mixed))
         try:
-            return parse_reply(getattr(response, "output_text", ""))
+            return parse_agent_text(getattr(response, "output_text", ""))
         except AgentError as error:
             call.error, call.raw_reply = str(error).splitlines()[0], error.raw
             raise

@@ -48,8 +48,8 @@ Each item gives the reason code the reply carries when it stops. Every stop carr
 - an address belongs to an environment, an Azure site (primary or DR) or an on-prem location other than the one the ticket gives it: `env_mismatch`. This one code covers all three conflicts. Stop and ask which is intended; never correct the address or the place yourself
 - the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place: `dr_policy_not_built`. This answer only says whether DR exists; DR is changed only when "Sites to change" selects it
 - the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address: `dns_lookup_failed`
-- non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change: `non_http_to_hostname`
-- a URL states a port that is not the ticket's one port, or its scheme is not the ticket's protocol (STD-COLL-03): `url_port_conflict`
+- non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change, including a URL on a TCP, UDP, ICMP or Any ticket: `non_http_to_hostname`
+- on an HTTP or HTTPS ticket, a URL's scheme is not the ticket's protocol, or it states a port that is not the ticket's one port (STD-COLL-03): `url_port_conflict`
 - `resolve_env_site` cannot give exactly one env-site for a selected environment and site: `env_site_not_found`
 
 ## RB-01-7 — Draft, but mark a caution, when

@@ -28,7 +28,7 @@ Reply with one JSON object and nothing else: no prose, no code fence.
 
 - `outcome`: `draft`, `already_allowed` or `stop_and_ask`.
 - `reason`: for `stop_and_ask`, always: the runbook's reason code, such as `address_not_in_plan`, or `env_site_not_found` (step 6). If you must stop and no listed code fits, use `needs_engineer_review` and say why in the explanation. Omit it otherwise.
-- `action`: `"remove"` for a removal draft. Omit it for an add.
+- `action`: `"remove"` only when `outcome` is `draft` and the ticket removes rules. Omit it for an add, and always omit it for `stop_and_ask` and `already_allowed`, even on a removal ticket.
 - `rules`: for `draft`, one rule per selected env-site. For `already_allowed`, the existing rules that allow the flow, as `duplicate_rule_check` reported them. For `stop_and_ask`, an empty list.
 - `explanation`: one to three plain sentences for the engineer: what you found and, for a stop, what the engineer must decide or fix.
 

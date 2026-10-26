@@ -26,7 +26,7 @@ import yaml
 
 from workflow.bypass import CODE as BYPASS, bypass_message, bypass_requests
 from workflow.tickets import ticket_errors
-from workflow.urls import CODE as URL_PORT, url_conflicts
+from workflow.urls import name_findings, url_conflicts
 
 ADDRESS_PLAN = "data/network/address-plan.yaml"
 SIDES = ("sources", "destination")
@@ -133,10 +133,13 @@ def intake_findings(repo: Path, ticket: dict) -> list[dict]:
             elif "vnet" in address or "subnet" in address:
                 out.append(missing_address_finding(repo, where, address))
                 explained.add(where)
+    for f in name_findings(ticket):  # explained in plain words, never corrected; the schema's pattern error is dropped
+        out.append(finding(f["code"], f["where"], f["message"]))
+        explained.add(f["where"].rsplit("/", 1)[0])
     for error in ticket_errors(ticket):
         path = error.split(":", 1)[0]
         if not any(path == w or path.startswith(w + "/") for w in explained):
             out.append(finding("invalid_ticket", path, error))
-    out += [finding(URL_PORT, c["where"], c["message"]) for c in url_conflicts(ticket)]
+    out += [finding(c["code"], c["where"], c["message"]) for c in url_conflicts(ticket)]
     out += [finding(BYPASS, m["where"], bypass_message(m), phrases=m["phrases"]) for m in bypass_requests(ticket)]
     return out

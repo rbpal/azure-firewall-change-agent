@@ -75,3 +75,26 @@ def test_the_workflow_record_keeps_the_raw_reply_and_nothing_else_changes(repo, 
     assert (kept["action"], kept["raw_reply"], kept["ticket_version"]) == ("agent_error", V3_TEXT, version)
     assert record["status"] == "awaiting_review" and record["reply"] is None and "review" not in record
     assert changed(before, repo) == set()
+
+
+# The action field: only on a removal draft. Version 4 added it to two stops on 2026-10-25 (RITM0011061, RITM0011065).
+
+@pytest.mark.parametrize("reply", [
+    {"outcome": "stop_and_ask", "reason": "both_ends_onprem", "action": "remove", "rules": []},
+    {"outcome": "stop_and_ask", "reason": "rule_allows_more", "action": "remove", "rules": []},
+    {"outcome": "already_allowed", "action": "remove", "rules": [{"env_site": "prod-eastus2", "spoke": "sett",
+     "collection": "allow-sett-network-rules", "name": "x", "sources": ["10.100.14.0/24"],
+     "destinations": ["203.0.113.48/28"], "ports": ["22"], "protocol": "TCP"}]},
+])
+def test_the_validator_stays_strict_action_on_a_stop_or_already_allowed_is_refused(reply):
+    with pytest.raises(AgentError, match="False schema does not allow 'remove'") as raised:
+        parse_reply(json.dumps(reply))
+    assert raised.value.raw == json.dumps(reply)
+
+
+def test_the_instructions_say_action_only_on_a_removal_draft():
+    from workflow.agent import instructions
+    from tests.workflow.test_cli import REPO
+    text = instructions(REPO)
+    assert "- `action`: `\"remove\"` only when `outcome` is `draft` and the ticket removes rules." in text
+    assert "always omit it for `stop_and_ask` and `already_allowed`, even on a removal ticket" in text

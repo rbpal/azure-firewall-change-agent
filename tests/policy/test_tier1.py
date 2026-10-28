@@ -211,6 +211,28 @@ def test_public_port_used_twice(plan):
     assert ("caution", "STD-COLL-06") in found(plan)
 
 
+def port_findings(plan, **second):
+    """STD-COLL-06 port findings after adding a second DNAT rule, a copy of the first with these fields changed."""
+    c = group(plan, "xfer")["nat_rule_collection"][0]
+    c["rule"].append({**c["rule"][0], "name": "sftp-litware-to-xferSftp", **second})
+    return [f.detail for f in tier1.run(plan) if f.standard == "STD-COLL-06" and "public port" in f.detail]
+
+
+@pytest.mark.parametrize("second, flagged", [
+    ({}, True),
+    ({"protocols": ["UDP"]}, False),
+    ({"protocols": ["TCP", "UDP"]}, True),
+    ({"destination_ports": ["2200-2230"]}, True),
+    ({"destination_ports": ["2222"]}, False),
+], ids=["same port", "UDP on the same port", "TCP and UDP", "range holding the port", "next port"])
+def test_public_port_reuse_uses_the_agent_tools_overlap(plan, second, flagged):
+    assert bool(port_findings(plan, **second)) is flagged
+
+
+def test_a_dnat_rule_whose_ports_cannot_be_read_is_a_caution(plan):
+    assert any("cannot be compared" in d for d in port_findings(plan, destination_ports=["ssh"]))
+
+
 def test_policy_missing_from_routing(plan):
     plan["planned_values"]["root_module"]["child_modules"][0]["resources"][0]["values"]["name"] = "afwp-unknown"
     assert ("caution", "STD-COLL-06") in found(plan)

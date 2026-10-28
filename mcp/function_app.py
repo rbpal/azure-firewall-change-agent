@@ -6,6 +6,7 @@ import json
 import azure.functions as func
 
 from gateway import run
+from tools.dnat_port_check import dnat_port_check
 from tools.dns_lookup_for_fqdn import dns_lookup_for_fqdn
 from tools.duplicate_rule_check import duplicate_rule_check
 from tools.locate_address_for_env_site import locate_address_for_env_site
@@ -100,3 +101,22 @@ def resolve_env_site_tool(context: str) -> str:
 )
 def duplicate_rule_check_tool(context: str) -> str:
     return run(context, duplicate_rule_check, snapshot=True)
+
+
+@app.mcp_tool_trigger(
+    arg_name="context",
+    tool_name="dnat_port_check",
+    description=("Check whether a TCP port is already published on one env-site's firewall public IP by any DNAT "
+                 "rule in its policy, hub included. Answers conflicts_found with each rule that holds the port, "
+                 "no_conflicts, or inconclusive when a rules file or rule cannot be read. Names the commit it read."),
+    tool_properties=json.dumps([
+        {"propertyName": "env_site", "propertyType": "string",
+         "description": "The env-site to check, such as stage-eastus2."},
+        {"propertyName": "protocols", "propertyType": "string", "isArray": True,
+         "description": "The ticket's protocol: [\"TCP\"]. New inbound DNAT is TCP only (workflow policy)."},
+        {"propertyName": "destination_ports", "propertyType": "string", "isArray": True,
+         "description": "The ticket's ports, such as [\"22\"] or [\"2220-2224\"]; a DNAT port is 1-63999."},
+    ]),
+)
+def dnat_port_check_tool(context: str) -> str:
+    return run(context, dnat_port_check, snapshot=True)

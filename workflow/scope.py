@@ -27,6 +27,8 @@ A DNAT rule is never added with a source open to everyone, however it is written
 ticket asks for it: STD-COLL-04 is the one standard that blocks. A removal of such
 a rule is still written, because deleting it closes the hole.
 An added DNAT rule needs one internal host from the ticket at its site (RB-02-2).
+A new inbound DNAT ticket must ask for TCP: workflow policy drafts TCP only, and
+a UDP ticket is refused, never rewritten to TCP (workflow/tickets.py).
 An add needs an Azure address on the ticket: a ticket whose every source and
 destination is on-prem has no env-site for a rule (RB-05-4). Every IP group a rule
 names must already exist at its env-site; the workflow never creates one (STD-COLL-03).
@@ -64,7 +66,7 @@ from workflow.bypass import check_no_bypass
 from workflow.rule_index import next_index
 from workflow.urls import name_findings, url_conflicts
 from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_type, spoke_path
-from workflow.tickets import SCHEMA_PATH
+from workflow.tickets import DNAT_PROTOCOL_CODE, SCHEMA_PATH, dnat_protocol_problem
 
 from data_readers.read_addressplan_routing import ROUTING, LocalSource  # noqa: E402  (tfvars_writer puts mcp/ on the path)
 from data_readers.read_env_site_ipgroup import read_ip_groups  # noqa: E402
@@ -202,6 +204,8 @@ def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
     removal = reply.get("action") == "remove"
     errors = [f"{c['where']}: {c['code']}: {c['message']}" for c in name_findings(ticket) + url_conflicts(ticket)]
+    if not removal and (why := dnat_protocol_problem(ticket)):
+        errors.append(f"protocol: {DNAT_PROTOCOL_CODE}: {why}")
     if not removal and all(_onprem(a) for a in ticket["sources"] + ticket["destination"]):
         errors.append("every source and destination on the ticket is on-prem, so it has no Azure address; a rule goes at "
                       "the env-site of the ticket's Azure address (RB-05-4, RB-05-5 both_ends_onprem)")

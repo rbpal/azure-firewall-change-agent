@@ -68,7 +68,7 @@ Enforced: Tier 1
 
 A DNAT rule translates to one internal host, inside the environment and site of the policy it is in. Its destination is that site's hub firewall public IP, taken from the network data, never from the ticket.
 
-Each public port is used once per firewall. A DNAT rule that reuses a port already published on that firewall fails this check.
+Each public port is used once per firewall public IP and protocol. A DNAT rule fails this check when its destination IP, protocol and port range overlap a rule already on that firewall. TCP 22 and UDP 22 do not conflict.
 Enforced: Tier 1
 
 ## STD-COLL-07 — No duplicate or shadowed rules

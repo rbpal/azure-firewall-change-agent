@@ -14,7 +14,7 @@ From the ticket, take exactly:
 - the source: the partner's range or partner IP group
 - the destination: the internal host, one per environment and site
 - the port, from `ports`: the partner connects on it at the firewall's public IP, and it is translated to the same port on the internal host
-- the protocol: TCP or UDP
+- the protocol: TCP. Workflow policy drafts new inbound DNAT rules for TCP only; Azure Firewall itself also accepts UDP. Never change the ticket's protocol.
 
 Never widen the source. A source of `0.0.0.0/0` or `*` is never drafted (STD-COLL-04).
 
@@ -22,7 +22,7 @@ Never widen the source. A source of `0.0.0.0/0` or `*` is never drafted (STD-COL
 
 The rule's destination address is the public IP of the hub firewall at that environment and site. Take it from the routing data, never from the ticket (STD-COLL-06).
 
-Check that the port is not already published on that firewall. If it is, escalate. Two DNAT rules cannot share one public IP and port.
+Call `dnat_port_check` for each selected env-site with the ticket's protocol and ports. If it answers `conflicts_found`, escalate with `port_already_published` and name the rule that holds the port. If it answers `inconclusive`, escalate with `needs_engineer_review` and give its reason. Two DNAT rules cannot share one public IP, protocol and port.
 
 ## RB-02-4 — Place and name the rule
 
@@ -41,7 +41,7 @@ Each item gives the reason code the reply carries when it stops. Every stop carr
 - the port is already published on that firewall: `port_already_published`
 - a selected site has no internal host: `site_without_address`
 - a host belongs to a site the ticket does not select: `address_for_unselected_site`
-- the protocol is anything other than TCP or UDP: `dnat_protocol_not_supported`. The ticket schema already sends such a ticket to engineer review, so the agent should never see it
+- the protocol is anything other than TCP: `dnat_protocol_not_supported`. Intake already sends such a ticket back to the engineer, who edits or rejects it, so the agent should never see it. Never draft it as TCP.
 
 ## RB-02-6 — Draft, but mark a caution, when
 

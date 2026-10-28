@@ -31,6 +31,38 @@ def load_ticket(path: str | Path) -> dict:
         return yaml.safe_load(f)
 
 
+# Workflow policy (2026-10-28), not an Azure limit: Azure Firewall DNAT takes TCP or UDP, but this
+# workflow drafts new inbound DNAT rules for TCP only. A ticket keeps the protocol it asks for; nothing
+# here changes it.
+INBOUND_PROTOCOL = "TCP"
+DNAT_PROTOCOL_CODE = "dnat_protocol_not_supported"
+
+
+def is_inbound(ticket: dict) -> bool:
+    """True when no source is internal, the same test the schema uses for inbound DNAT tickets."""
+    def internal(entry) -> bool:
+        return isinstance(entry, dict) and ("environment" in entry or "location" in entry
+                                            or str(entry.get("ip_group", "")).startswith("ipg-onprem-"))
+    sources = ticket.get("sources")
+    return isinstance(sources, list) and bool(sources) and not any(internal(s) for s in sources)
+
+
+def dnat_protocol_problem(ticket: dict) -> str:
+    """Explain why a new inbound DNAT ticket's protocol cannot be drafted under the TCP-only policy, or return ''."""
+    protocol = ticket.get("protocol")
+    if (ticket.get("item") != "Firewall Change Request" or not is_inbound(ticket)
+            or protocol in (INBOUND_PROTOCOL, None)):  # a missing protocol is the schema's finding
+        return ""
+    if protocol == "UDP":
+        why = ("Azure Firewall DNAT can take UDP, but this workflow drafts new inbound DNAT rules for TCP "
+               "only (workflow policy)")
+    else:
+        why = (f"Azure Firewall DNAT takes TCP or UDP, not {protocol!r}, and this workflow drafts new inbound "
+               "DNAT rules for TCP only (workflow policy)")
+    return (f"This inbound ticket asks for {protocol}. {why}. The workflow will not change the protocol. "
+            "Edit the ticket to TCP if the partner connects over TCP, or reject it.")
+
+
 def _ip_group_errors(where: str, address: dict) -> list[str]:
     """An internal group must sit at the env-site its name says; partner and on-prem groups have no env-site."""
     name = address["ip_group"]

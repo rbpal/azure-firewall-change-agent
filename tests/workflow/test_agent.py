@@ -64,8 +64,8 @@ def test_the_definition_gives_four_read_tools_over_the_project_connection_with_n
     assert body["model"] == "gpt-6-luna-agent" and len(body["tools"]) == 1
     assert tool["type"] == "mcp" and tool["project_connection_id"] == "mcp-fwagentic-tools"
     assert tool["server_url"] == "https://func-fwagentic-dev.azurewebsites.net/runtime/webhooks/mcp"
-    assert sorted(tool["allowed_tools"]) == ["dns_lookup_for_fqdn", "duplicate_rule_check", "locate_address_for_env_site",
-                                             "resolve_env_site"]
+    assert sorted(tool["allowed_tools"]) == ["dnat_port_check", "dns_lookup_for_fqdn", "duplicate_rule_check",
+                                             "locate_address_for_env_site", "resolve_env_site"]
     assert tool["require_approval"] == "never"
     assert tool["headers"] == {"X-Fwagent-Snapshot": SNAP}  # every tool call of the ticket reads this commit
     fmt = body["text"]["format"]

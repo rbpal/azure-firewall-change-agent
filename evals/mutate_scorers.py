@@ -25,6 +25,7 @@ REPO = Path(__file__).resolve().parents[1]
 LP = "evals/least_privilege.py"
 AB = "evals/abstention.py"
 RUN = "evals/run_eval.py"
+REQ = "evals/required_tools.py"
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,17 @@ MUTATIONS = [
     Mutation("allow rules on a stop", AB, 'if reply.get("rules"):', "if False:"),
     Mutation("accept a needless stop", AB, 'return Score("fail", "over_abstain"', 'return Score("pass", "over_abstain"'),
     Mutation("treat any non-draft as a stop", AB, 'stopped = reply.get("outcome") == STOP', 'stopped = reply.get("outcome") != "draft"'),
+    # Required tools: the ways a skipped call could go unnoticed.
+    Mutation("require no lookups", REQ, 'if ticket.get("item") == REMOVAL:', "if True:"),
+    Mutation("require lookups on a removal", REQ, 'if ticket.get("item") == REMOVAL:', "if False:"),
+    Mutation("skip IP group lookups", REQ, 'entry.get("cidr") or entry.get("ip_group")', 'entry.get("cidr")'),
+    Mutation("require a lookup of *", REQ, "if value and value != REFUSED_BY_TOOL]", "if value]"),
+    Mutation("accept a duplicate check at any site", REQ, 'and t["env_site"] not in sites]', "and not sites]"),
+    Mutation("drop the DNAT port check", REQ, 'if r.get("translated_address"))', "if False)"),
+    Mutation("drop the labelled DNS check", REQ, "and not called(DNS):", "and False:"),
+    Mutation("compare addresses as raw text", REQ, "        return str(ipaddress.IPv4Network(str(text).strip(), strict=False))",
+             "        return str(text)"),
+    Mutation("ignore a skipped tool", RUN, "            if skipped:\n", "            if False:\n"),
     # Runner: the ways it could leak the answer key or miscount the marks.
     Mutation("hand the agent its answer key", RUN, "reply = agent(copy.deepcopy(request.ticket), **extra)",
              'reply = agent({**request.ticket, "expected": request.expected}, **extra)'),

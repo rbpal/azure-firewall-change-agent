@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from evals.mutate_scorers import AB, LP, MUTATIONS, REPO, RUN, mutated
+from evals.mutate_scorers import AB, LP, MUTATIONS, REPO, RUN, REQ, mutated
 
 
 @pytest.mark.parametrize("m", MUTATIONS, ids=lambda m: m.name)
@@ -22,7 +22,7 @@ def test_every_mutation_changes_the_code(m):
 def test_mutation_names_are_unique_and_cover_scorers_and_runner():
     """Each line of output names one mutation, and both scorers and the runner are mutated."""
     assert len({m.name for m in MUTATIONS}) == len(MUTATIONS)
-    assert {m.path for m in MUTATIONS} == {LP, AB, RUN}
+    assert {m.path for m in MUTATIONS} == {LP, AB, RUN, REQ}
 
 
 def test_the_plans_three_mutations_are_listed():

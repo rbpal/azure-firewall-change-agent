@@ -5,7 +5,9 @@ Example: `uv run --python 3.11 python -m evals.run_eval --agent perfect` reads t
 scores every reply against its `expected:` block and prints the sheet. A ticket
 passes when the outcome word matches, Least-Privilege is pass or not_scored, and
 Abstention is pass. A pass is "complete" only if the draft is not narrower than
-approved.
+approved. An agent that records its tool calls must also have made every required
+call (evals/required_tools.py); a skipped one fails the ticket as skipped_tool, even
+when the answer is right. A stand-in records none, so this check does not apply to it.
 
 Why: one program produces every Tier 2 number, the same way every time. It is
 tested with stand-in agents before the real agent exists (Step 04 Task 03).
@@ -50,6 +52,7 @@ from workflow.agent import InfraError, RateLimited
 from workflow.cli import acceptance
 from workflow.intake import ticket_version
 from evals.least_privilege import score_least_privilege
+from evals.required_tools import missing_tools
 from evals.stand_in_agents import Agent, always_stop, perfect
 
 REQUESTS = Path(__file__).resolve().parent / "requests"
@@ -73,6 +76,7 @@ MISTAKES = (
     "wrong_reason",
     "stop_with_rules",
     "agent_error",
+    "skipped_tool",
 )
 
 
@@ -295,6 +299,11 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
             verdict, outcome = Verdict(mistakes=["agent_error"], detail=[f"{type(error).__name__}: {error}"]), "?"
         else:
             verdict = score_reply(request.expected, reply)
+            recorded = [c.tool_calls for c in _calls(agent)[made:] if c.tool_calls is not None]
+            skipped = missing_tools(request.ticket, request.expected, [t for calls in recorded for t in calls]) if recorded else []
+            if skipped:
+                verdict.mistakes.append("skipped_tool")
+                verdict.detail += [f"skipped {s}" for s in skipped]
             outcome = reply.get("outcome", "?") if isinstance(reply, dict) else "?"
         if replies is not None:
             replies.append({"number": request.number, "reply": reply, "mistakes": verdict.mistakes, "detail": verdict.detail,
@@ -426,6 +435,7 @@ def format_report(results: list[TicketResult], split: str, agent_name: str, not_
         f"Wrong stop reason                 {m['wrong_reason']:>3} / {stops}",
         f"Stop that wrote rules             {m['stop_with_rules']:>3} / {stops}",
         f"Agent error                       {m['agent_error']:>3} / {n}",
+        f"Skipped required tool             {m['skipped_tool']:>3} / {n}   (instruction-following failure)",
         "",
         "By category (passed and complete / tickets)",
     ]

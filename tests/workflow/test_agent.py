@@ -540,6 +540,27 @@ def test_step_one_checks_mixed_sources_and_unresolved_groups_before_any_route():
     assert all(step.index(word) > step.index("- a. ") for word in ("`open_dnat_source`", "`address_not_in_plan`", "evaluate the ticket with RB-02"))
 
 
+def test_step_one_requires_the_open_source_lookup_before_the_stop():
+    assert "`0.0.0.0/0` must be looked up before you stop" in _step_one()
+    assert "The tool refuses `*`, so do not look it up." in _step_one()
+
+
+def test_rb_03_treats_an_exact_match_on_a_removal_as_a_deletion_candidate():
+    text = (Path(__file__).resolve().parents[2] / "data" / "runbooks" / "rule-removal.md").read_text()
+    section = text[text.index("## RB-03-1"):text.index("## RB-03-2")]
+    assert "identifies an existing matching rule. Treat it as a deletion candidate" in section
+    assert "Do not conclude that no removal is needed merely because the requested traffic is already allowed." in section
+
+
+def test_the_recorded_tool_calls_keep_each_name_and_its_arguments():
+    good = SimpleNamespace(type="mcp_call", name="locate_address_for_env_site", arguments='{"address": "0.0.0.0/0"}')
+    bad = SimpleNamespace(type="mcp_call", name="resolve_env_site", arguments="oops")
+    other = SimpleNamespace(type="message")
+    assert agent_mod.tool_calls(SimpleNamespace(output=[good, bad, other])) == [
+        {"name": "locate_address_for_env_site", "arguments": {"address": "0.0.0.0/0"}},
+        {"name": "resolve_env_site", "arguments": {}}]
+
+
 def test_step_one_never_lets_a_tag_or_name_or_address_space_prove_direction():
     step = _step_one()
     assert "never from the ticket's `environment`, `site` or `location` tags or from a group's name" in step

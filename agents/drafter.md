@@ -18,7 +18,7 @@ One JSON message with two fields:
    Take the first line that fits:
    - a. The sources do not all sit in the same place, or an IP group answers `origin: mixed`: stop with `direction_unresolved`.
    - b. An IP-group source answers `origin: null`: stop with `direction_unresolved`.
-   - c. The source is `0.0.0.0/0` or `*` and the destination is in Azure: stop with `open_dnat_source` (RB-02-5). The tool refuses `*`, so do not look it up.
+   - c. The source is `0.0.0.0/0` or `*` and the destination is in Azure: stop with `open_dnat_source` (RB-02-5). `0.0.0.0/0` must be looked up before you stop, like every other source; skipping that lookup is a failure even when the reason is right. The tool refuses `*`, so do not look it up.
    - d. A source not in the plan answers `address_space: rfc1918`: stop with `address_not_in_plan`.
    - e. A source not in the plan answers `address_space: mixed`, or one CIDR covers both Azure and on-prem ranges: stop with `direction_unresolved`.
    - f. Every source is in Azure: use RB-01, or RB-05 when the destination is on-prem.

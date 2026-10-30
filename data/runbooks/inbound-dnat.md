@@ -34,7 +34,7 @@ Azure Firewall adds a matching allow rule for the translated traffic itself. Do 
 
 Each item gives the reason code the reply carries when it stops. Every stop carries a code.
 
-- the source is `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block): `open_dnat_source`
+- the source is `0.0.0.0/0` or `*` (STD-COLL-04; the only hard block): `open_dnat_source`. Look up `0.0.0.0/0` before you stop.
 - the destination is not a single internal host, such as a whole subnet: `dnat_destination_not_host`
 - the host is not in the address plan: `address_not_in_plan`
 - the host belongs to an environment or site other than the one the ticket gives it: `env_mismatch` (RB-01-6)

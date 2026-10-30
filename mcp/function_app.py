@@ -46,12 +46,16 @@ def dns_lookup_for_fqdn_tool(context: str) -> str:
     arg_name="context",
     tool_name="locate_address_for_env_site",
     description=("Find which environment, site, spoke, VNet and IP group an internal IPv4 address or CIDR "
-                 "belongs to, and that env-site's hub firewall and firewall policy. Reads the address plan "
-                 "and routing from the copy of main (the pinned snapshot, else the latest) and names the commit it read."),
+                 "belongs to, and that env-site's hub firewall and firewall policy. Given an IP group name, list "
+                 "every plan range that names it, with origin azure, onprem or mixed; null when no range does. "
+                 "An address no plan range contains also answers address_space: rfc1918, non_rfc1918 or mixed. "
+                 "Reads the address plan and routing from the copy of main (the pinned snapshot, else the latest) "
+                 "and names the commit it read."),
     tool_properties=json.dumps([{
         "propertyName": "address",
         "propertyType": "string",
-        "description": "An IPv4 address such as 10.100.20.14, or a CIDR such as 10.100.20.0/24.",
+        "description": ("An IPv4 address such as 10.100.20.14, a CIDR such as 10.100.20.0/24, "
+                        "or an IP group name such as ipg-onprem-primary."),
     }]),
 )
 def locate_address_for_env_site_tool(context: str) -> str:

@@ -21,13 +21,31 @@ addresses no range lists (with those extra blocks and their count), and
 `no_owner` when the input sits in an env-site but no spoke or shared range
 owns it, as with a planned or unknown subnet. A CIDR with host bits set is
 refused with both of its readings; the tool never picks one.
+
+An IP group name, such as ipg-onprem-primary, answers with every plan range
+that lists that group and their origin: azure, onprem, or mixed when the plan
+lists it on both. The agent looks up each source this way before it picks a
+runbook, so the direction comes from the plan, never from a name. A group no
+range lists answers origin null: the plan cannot say whether it is a partner's
+group or an internal one it does not record, and the tool never guesses.
+
+An address or CIDR no plan range contains also answers `address_space`, from
+the three RFC 1918 blocks: rfc1918 when it sits entirely inside one, non_rfc1918
+when it overlaps none, mixed when it overlaps one and reaches outside it. This
+states only what the number is. non_rfc1918 does not prove a source is on the
+internet, and rfc1918 does not prove where a source sits. Python's is_private is
+not used: it also answers True for documentation ranges such as 198.51.100.0/24.
 """
 
 import ipaddress
+import re
 
 from errors import BadArguments
 from data_readers.read_addressplan_routing import (ADDRESS_PLAN, ROUTING, NetworkDataError, Hub, OnPremRange, Range, Source,
                                                    load_hubs, load_onprem, load_ranges)
+
+IP_GROUP = re.compile(r"ipg-[a-z0-9]+(?:-[a-z0-9]+)*")  # STD-NAME-04: lower case, single hyphens
+RFC1918 = tuple(ipaddress.IPv4Network(b) for b in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 
 def _describe(r: Range | OnPremRange, hubs: dict[str, Hub]) -> dict:
@@ -69,7 +87,36 @@ def parse_address(text) -> ipaddress.IPv4Network:
             if net is not None:
                 raise BadArguments(f"{text} has host bits set, so it has two readings: the host "
                                    f"{text.split('/')[0]}/32 or the subnet {net}; the tool will not pick one") from exc
-        raise BadArguments(f"{text!r} is not an IPv4 address or CIDR") from exc
+        raise BadArguments(f"{text!r} is not an IPv4 address, a CIDR or an IP group name") from exc
+
+
+def parse_ip_group(text: str) -> str:
+    """Read one IP group name in the STD-NAME-04 shape; refuse anything else, never fix its case or spelling."""
+    if not IP_GROUP.fullmatch(text):
+        raise BadArguments(f"{text!r} is not an IP group name such as ipg-sett-prod or ipg-onprem-primary: "
+                           "lower case letters and digits joined by single hyphens")
+    return text
+
+
+def locate_group(name: str, ranges: list[Range | OnPremRange], hubs: dict[str, Hub]) -> dict:
+    """Every plan range that lists this IP group, and whether they sit in Azure, on-prem, or both."""
+    members = sorted((r for r in ranges if r.ip_group == name), key=lambda r: r.network)
+    origins = {"onprem" if isinstance(r, OnPremRange) else "azure" for r in members}
+    result = {"input": name, "matches": [_describe(r, hubs) for r in members],
+              "origin": origins.pop() if len(origins) == 1 else "mixed" if origins else None}
+    if not members:
+        result["reason"] = ("no range in the address plan lists this IP group, so the plan cannot say where it is "
+                            "or whether it is a partner's")
+    elif result["origin"] == "mixed":
+        result["ambiguous"] = "the address plan lists this IP group on both Azure and on-prem ranges"
+    return result
+
+
+def address_space(net: ipaddress.IPv4Network) -> str:
+    """Whether a network sits inside RFC 1918 (rfc1918), outside it (non_rfc1918), or across the edge (mixed)."""
+    if any(net.subnet_of(block) for block in RFC1918):
+        return "rfc1918"
+    return "mixed" if any(net.overlaps(block) for block in RFC1918) else "non_rfc1918"
 
 
 def locate(net: ipaddress.IPv4Network, ranges: list[Range | OnPremRange], hubs: dict[str, Hub]) -> dict:
@@ -89,6 +136,7 @@ def locate(net: ipaddress.IPv4Network, ranges: list[Range | OnPremRange], hubs: 
     if not containing:
         result["reason"] = ("wider than every range in the address plan" if covered
                             else "not in the address plan (Azure or on-prem)")
+        result["address_space"] = address_space(net)
     leaves = [r for r in covered if getattr(r, "kind", "") != "env-site"]
     if leaves:
         extra = [net]
@@ -106,11 +154,14 @@ def locate(net: ipaddress.IPv4Network, ranges: list[Range | OnPremRange], hubs: 
 
 
 def locate_address_for_env_site(caller, arguments: dict, source: Source) -> dict:
-    """The tool: where one address lives, in Azure or on-prem, from the plan in the repo."""
+    """The tool: where one address or IP group lives, in Azure or on-prem, from the plan in the repo."""
     if not isinstance(arguments, dict) or set(arguments) - {"address"}:
         raise BadArguments("only one argument is accepted: address")
-    net = parse_address(arguments.get("address"))
+    text = arguments.get("address")
+    group = isinstance(text, str) and text.strip().lower().startswith("ipg-")
+    target = parse_ip_group(text.strip()) if group else parse_address(text)
     hubs = load_hubs(source)
-    result = locate(net, load_ranges(source) + load_onprem(source), hubs)
+    ranges = load_ranges(source) + load_onprem(source)
+    result = locate_group(target, ranges, hubs) if group else locate(target, ranges, hubs)
     result["source"] = {"files": [ADDRESS_PLAN, ROUTING], "commit": source.commit}
     return result

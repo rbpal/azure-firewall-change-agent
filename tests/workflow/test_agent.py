@@ -523,3 +523,31 @@ def test_a_live_agent_error_writes_nothing_and_leaves_the_ticket_waiting(repo, t
     assert code == cli.REFUSED and "Nothing was written" in capsys.readouterr().out
     assert {p: p.read_bytes() for p in (repo / "infra").rglob("*") if p.is_file()} == before
     assert cli.load_record(repo, "RITM0011001")["status"] == "awaiting_review"
+
+
+def _step_one() -> str:
+    """Step 1 of the drafter's instructions, as the agent reads it."""
+    text = (Path(__file__).resolve().parents[2] / "agents" / "drafter.md").read_text()
+    return text[text.index("1. Pick the runbook"):text.index("2. Get every fact")]
+
+
+def test_step_one_checks_mixed_sources_and_unresolved_groups_before_any_route():
+    step = _step_one()
+    order = ["- a. ", "`origin: mixed`", "- b. ", "`origin: null`", "- c. ", "`open_dnat_source`", "- d. ",
+             "`address_not_in_plan`", "- e. ", "`address_space: mixed`", "- f. ", "RB-01", "- g. ", "- h. ", "evaluate the ticket with RB-02", "- i. "]
+    at = [step.index(word, step.index("- a. ")) for word in order]
+    assert at == sorted(at)
+    assert all(step.index(word) > step.index("- a. ") for word in ("`open_dnat_source`", "`address_not_in_plan`", "evaluate the ticket with RB-02"))
+
+
+def test_step_one_never_lets_a_tag_or_name_or_address_space_prove_direction():
+    step = _step_one()
+    assert "never from the ticket's `environment`, `site` or `location` tags or from a group's name" in step
+    assert "`non_rfc1918` does not prove the source is on the internet" in step
+    assert "Every RB-02 check still decides" in step
+
+
+def test_the_unresolved_stop_goes_back_for_edit_or_reject_and_a_new_acceptance():
+    text = (Path(__file__).resolve().parents[2] / "agents" / "drafter.md").read_text()
+    assert "return the ticket to the engineer to edit or reject" in text
+    assert "An edited ticket must be accepted again before you run again" in text

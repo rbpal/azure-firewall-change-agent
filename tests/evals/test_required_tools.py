@@ -19,9 +19,16 @@ def missing(number, *tool_calls):
 
 
 def test_an_open_source_must_be_looked_up_even_when_the_label_lists_no_tools():
+    ticket = REQUESTS["RITM0011059"].ticket
     destination = call(LOCATE, address="10.102.20.14/32")
-    assert missing("RITM0011059", destination) == [f"{LOCATE} 0.0.0.0/0"]
-    assert missing("RITM0011059", destination, call(LOCATE, address="0.0.0.0/0")) == []
+    assert missing_tools(ticket, {"tools": []}, [destination]) == [f"{LOCATE} 0.0.0.0/0"]
+    assert missing_tools(ticket, {"tools": []}, [destination, call(LOCATE, address="0.0.0.0/0")]) == []
+
+
+def test_a_non_http_hostname_stop_needs_its_dns_lookup():
+    sources = [call(LOCATE, address="10.102.15.0/24"), call(LOCATE, address="10.103.15.0/24")]
+    assert missing("RITM0011064", *sources) == [DNS]
+    assert missing("RITM0011064", *sources, call(DNS, target="api.tailspin.example")) == []
 
 
 def test_star_is_exempt_because_the_tool_refuses_it():

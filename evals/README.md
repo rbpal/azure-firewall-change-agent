@@ -17,7 +17,7 @@ There is no training set: the model's weights are never trained here.
 ## What a label's fields mean
 
 - `labelled_against`: the commit whose network data, rule files and tools the label was checked against. A later commit that changes those files can change the right answer, so the label must be checked again.
-- `tools`: the lookups the answer rests on, for the reviewer. It is empty when the ticket's own fields establish the answer. No scorer reads it, so an agent that stops correctly without a lookup is not marked down. Scoring tool use comes later, and will require only these lookups.
+- `tools`: the lookups the answer rests on or the instructions require. `evals/required_tools.py` scores duplicate-check and DNS entries from this list; step 1 lookups are scored from the ticket, whatever the list says.
 - `note`: why the answer is right, the evidence checked, and what the workflow code does if the agent drafts instead.
 
 ## Labels pending review

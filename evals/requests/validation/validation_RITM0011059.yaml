@@ -34,9 +34,11 @@ expected:
     the source; a source of 0.0.0.0/0 or * is never drafted (STD-COLL-04, the only standard that blocks). RB-02-5
     stops: open_dnat_source. Explain that unrestricted inbound access is prohibited. Return the ticket to the engineer
     to provide the specific permitted source ranges or reject it. Draft nothing and never change the source
-    automatically. The ticket fields alone establish the stop, so no lookup is required. If the agent drafts the rule
+    automatically. Step 1 and RB-02-5 require both addresses to be looked up before the stop, including 0.0.0.0/0. If the agent drafts the rule
     anyway, the workflow's draft check refuses it and writes nothing (security register 50.21, fixed).
   outcome: stop_and_ask
   reason: open_dnat_source
   rules: []
-  tools: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 0.0.0.0/0}
+  - {tool: locate_address_for_env_site, address: 10.102.20.14/32}

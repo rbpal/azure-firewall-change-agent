@@ -64,8 +64,8 @@ def test_the_definition_gives_four_read_tools_over_the_project_connection_with_n
     assert body["model"] == "gpt-6-luna-agent" and len(body["tools"]) == 1
     assert tool["type"] == "mcp" and tool["project_connection_id"] == "mcp-fwagentic-tools"
     assert tool["server_url"] == "https://func-fwagentic-dev.azurewebsites.net/runtime/webhooks/mcp"
-    assert sorted(tool["allowed_tools"]) == ["dns_lookup_for_fqdn", "duplicate_rule_check", "locate_address_for_env_site",
-                                             "resolve_env_site"]
+    assert sorted(tool["allowed_tools"]) == ["dnat_port_check", "dns_lookup_for_fqdn", "duplicate_rule_check",
+                                             "locate_address_for_env_site", "resolve_env_site"]
     assert tool["require_approval"] == "never"
     assert tool["headers"] == {"X-Fwagent-Snapshot": SNAP}  # every tool call of the ticket reads this commit
     fmt = body["text"]["format"]
@@ -523,3 +523,52 @@ def test_a_live_agent_error_writes_nothing_and_leaves_the_ticket_waiting(repo, t
     assert code == cli.REFUSED and "Nothing was written" in capsys.readouterr().out
     assert {p: p.read_bytes() for p in (repo / "infra").rglob("*") if p.is_file()} == before
     assert cli.load_record(repo, "RITM0011001")["status"] == "awaiting_review"
+
+
+def _step_one() -> str:
+    """Step 1 of the drafter's instructions, as the agent reads it."""
+    text = (Path(__file__).resolve().parents[2] / "agents" / "drafter.md").read_text()
+    return text[text.index("1. Pick the runbook"):text.index("2. Get every fact")]
+
+
+def test_step_one_checks_mixed_sources_and_unresolved_groups_before_any_route():
+    step = _step_one()
+    order = ["- a. ", "`origin: mixed`", "- b. ", "`origin: null`", "- c. ", "`open_dnat_source`", "- d. ",
+             "`address_not_in_plan`", "- e. ", "`address_space: mixed`", "- f. ", "RB-01", "- g. ", "- h. ", "evaluate the ticket with RB-02", "- i. "]
+    at = [step.index(word, step.index("- a. ")) for word in order]
+    assert at == sorted(at)
+    assert all(step.index(word) > step.index("- a. ") for word in ("`open_dnat_source`", "`address_not_in_plan`", "evaluate the ticket with RB-02"))
+
+
+def test_step_one_requires_the_open_source_lookup_before_the_stop():
+    assert "`0.0.0.0/0` must be looked up before you stop" in _step_one()
+    assert "The tool refuses `*`, so do not look it up." in _step_one()
+
+
+def test_rb_03_treats_an_exact_match_on_a_removal_as_a_deletion_candidate():
+    text = (Path(__file__).resolve().parents[2] / "data" / "runbooks" / "rule-removal.md").read_text()
+    section = text[text.index("## RB-03-1"):text.index("## RB-03-2")]
+    assert "identifies an existing matching rule. Treat it as a deletion candidate" in section
+    assert "Do not conclude that no removal is needed merely because the requested traffic is already allowed." in section
+
+
+def test_the_recorded_tool_calls_keep_each_name_and_its_arguments():
+    good = SimpleNamespace(type="mcp_call", name="locate_address_for_env_site", arguments='{"address": "0.0.0.0/0"}')
+    bad = SimpleNamespace(type="mcp_call", name="resolve_env_site", arguments="oops")
+    other = SimpleNamespace(type="message")
+    assert agent_mod.tool_calls(SimpleNamespace(output=[good, bad, other])) == [
+        {"name": "locate_address_for_env_site", "arguments": {"address": "0.0.0.0/0"}},
+        {"name": "resolve_env_site", "arguments": {}}]
+
+
+def test_step_one_never_lets_a_tag_or_name_or_address_space_prove_direction():
+    step = _step_one()
+    assert "never from the ticket's `environment`, `site` or `location` tags or from a group's name" in step
+    assert "`non_rfc1918` does not prove the source is on the internet" in step
+    assert "Every RB-02 check still decides" in step
+
+
+def test_the_unresolved_stop_goes_back_for_edit_or_reject_and_a_new_acceptance():
+    text = (Path(__file__).resolve().parents[2] / "agents" / "drafter.md").read_text()
+    assert "return the ticket to the engineer to edit or reject" in text
+    assert "An edited ticket must be accepted again before you run again" in text

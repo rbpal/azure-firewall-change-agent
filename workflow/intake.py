@@ -25,7 +25,7 @@ from pathlib import Path
 import yaml
 
 from workflow.bypass import CODE as BYPASS, bypass_message, bypass_requests
-from workflow.tickets import ticket_errors
+from workflow.tickets import DNAT_PROTOCOL_CODE, dnat_protocol_problem, ticket_errors
 from workflow.urls import name_findings, url_conflicts
 
 ADDRESS_PLAN = "data/network/address-plan.yaml"
@@ -136,6 +136,9 @@ def intake_findings(repo: Path, ticket: dict) -> list[dict]:
     for f in name_findings(ticket):  # explained in plain words, never corrected; the schema's pattern error is dropped
         out.append(finding(f["code"], f["where"], f["message"]))
         explained.add(f["where"].rsplit("/", 1)[0])
+    if why := dnat_protocol_problem(ticket):  # TCP-only policy; the schema's enum error for the same field is dropped
+        out.append(finding(DNAT_PROTOCOL_CODE, "protocol", why))
+        explained.add("protocol")
     for error in ticket_errors(ticket):
         path = error.split(":", 1)[0]
         if not any(path == w or path.startswith(w + "/") for w in explained):

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from workflow import intake
 from workflow.scope import BACKUP, ApprovalError, PartialWriteError, ScopeError, apply_reply, selected_env_sites
 from workflow.tfvars_writer import DraftError, parse_rules
 from workflow.tickets import load_ticket, ticket_errors
@@ -778,4 +779,45 @@ def test_a_legacy_dnat_removal_still_matches_the_stored_rule_exactly(repo, ports
     before = snapshot(repo)
     with pytest.raises(error, match=why):
         apply_reply(repo, *legacy_removal(ports, **change))
+    assert changed(before, repo) == set()
+
+
+# ---------------------------------------------------------------- inbound DNAT is TCP only (workflow policy, 2026-10-28)
+
+def test_a_tcp_inbound_ticket_has_no_protocol_finding():
+    t, _ = _label("RITM0011020")
+    assert intake.intake_findings(REPO, t) == []
+
+
+@pytest.mark.parametrize("protocol, says", [("UDP", "Azure Firewall DNAT can take UDP"),
+                                            ("ICMP", "takes TCP or UDP, not 'ICMP'")])
+def test_a_non_tcp_inbound_ticket_goes_back_to_the_engineer_unchanged(protocol, says):
+    t, _ = _label("RITM0011020")
+    t["protocol"] = protocol
+    before = copy.deepcopy(t)
+    [f] = intake.intake_findings(REPO, t)
+    assert (f["code"], f["where"], f["acceptable"]) == ("dnat_protocol_not_supported", "protocol", False)
+    assert says in f["message"] and "workflow policy" in f["message"]
+    assert "will not change the protocol" in f["message"] and "or reject it" in f["message"]
+    assert t == before
+
+
+@pytest.mark.parametrize("change", [{"item": "Firewall Rule Removal"},
+                                    {"sources": [{"environment": "stage", "site": "primary", "cidr": "10.102.20.0/24"}]}],
+                         ids=["removal of an inbound rule", "egress ticket"])
+def test_the_tcp_policy_covers_only_new_inbound_requests(change):
+    t, _ = _label("RITM0011020")
+    t.update(change, protocol="UDP")
+    assert all(f["code"] != "dnat_protocol_not_supported" for f in intake.intake_findings(REPO, t))
+
+
+@pytest.mark.parametrize("rule_protocol", ["UDP", "TCP"], ids=["draft follows the ticket", "draft substitutes TCP"])
+def test_a_udp_inbound_ticket_writes_nothing_even_when_the_draft_says_tcp(repo, rule_protocol):
+    t, e = _label("RITM0011020")
+    t["protocol"] = "UDP"
+    for rule in e["rules"]:
+        rule["protocol"] = rule_protocol
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError, match="dnat_protocol_not_supported"):
+        apply_reply(repo, t, e)
     assert changed(before, repo) == set()

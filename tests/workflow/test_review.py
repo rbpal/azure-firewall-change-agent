@@ -254,6 +254,52 @@ def test_a_contradiction_needs_an_edit_not_an_accept(repo, tmp_path, reason):
     assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "ok", "--reply", label_reply(tmp_path)) == cli.REFUSED
 
 
+# direction_unresolved: edit or reject only; the code holds this, not the instructions.
+
+UNRESOLVED = {"outcome": "stop_and_ask", "reason": "direction_unresolved", "rules": [],
+              "explanation": "ipg-partner-northwind answered origin null, so the plan cannot say which way the traffic flows."}
+
+
+def test_a_direction_unresolved_stop_is_not_acceptable_and_keeps_the_tool_evidence(repo, tmp_path, capsys):
+    ticket, _ = files(tmp_path, ADD)
+    before = snapshot(repo)
+    assert draft(repo, ticket, reply_file(tmp_path, "stop", UNRESOLVED)) == cli.REVIEW
+    record = cli.load_record(repo, ADD)
+    assert record["status"] == "awaiting_review" and changed(before, repo) == set()
+    assert record["findings"][0]["code"] == "direction_unresolved" and record["findings"][0]["acceptable"] is False
+    assert "origin null" in record["findings"][0]["message"]
+    capsys.readouterr()
+    code = run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "fine",
+               "--reply", label_reply(tmp_path))
+    assert code == cli.REFUSED and "direction_unresolved" in capsys.readouterr().out
+    assert changed(before, repo) == set() and cli.load_record(repo, ADD)["status"] == "awaiting_review"
+
+
+def test_a_direction_unresolved_ticket_can_be_rejected(repo, tmp_path):
+    ticket, _ = files(tmp_path, ADD)
+    draft(repo, ticket, reply_file(tmp_path, "stop", UNRESOLVED))
+    assert run(repo, "reject", ADD, "Requester withdrew it") == cli.DONE
+    assert cli.load_record(repo, ADD)["status"] == "rejected"
+
+
+def test_an_edit_after_direction_unresolved_needs_a_new_acceptance_before_the_agent_runs(repo, tmp_path):
+    ticket, _ = files(tmp_path, ADD)
+    draft(repo, ticket, reply_file(tmp_path, "stop", UNRESOLVED))
+    old = version(repo)
+    t = copy.deepcopy(request(ADD)[0])
+    t["justification"] += " Edited."
+    path = tmp_path / "edited.yaml"
+    path.write_text(yaml.safe_dump(t))
+    assert run(repo, "edit", ADD, str(path), "--engineer", ENGINEER, "--note", "source confirmed") == cli.REVIEW
+    record = cli.load_record(repo, ADD)
+    assert record["status"] == "awaiting_review" and record["findings"] == [] and record["reply"] is None
+    assert version(repo) != old  # the agent has not run on the edit
+    assert run(repo, "accept", ADD, "--ticket-version", old, "--engineer", ENGINEER, "--reason", "again",
+               "--reply", label_reply(tmp_path)) == cli.REFUSED
+    assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "edited",
+               "--reply", label_reply(tmp_path)) == cli.DONE
+
+
 # Planned addresses: the engineer confirms CIDR, environment, site, policy and placement.
 
 PLANNED = {"cidr": "10.102.15.0/24", "environment": "stage", "site": "primary",

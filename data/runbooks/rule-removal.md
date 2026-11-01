@@ -7,6 +7,8 @@ Do not use for: a partner leaving altogether (use RB-04).
 
 The ticket describes the traffic to remove: source, destination, protocol and ports. Call `duplicate_rule_check` with that flow at every selected site: the environments on the ticket, and for each one the sites under "Sites to change". A rule it marks `duplicate` allows exactly that traffic, and only such a rule may be deleted. A rule marked `covers` allows more than the ticket's flow; see RB-03-2.
 
+On a removal, `already_allowed: true` with `relation: duplicate` identifies an existing matching rule. Treat it as a deletion candidate and continue RB-03's exact-match, scope and ambiguity checks. Do not conclude that no removal is needed merely because the requested traffic is already allowed.
+
 The ticket may also name the rule. Use the name only to confirm the match. The match decides, not the name.
 
 Compare like with like (STD-COLL-03). A ticket that gives CIDRs matches only rules written with addresses. A ticket that names an IP group matches only rules that name that group. `duplicate_rule_check` expands groups into their addresses, so check the rule's type yourself; a rule of the other type is not a match.

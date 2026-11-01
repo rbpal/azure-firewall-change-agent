@@ -38,10 +38,12 @@ expected:
     non_http_to_hostname. This is a limit of the Basic SKU this project uses, not of Azure Firewall in general:
     Standard and Premium filter hostnames in network rules through DNS proxy. Never replace the hostname with resolved
     IPs. Return the ticket to the engineer for edit or rejection, explaining that this project's Basic firewall policy
-    cannot filter this hostname in a network rule for TCP 5671. Draft nothing. The ticket fields alone establish the
-    stop, so no lookup is required. If the agent drafts anyway, the draft check refuses resolved IPs in place of the
+    cannot filter this hostname in a network rule for TCP 5671. Draft nothing. Step 1 requires both sources to be looked up and RB-01-4 requires a DNS lookup of the hostname; the DNS answer does not change this stop. If the agent drafts anyway, the draft check refuses resolved IPs in place of the
     hostname (STD-COLL-03), but writes a network rule that names the hostname (security register 50.23).
   outcome: stop_and_ask
   reason: non_http_to_hostname
   rules: []
-  tools: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
+  - {tool: dns_lookup_for_fqdn, target: api.tailspin.example}

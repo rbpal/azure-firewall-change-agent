@@ -48,7 +48,7 @@ AGENT_NAME = "fwagent-drafter"
 DEFAULT_MODEL = "gpt-6-luna-agent"
 DEFAULT_CONNECTION = "mcp-fwagentic-tools"
 MCP_URL = "https://func-fwagentic-dev.azurewebsites.net/runtime/webhooks/mcp"
-TOOLS = ["locate_address_for_env_site", "resolve_env_site", "duplicate_rule_check", "dns_lookup_for_fqdn"]  # whoami is diagnostic only
+TOOLS = ["locate_address_for_env_site", "resolve_env_site", "duplicate_rule_check", "dnat_port_check", "dns_lookup_for_fqdn"]  # whoami is diagnostic only
 AGENTS = Path(__file__).resolve().parent.parent / "agents"
 GUIDANCE = ("data/standards", "data/runbooks")
 REPLY_SCHEMA = json.loads((AGENTS / "reply.schema.json").read_text())
@@ -60,7 +60,7 @@ FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.S)
 SNAPSHOT_HEADER = "X-Fwagent-Snapshot"
 COMMIT = re.compile(r"[0-9a-f]{40}")
 RAW_LIMIT = 20_000  # characters of an invalid reply kept for diagnosis; a valid reply is far shorter
-READS_MAIN = {"locate_address_for_env_site", "resolve_env_site", "duplicate_rule_check"}  # their answers name the commit they read
+READS_MAIN = {"locate_address_for_env_site", "resolve_env_site", "duplicate_rule_check", "dnat_port_check"}  # their answers name the commit they read
 DATA = ("data/network", "infra/envs")  # what the sync job copies, and what a draft is written into
 SNAPSHOT_ACCOUNT = "stfwagentfuncdev"
 SNAPSHOT_CONTAINER = "network-snapshot"
@@ -235,6 +235,20 @@ def tool_commits(response) -> list[tuple[str, str | None]]:
     return out
 
 
+def tool_calls(response) -> list[dict]:
+    """Each MCP tool call the response made: its name and arguments; arguments that are not JSON count as none."""
+    out = []
+    for item in getattr(response, "output", []) or []:
+        if getattr(item, "type", "") != "mcp_call":
+            continue
+        try:
+            arguments = json.loads(getattr(item, "arguments", None) or "{}")
+        except ValueError:
+            arguments = {}
+        out.append({"name": getattr(item, "name", "?"), "arguments": arguments if isinstance(arguments, dict) else {}})
+    return out
+
+
 def definition_sha(body: dict) -> str:
     """A short hash of the definition, stored on each agent version so an unchanged one is reused."""
     return hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()[:16]
@@ -328,6 +342,7 @@ class Call:
     input_tokens: int = 0
     output_tokens: int = 0
     tools: list[str] = field(default_factory=list)
+    tool_calls: list[dict] | None = None  # each tool's name and arguments, for the required-tool score; None if not recorded
     commits: list[str | None] = field(default_factory=list)
     error: str | None = None
     response_id: str | None = None  # finds the call's trace in Application Insights (gen_ai.response.id)
@@ -398,6 +413,7 @@ class FoundryAgent:
             raise refused
         call.tools = [getattr(item, "name", "?") for item in getattr(response, "output", []) or []
                       if getattr(item, "type", "") == "mcp_call"]
+        call.tool_calls = tool_calls(response)
         read = tool_commits(response)
         call.commits = [c for _, c in read]
         mixed = [f"{name} read {commit or 'no named commit'}" for name, commit in read if commit != self.snapshot]

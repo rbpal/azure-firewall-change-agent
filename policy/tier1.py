@@ -27,6 +27,7 @@ sys.path.insert(0, str(REPO / "mcp"))
 from data_readers.read_addressplan_routing import LocalSource, load_hubs, load_ranges  # noqa: E402
 from errors import BadArguments  # noqa: E402
 from tools.duplicate_rule_check import duplicate_rule_check  # noqa: E402
+from tools.dnat_port_check import overlap, published  # noqa: E402  (the agent tool's port test, so the two agree)
 
 KINDS = {  # plan block -> (type word in names, priority, action)
     "nat_rule_collection": ("dnat", 1000, "Dnat"),
@@ -214,7 +215,7 @@ def check_layout(m: dict, **_) -> list[Finding]:
 
 
 def check_dnat_targets(m: dict, root: Path = REPO, **_) -> list[Finding]:
-    """STD-COLL-06: DNAT goes to this site's hub public IP, translates inside this site, and each public port is used once."""
+    """STD-COLL-06: DNAT goes to this site's hub public IP, translates inside this site, and each public IP, protocol and port is used once."""
     dnat = list(_rules(m, "nat_rule_collection"))
     if not dnat:
         return []
@@ -223,7 +224,7 @@ def check_dnat_targets(m: dict, root: Path = REPO, **_) -> list[Finding]:
     if hub is None:
         return [Finding("caution", "STD-COLL-06", m["policy"] or "?", "policy is not in routing.yaml")]
     mine = [r.network for r in load_ranges(source) if r.env_site == env_site and r.kind != "env-site"]
-    out, seen = [], {}
+    out, earlier = [], []
     for g, c, r in dnat:
         w = _where(g, c, r)
         if r.get("destination_address") != hub.public_ip:
@@ -236,10 +237,16 @@ def check_dnat_targets(m: dict, root: Path = REPO, **_) -> list[Finding]:
         if not inside:
             out.append(Finding("caution", "STD-COLL-06", w,
                                f"translated address {r.get('translated_address')} is outside {env_site}"))
-        for p in r.get("destination_ports") or []:
-            if p in seen:
-                out.append(Finding("caution", "STD-COLL-06", w, f"public port {p} already used by {seen[p]}"))
-            seen.setdefault(p, r["name"])
+        try:
+            mine_published = published(r)
+        except ValueError as exc:
+            out.append(Finding("caution", "STD-COLL-06", w, f"public port cannot be compared: {exc}"))
+            continue
+        for name, other in earlier:
+            if shared := overlap(mine_published, other):
+                out.append(Finding("caution", "STD-COLL-06", w,
+                                   f"public port {', '.join(shared)} already used by {name}"))
+        earlier.append((r["name"], mine_published))
     return out
 
 

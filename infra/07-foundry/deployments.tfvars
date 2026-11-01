@@ -4,8 +4,9 @@
 # No free tier: models bill per token. Chosen by the user on 2026-10-15 as the
 # cheapest option (eastus2 retail prices, per 1M tokens, Global Standard):
 #   gpt-6-luna    $0.10 input / $0.50 output  - the agent
-#   gpt-5.4-mini  $0.75 input / $4.50 output  - the judge for Foundry's quality checks
-# The judge is a different model from the agent, so it does not grade itself.
+# gpt-5.4-mini-judge was removed on 2026-10-30: no agent, evaluation or code used
+# it and it had served no tokens. Foundry's quality checks are not built; add a
+# judge back here, a different model from the agent, when they are.
 # Capacity is a throughput limit, not a spending cap: one unit allows 1,000
 # tokens and 1 request per minute. Billing is per token, so the same run costs
 # the same at any capacity; spend is watched by budget-fwagentic-monthly.
@@ -22,12 +23,6 @@ deployments = {
     model_version = "2026-09-22"
     sku_name      = "GlobalStandard"
     capacity      = 200
-  }
-  "gpt-5.4-mini-judge" = {
-    model_name    = "gpt-5.4-mini"
-    model_version = "2026-03-17"
-    sku_name      = "GlobalStandard"
-    capacity      = 10
   }
 }
 

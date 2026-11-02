@@ -52,6 +52,13 @@ rprt = {
           destination_addresses = ["198.51.100.32/28"]
           destination_ports     = ["443"]
         }
+        "007-tcp-rprt-to-tailspin" = {
+          name                  = "tcp-rprt-to-tailspin"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.102.15.0/24"]
+          destination_addresses = ["198.51.100.16/28"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

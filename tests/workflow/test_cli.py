@@ -73,11 +73,69 @@ ADD = "RITM0011041"  # stage primary only, DR built: one new rule in stage-eastu
 ADD_FILE = "infra/envs/stage-eastus2/firewall_policy_rule_collection_groups/rprt.tfvars"
 REMOVE = "RITM0011045"  # lab primary only: remove 008-smtp-sett-to-wingtipSmtp; lab DR keeps it
 REMOVE_FILE = "infra/envs/lab-eastus2/firewall_policy_rule_collection_groups/sett.tfvars"
+# A fixed starting file, so these tests do not depend on how many rules the real file holds: network rules
+# 001-003 and one application rule. Application rules count on their own, so the next network rule is 004.
+KNOWN_RPRT = """\
+rprt = {
+  name                = "rprt"
+  firewall_policy_key = "firewall_policy"
+  priority            = 200
+
+  network_rule_collections = {
+    allow-rprt-network-rules = {
+      name     = "allow-rprt-network-rules"
+      priority = 2000
+      action   = "Allow"
+      rules = {
+        "001-sftp-rprt-to-fabrikamSftp" = {
+          name                  = "sftp-rprt-to-fabrikamSftp"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.102.15.0/24"]
+          destination_addresses = ["203.0.113.32/28"]
+          destination_ports     = ["22"]
+        }
+        "002-https-rprt-to-fabrikamFs" = {
+          name                  = "https-rprt-to-fabrikamFs"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.102.15.0/24"]
+          destination_addresses = ["203.0.113.32/28"]
+          destination_ports     = ["443"]
+        }
+        "003-smtp-rprt-to-woodgroveSmtp" = {
+          name                  = "smtp-rprt-to-woodgroveSmtp"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.102.15.0/24"]
+          destination_addresses = ["203.0.113.48/28"]
+          destination_ports     = ["587"]
+        }
+      }
+    }
+  }
+
+  application_rule_collections = {
+    allow-rprt-app-rules = {
+      name     = "allow-rprt-app-rules"
+      priority = 3000
+      action   = "Allow"
+      rules = {
+        "001-https-rprt-to-litwareApi" = {
+          name              = "https-rprt-to-litwareApi"
+          protocols         = ["Https:443"]
+          source_ip_groups  = ["ipg-rprt-stage"]
+          destination_fqdns = ["api.litware.example"]
+        }
+      }
+    }
+  }
+}
+"""
 
 
-@pytest.mark.parametrize("number, file, key", [(ADD, ADD_FILE, "007-https-rprt-to-fourthcoffeeFs"),
+@pytest.mark.parametrize("number, file, key", [(ADD, ADD_FILE, "004-https-rprt-to-fourthcoffeeFs"),
                                                (REMOVE, REMOVE_FILE, "008-smtp-sett-to-wingtipSmtp")])
 def test_submit_writes_only_the_selected_file_and_keeps_a_record(repo, tmp_path, capsys, number, file, key):
+    if number == ADD:
+        (repo / ADD_FILE).write_text(KNOWN_RPRT)
     ticket, reply = files(tmp_path, number)
     before = snapshot(repo)
     assert draft(repo, ticket, reply) == cli.DONE
@@ -87,6 +145,10 @@ def test_submit_writes_only_the_selected_file_and_keeps_a_record(repo, tmp_path,
     record = cli.load_record(repo, number)
     assert record["status"] == "drafted" and record["keys"] == [{"file": file, "key": key}]
     assert record["files"][file]["before"].encode() == before[Path(file)]
+    if number == ADD:  # the new rule follows 003 and stays inside the network collection
+        text = (repo / file).read_text()
+        assert text.count(f'"{key}" = {{') == 1
+        assert text.index('"003-') < text.index(f'"{key}"') < text.index("application_rule_collections")
 
 
 def test_without_a_reply_or_an_endpoint_accept_says_no_agent_is_configured(repo, tmp_path, capsys):
@@ -188,6 +250,7 @@ def test_an_edit_after_the_draft_stops_the_command_and_survives(repo, tmp_path, 
 
 
 def test_fix_replaces_the_draft_in_one_write(repo, tmp_path, capsys):
+    (repo / ADD_FILE).write_text(KNOWN_RPRT)
     _, e = request(ADD)
     ticket, reply = files(tmp_path, ADD)
     before = snapshot(repo)
@@ -198,7 +261,9 @@ def test_fix_replaces_the_draft_in_one_write(repo, tmp_path, capsys):
     fixed_path.write_text(json.dumps(fixed))
     assert run(repo, "fix", ADD, "Use the partner's service name", "--reply", str(fixed_path)) == cli.DONE
     text = (repo / ADD_FILE).read_text()
-    assert "007-https-rprt-to-fourthcoffeeFiles" in text and "https-rprt-to-fourthcoffeeFs" not in text
+    assert "004-https-rprt-to-fourthcoffeeFiles" in text and "https-rprt-to-fourthcoffeeFs" not in text
+    assert text.count('"004-') == 1 and '"005-' not in text  # the fix replaced the draft and left no second rule
+    assert text.count('"203.0.113.80/28"') == 1  # the ticket's destination appears in that one rule only
     assert changed(before, repo) == {ADD_FILE}
     record = cli.load_record(repo, ADD)
     assert record["history"][-1]["note"] == "Use the partner's service name"

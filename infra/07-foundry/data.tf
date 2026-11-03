@@ -13,6 +13,13 @@ data "azurerm_user_assigned_identity" "project" {
   resource_group_name = data.azurerm_resource_group.this.name
 }
 
+# The sync-network workflow's identity, built by step 06-sync, found by name. It
+# publishes the drafter's agent versions on this project.
+data "azurerm_user_assigned_identity" "sync" {
+  name                = var.sync_identity_name
+  resource_group_name = data.azurerm_resource_group.this.name
+}
+
 # Who is running Terraform. Used to give that person the Foundry User role on
 # this resource only.
 data "azurerm_client_config" "current" {}

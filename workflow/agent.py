@@ -1,7 +1,8 @@
 """The drafting agent on Foundry: one call per accepted ticket, tools over remote MCP.
 
-Example: with FWAGENT_PROJECT_ENDPOINT set,
-    agent = FoundryAgent.from_env(REPO)
+Example: with FWAGENT_PROJECT_ENDPOINT set, after workflow/mainline.py has fetched main and found
+its snapshot ready (workflow/snapshot.py),
+    agent = FoundryAgent.pinned(worktree, commit, marker)
     reply = agent(ticket, engineer_review=None)
 returns {"outcome": "draft", "rules": [...], "explanation": "..."} after the model has called
 locate_address_for_env_site and duplicate_rule_check on func-fwagentic-dev.
@@ -12,16 +13,15 @@ every version of the agent. Its tools are the deployed MCP server, reached throu
 the project connection mcp-fwagentic-tools as the project's managed identity, so
 the agent reads the same copy of main the tools serve (ADR 0003).
 
-One revision per run: the run reads current.json once, checks that the snapshot it
-names holds exactly that commit's data files, and pins that SHA. It never falls back
-to the previous snapshot; a bad or mismatched snapshot stops the run. If
-FWAGENT_SNAPSHOT_COMMIT is set, current.json must name that commit. The agent version
-carries the SHA as the X-Fwagent-Snapshot header, so every tool call reads that
-snapshot even if current.json moves during the run.
+One revision per run: the run is pinned to one main commit whose snapshot the sync job
+has marked ready. The agent version has the header X-Fwagent-Snapshot: {{snapshot}}, a
+required structured input, and every request fills it with that commit, so every tool call
+of the ticket reads that snapshot (confirmed live on 2026-11-03 with a probe agent). Routine
+network changes therefore need no new agent version: a version changes only when the
+instructions, model, tools or reply format change, and only the sync job publishes one.
 Because a header can be dropped on the way, the reply is accepted only when every
-tool answer that read main names that same commit, and only when this repo's
-data/network and infra/envs equal that commit, the files the draft is written into.
-Any mismatch is an AgentError, and nothing is written.
+tool answer that read main names that same commit, and only when the files the draft is
+written into equal that commit. Any mismatch is an AgentError, and nothing is written.
 
 Safety rule: the agent never writes. Its reply is only JSON. The agent version asks the
 service for strict structured output: one {"reply": ...} object that fits
@@ -58,6 +58,10 @@ REPLY_FORMAT = {"type": "json_schema", "name": "fwagent_reply", "strict": True, 
                                 "rules as an empty list; action appears only on a draft that removes rules.")}
 FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.S)
 SNAPSHOT_HEADER = "X-Fwagent-Snapshot"
+SNAPSHOT_INPUT = "snapshot"  # the structured input each request fills with the pinned commit
+SNAPSHOT_TEMPLATE = "{{" + SNAPSHOT_INPUT + "}}"
+SNAPSHOT_INPUT_SPEC = {"description": "Full commit SHA of the main snapshot every tool call reads",
+                       "required": True, "schema": {"type": "string"}}
 COMMIT = re.compile(r"[0-9a-f]{40}")
 RAW_LIMIT = 20_000  # characters of an invalid reply kept for diagnosis; a valid reply is far shorter
 READS_MAIN = {"locate_address_for_env_site", "resolve_env_site", "duplicate_rule_check", "dnat_port_check"}  # their answers name the commit they read
@@ -144,15 +148,20 @@ def instructions(repo: Path) -> str:
     return "\n\n---\n\n".join(parts) + "\n"
 
 
-def definition(text: str, snapshot: str, model: str = DEFAULT_MODEL, connection: str = DEFAULT_CONNECTION) -> dict:
-    """The prompt agent: model, instructions, strict reply format, and the read tools over MCP pinned to one snapshot."""
-    if not COMMIT.fullmatch(snapshot or ""):
-        raise AgentError(f"the snapshot must be a full commit SHA, not {snapshot!r}")
+def definition(text: str, model: str = DEFAULT_MODEL, connection: str = DEFAULT_CONNECTION) -> dict:
+    """The prompt agent: model, instructions, strict reply format, and the read tools over MCP; the snapshot comes per request."""
     return {"kind": "prompt", "model": model, "instructions": text,
             "tools": [{"type": "mcp", "server_label": "fwtools", "server_url": MCP_URL, "allowed_tools": list(TOOLS),
                        "require_approval": "never", "project_connection_id": connection,
-                       "headers": {SNAPSHOT_HEADER: snapshot}}],
+                       "headers": {SNAPSHOT_HEADER: SNAPSHOT_TEMPLATE}}],
+            "structured_inputs": {SNAPSHOT_INPUT: dict(SNAPSHOT_INPUT_SPEC)},
             "text": {"format": REPLY_FORMAT}}
+
+
+def local_definition(repo: Path) -> dict:
+    """The definition built from repo's own agents/, standards and runbooks, with the configured model and connection."""
+    return definition(instructions(repo), os.environ.get("FWAGENT_MODEL", DEFAULT_MODEL),
+                      os.environ.get("FWAGENT_MCP_CONNECTION", DEFAULT_CONNECTION))
 
 
 def data_differences(repo: Path, commit: str) -> list[str]:
@@ -167,55 +176,12 @@ def data_differences(repo: Path, commit: str) -> list[str]:
     return sorted(set(git("diff", "--name-only", commit, "--", *DATA)) | set(git("ls-files", "--others", "--exclude-standard", "--", *DATA)))
 
 
-def _git_files(repo: Path, commit: str) -> set[str]:
-    """The data files commit holds, from this checkout's git history."""
-    done = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", "--name-only", commit, "--", *DATA],
-                          capture_output=True, text=True)
-    if done.returncode != 0:
-        raise AgentError(f"this checkout does not have commit {commit[:12]}, so its snapshot cannot be checked: "
-                         f"{done.stderr.strip()}")
-    return {line for line in done.stdout.splitlines() if line}
-
-
-def current_snapshot(repo: Path, container) -> str:
-    """The commit current.json names, after checking its snapshot holds exactly that commit's data files."""
-    try:
-        pointer = json.loads(container.download_blob("current.json").readall())
-    except Exception as error:
-        raise AgentError(f"current.json could not be read: {type(error).__name__}: {error}") from error
-    commit = pointer.get("commit") if isinstance(pointer, dict) else None
-    if not isinstance(commit, str) or not COMMIT.fullmatch(commit):
-        raise AgentError(f"current.json does not name a full commit SHA: {pointer!r}")
-    prefix = f"snapshots/{commit}/"
-    uploaded = {b.name[len(prefix):] for b in container.list_blobs(name_starts_with=prefix)}
-    wanted = _git_files(repo, commit)
-    if uploaded != wanted:
-        missing, extra = sorted(wanted - uploaded), sorted(uploaded - wanted)
-        raise AgentError(f"snapshot {commit[:12]} does not match its commit: {len(missing)} files missing "
-                         f"{missing[:3]}, {len(extra)} extra {extra[:3]}. Stopped; the previous snapshot is never used instead")
-    return commit
-
-
 def snapshot_container():
     """The snapshot container, read with your az login (Storage Blob Data Reader on the container)."""
     from azure.identity import AzureCliCredential
     from azure.storage.blob import ContainerClient
     account = os.environ.get("FWAGENT_SNAPSHOT_ACCOUNT", SNAPSHOT_ACCOUNT)
     return ContainerClient(f"https://{account}.blob.core.windows.net", SNAPSHOT_CONTAINER, credential=AzureCliCredential())
-
-
-def pin_snapshot(repo: Path, container, allowed_differences=()) -> str:
-    """Pin the current snapshot for a run: verified, as required, and the same data as this checkout, or stop."""
-    commit = current_snapshot(repo, container)
-    required = os.environ.get("FWAGENT_SNAPSHOT_COMMIT")
-    if required and required != commit:
-        raise AgentError(f"current.json names {commit[:12]}, but this run requires {required[:12]}. Stopped; "
-                         "the previous snapshot is never used instead")
-    differ = sorted(set(data_differences(repo, commit)) - set(allowed_differences))
-    if differ:
-        raise AgentError(f"this checkout's data differs from snapshot {commit[:12]}, so the draft and the tools would "
-                         "use two revisions: " + ", ".join(differ))
-    return commit
 
 
 def tool_commits(response) -> list[tuple[str, str | None]]:
@@ -267,16 +233,38 @@ def ensure_version(project, body: dict) -> str:
         if (getattr(v, "metadata", None) or {}).get("definition_sha") == sha:
             return str(v.version)
     from azure.ai.projects.models import (MCPTool, PromptAgentDefinition, PromptAgentDefinitionTextOptions,
-                                          TextResponseFormatJsonSchema)
+                                          StructuredInputDefinition, TextResponseFormatJsonSchema)
     tool, fmt = body["tools"][0], body["text"]["format"]
     made = project.agents.create_version(
         AGENT_NAME,
         definition=PromptAgentDefinition(model=body["model"], instructions=body["instructions"],
                                          tools=[MCPTool(**{k: v for k, v in tool.items() if k != "type"})],
                                          text=PromptAgentDefinitionTextOptions(format=TextResponseFormatJsonSchema(
-                                             **{k: v for k, v in fmt.items() if k != "type"}))),
+                                             **{k: v for k, v in fmt.items() if k != "type"})),
+                                         structured_inputs={k: StructuredInputDefinition(**v)
+                                                            for k, v in body["structured_inputs"].items()}),
         metadata={"definition_sha": sha}, description="Drafts firewall rule changes for one accepted ticket.")
     return str(made.version)
+
+
+def check_version(project, version: str, body: dict) -> None:
+    """Read the published version back and refuse unless it is exactly body: same hash, header template and input."""
+    try:
+        published = project.agents.get_version(AGENT_NAME, version)
+    except Exception as error:
+        raise AgentError(f"agent version {version} could not be read: {type(error).__name__}: {error}") from error
+    found = published.definition
+    tool = (found.get("tools") or [{}])[0]
+    problems = []
+    if (published.metadata or {}).get("definition_sha") != definition_sha(body):
+        problems.append("its definition hash differs from main's instructions, model and tools")
+    if (tool.get("headers") or {}).get(SNAPSHOT_HEADER) != SNAPSHOT_TEMPLATE:
+        problems.append(f"its {SNAPSHOT_HEADER} header is not the per-request template {SNAPSHOT_TEMPLATE}")
+    spec = (found.get("structured_inputs") or {}).get(SNAPSHOT_INPUT) or {}
+    if not spec.get("required"):
+        problems.append(f"its structured input {SNAPSHOT_INPUT!r} is missing or not required")
+    if problems:
+        raise AgentError(f"agent version {version} does not match: " + "; ".join(problems))
 
 
 def message(ticket: dict, engineer_review: dict | None) -> str:
@@ -361,10 +349,10 @@ class FoundryAgent:
 
     controlled_dns = False  # its DNS tool runs in Azure, so an eval's dns: condition cannot reach it
 
-    def __init__(self, project, openai_client, version: str, snapshot: str, container=None):
-        """Keep the clients, the agent version, the pinned snapshot and the container that names the current one."""
+    def __init__(self, project, openai_client, version: str, snapshot: str, container=None, marker: dict | None = None):
+        """Keep the clients, the agent version, the pinned snapshot, its container and its ready marker."""
         self.project, self.openai, self.version, self.snapshot = project, openai_client, version, snapshot
-        self.container = container
+        self.container, self.marker = container, marker
         self.calls: list[Call] = []
 
     def pointer_now(self) -> str | None:
@@ -375,19 +363,40 @@ class FoundryAgent:
             return None
 
     @classmethod
-    def from_env(cls, repo: Path, allowed_differences=(), container=None) -> "FoundryAgent":
-        """Pin the current snapshot, sign in with az login, publish the drafter if its definition changed, and return it."""
+    def pinned(cls, repo: Path, commit: str, marker: dict, container=None, allowed_differences=()) -> "FoundryAgent":
+        """The ready agent version for one main commit, checked against repo's files; it never publishes."""
         endpoint = os.environ.get("FWAGENT_PROJECT_ENDPOINT")
         if not endpoint:
             raise AgentError("FWAGENT_PROJECT_ENDPOINT is not set: the Foundry project endpoint, "
                              "https://<account>.services.ai.azure.com/api/projects/<project>")
-        container = container if container is not None else snapshot_container()
-        snapshot = pin_snapshot(repo, container, allowed_differences)  # before any Foundry call
+        if not COMMIT.fullmatch(commit or "") or marker.get("commit") != commit:
+            raise AgentError(f"the ready marker does not belong to commit {commit!r}")
+        differ = sorted(set(data_differences(repo, commit)) - set(allowed_differences))
+        if differ:
+            raise AgentError(f"these files differ from snapshot {commit[:12]}, so the draft and the tools would "
+                             "use two revisions: " + ", ".join(differ))
+        body = local_definition(repo)
+        agent = marker.get("agent") or {}
+        if agent.get("definition_sha") != definition_sha(body):
+            raise AgentError(f"main {commit[:12]}'s instructions, model or tools differ from ready agent version "
+                             f"{agent.get('version')}; the sync job must publish and mark a matching version first")
         project = connect(endpoint)
-        body = definition(instructions(repo), snapshot, os.environ.get("FWAGENT_MODEL", DEFAULT_MODEL),
-                          os.environ.get("FWAGENT_MCP_CONNECTION", DEFAULT_CONNECTION))
+        check_version(project, str(agent["version"]), body)
         # No hidden retries in the SDK: the runner retries, waits and records every attempt.
-        return cls(project, project.get_openai_client(max_retries=0), ensure_version(project, body), snapshot, container)
+        return cls(project, project.get_openai_client(max_retries=0), str(agent["version"]), commit, container, marker)
+
+    @classmethod
+    def from_env(cls, repo: Path, allowed_differences=(), container=None) -> "FoundryAgent":
+        """For the eval runner: pin this checkout's commit (or FWAGENT_SNAPSHOT_COMMIT), which must already be ready; never publishes."""
+        from workflow.snapshot import SyncPending, verify_ready
+        commit = os.environ.get("FWAGENT_SNAPSHOT_COMMIT") or subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        container = container if container is not None else snapshot_container()
+        marker = verify_ready(repo, container, commit)  # before any Foundry call
+        if marker is None:
+            raise SyncPending(f"commit {commit[:12]} has no snapshot ready for drafting; push it to main and let "
+                              "sync-network finish. An older snapshot is never used instead")
+        return cls.pinned(repo, commit, marker, container, allowed_differences)
 
     def __call__(self, ticket: dict, engineer_review: dict | None = None, dns_lookup=None) -> dict:
         """Draft one ticket; refuse a controlled DNS condition, which cannot reach the deployed tools."""
@@ -399,7 +408,8 @@ class FoundryAgent:
         try:
             response = self.openai.responses.create(
                 input=message(ticket, engineer_review),
-                extra_body={"agent_reference": {"name": AGENT_NAME, "version": self.version, "type": "agent_reference"}})
+                extra_body={"agent_reference": {"name": AGENT_NAME, "version": self.version, "type": "agent_reference"},
+                            "structured_inputs": {SNAPSHOT_INPUT: self.snapshot}})
         except Exception as error:
             call.error = f"{type(error).__name__}: {error}"
             raise failed_call(error) from error

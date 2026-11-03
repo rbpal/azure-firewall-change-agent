@@ -483,11 +483,11 @@ def test_every_edit_is_audited_with_its_note_values_and_both_versions(repo, tmp_
     assert record["original_ticket"]["ports"] == ["443"] and record["original_ticket"]["sources"] == request(ADD)[0]["sources"]
 
 
-def test_the_agent_gets_the_revised_ticket_and_the_engineers_edits(repo, tmp_path, monkeypatch):
+def test_the_agent_gets_the_revised_ticket_and_the_engineers_edits(repo, tmp_path, monkeypatch, offline_main):
     from tests.workflow.test_agent import foundry
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
     fake = foundry('{"outcome": "stop_and_ask", "reason": "hub_rule", "rules": []}')
-    monkeypatch.setattr(cli, "live_agent", lambda root: fake)
+    monkeypatch.setattr(cli, "live_agent", lambda *_: fake)
     ticket, _ = files(tmp_path, ADD)
     run(repo, "submit", ticket)
     first = cli.load_record(repo, ADD)["ticket_version"]

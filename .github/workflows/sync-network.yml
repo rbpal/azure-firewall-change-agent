@@ -1,5 +1,14 @@
 # Copies the files the agent's tools read into Blob storage on every push to
-# main (ADR 0003). The tools read the copy, never GitHub.
+# main (ADR 0003), checks them byte for byte against Git, matches the agent
+# version to this commit's instructions, then marks the commit ready for
+# drafting. The tools read the copy, never GitHub. Every push gets its own
+# snapshot and marker, docs-only and test-only commits included, so any main
+# commit can be drafted from.
+#
+# Ready for drafting is not applied in Azure. This workflow never changes a
+# firewall policy: it writes only to the network-snapshot container and to the
+# drafter's agent versions. workflow/deploy.py is the only code that publishes
+# an agent version; it reuses the current one while the definition is unchanged.
 #
 # Sign-in uses no password or key. GitHub signs a token naming this repo and branch, and
 # Azure accepts it only for main (federated credential fic-fwagentic-sync-main,
@@ -7,9 +16,10 @@
 # not let anyone sign in, but as secrets GitHub hides them in every log, and
 # this repo's logs are public.
 #
-# Two snapshots are kept: the current one and the one before it. A manual run with
-# rollback_to moves current.json back to a kept snapshot; it uploads and deletes
-# nothing. docs/snapshots.md says how to compare snapshots and roll back.
+# Snapshots are immutable and kept until 24 hours after a newer commit replaced
+# them, far longer than a draft may run (30 minutes). A manual run with
+# rollback_to moves current.json back to a ready snapshot; it uploads and
+# deletes nothing, and drafting still follows main.
 name: sync-network
 
 on:
@@ -34,7 +44,6 @@ concurrency:
 env:
   ACCOUNT: stfwagentfuncdev
   CONTAINER: network-snapshot
-  KEEP: "2"
 
 jobs:
   sync:
@@ -67,27 +76,24 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # Files go into a folder named after the commit. Nothing reads it yet.
-      - name: Upload this commit's files
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      # Upload once, check every file's bytes, reuse or publish the matching agent
+      # version, read it back, then write ready/<commit>.json. Any failure leaves
+      # no marker, so drafting waits or stops; it never uses an older snapshot.
+      - name: Mark this commit ready for drafting
         if: github.event_name == 'push' || inputs.rollback_to == ''
-        run: |
-          for dir in data/network infra/envs; do
-            az storage blob upload-batch --auth-mode login --account-name "$ACCOUNT" \
-              --destination "$CONTAINER" --destination-path "snapshots/$GITHUB_SHA/$dir" \
-              --source "$dir" --overwrite --only-show-errors --output none
-          done
+        env:
+          FWAGENT_PROJECT_ENDPOINT: ${{ vars.FWAGENT_PROJECT_ENDPOINT }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: uv run --python 3.11 python -m workflow.deploy ready --commit "$TARGET" --run-url "$RUN_URL"
 
-      # The snapshot must hold exactly the commit's files before the pointer moves.
-      - name: Check the snapshot is complete
-        run: |
-          git ls-tree -r --name-only "$TARGET" -- data/network infra/envs | sort > wanted.txt
-          az storage blob list --auth-mode login --account-name "$ACCOUNT" \
-            --container-name "$CONTAINER" --prefix "snapshots/$TARGET/" --num-results "*" \
-            --query "[].name" --output tsv | sed "s|^snapshots/$TARGET/||" | sort > uploaded.txt
-          echo "commit $(wc -l < wanted.txt) files, snapshot $(wc -l < uploaded.txt)"
-          diff wanted.txt uploaded.txt
+      # A rollback only moves current.json, and only to a commit that is still ready.
+      - name: Check the rollback target is ready
+        if: github.event_name != 'push' && inputs.rollback_to != ''
+        run: uv run --python 3.11 python -m workflow.deploy check --commit "$TARGET"
 
-      # Only now do the tools see the new commit. A tool reads current.json once per call.
+      # Tools called without a pinned snapshot read the commit current.json names.
       - name: Point current.json at the chosen commit
         run: |
           printf '{"commit": "%s"}\n' "$TARGET" > current.json
@@ -95,20 +101,8 @@ jobs:
             --container-name "$CONTAINER" --name current.json --file current.json \
             --content-type application/json --overwrite --only-show-errors --output none
 
-      # Keep the newest two; never delete the one current.json points at. A rollback deletes
-      # nothing. There is no record of active runs, so no push may happen during a controlled run.
-      - name: Delete old copies
+      # Delete only snapshots another commit replaced more than 24 hours ago. A
+      # draft may run 30 minutes at most, so no run outlives its snapshot.
+      - name: Delete replaced snapshots
         if: github.event_name == 'push' || inputs.rollback_to == ''
-        run: |
-          az storage blob list --auth-mode login --account-name "$ACCOUNT" \
-            --container-name "$CONTAINER" --prefix snapshots/ --num-results "*" \
-            --query "[].[properties.lastModified, name]" --output tsv \
-          | awk -F'\t' '{split($2, p, "/"); if (!(p[2] in t) || $1 > t[p[2]]) t[p[2]] = $1}
-                        END {for (c in t) print t[c] "\t" c}' \
-          | sort -r | tail -n +$((KEEP + 1)) | cut -f2 \
-          | while read -r old; do
-              [ "$old" = "$TARGET" ] && continue
-              echo "deleting snapshots/$old/"
-              az storage blob delete-batch --auth-mode login --account-name "$ACCOUNT" \
-                --source "$CONTAINER" --pattern "snapshots/$old/*" --only-show-errors --output none
-            done
+        run: uv run --python 3.11 python -m workflow.deploy prune --keep "$TARGET"

@@ -88,11 +88,19 @@ def test_gate_signs_in_as_the_plan_identity():
 
 def test_sync_uploads_only_the_tool_data():
     # The agent's tools read this copy. Any other folder uploaded, such as
-    # evals/ with the answers, would be readable by the agent.
-    [upload] = [r for r in run_steps(SYNC) if "upload-batch" in r]
-    assert set(re.search(r"for dir in ([^;]+);", upload).group(1).split()) == TOOL_DATA
-    [check] = [r for r in run_steps(SYNC) if "git ls-tree" in r]
-    assert set(re.search(r'--name-only "\$TARGET" -- (.+?) \|', check).group(1).split()) == TOOL_DATA
+    # evals/ with the answers, would be readable by the agent. workflow/deploy.py
+    # uploads and checks exactly the folders in workflow.agent.DATA.
+    from workflow.agent import DATA
+    assert set(DATA) == TOOL_DATA
+    assert not any("upload-batch" in r for r in run_steps(SYNC))  # no second upload path
+    assert sync_step("Mark this commit ready for drafting")["run"] == (
+        'uv run --python 3.11 python -m workflow.deploy ready --commit "$TARGET" --run-url "$RUN_URL"')
+
+
+def test_sync_never_touches_a_firewall_policy():
+    # Ready for drafting is not applied in Azure: the sync job writes snapshots and agent versions only.
+    for run in run_steps(SYNC):
+        assert "terraform" not in run and "az network" not in run
 
 
 @pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
@@ -126,9 +134,13 @@ def choose(rollback_to: str, tmp_path: Path) -> tuple[int, str]:
     return code, env_file.read_text()
 
 
-def test_sync_keeps_two_snapshots():
-    # User decision 2026-10-22: the current snapshot and the one before it, nothing more.
-    assert load(SYNC)["env"]["KEEP"] == "2"
+def test_sync_keeps_a_replaced_snapshot_far_longer_than_any_run():
+    # Replaces the keep-two rule (2026-10-22): a run pinned to a snapshot must never lose it.
+    from workflow.snapshot import GRACE, RUN_DEADLINE
+    assert RUN_DEADLINE.total_seconds() == 30 * 60 and GRACE.total_seconds() == 24 * 3600
+    assert GRACE > 10 * RUN_DEADLINE
+    assert sync_step("Delete replaced snapshots")["run"] == (
+        'uv run --python 3.11 python -m workflow.deploy prune --keep "$TARGET"')
 
 
 def test_sync_rollback_input_reaches_the_shell_only_as_an_environment_variable():
@@ -155,18 +167,22 @@ def test_sync_without_rollback_chooses_the_pushed_commit(tmp_path):
 
 def test_sync_rollback_uploads_nothing_and_deletes_nothing():
     only_on_sync = "github.event_name == 'push' || inputs.rollback_to == ''"
-    assert sync_step("Upload this commit's files")["if"] == only_on_sync
-    assert sync_step("Delete old copies")["if"] == only_on_sync
-    assert "if" not in sync_step("Check the snapshot is complete")
+    assert sync_step("Mark this commit ready for drafting")["if"] == only_on_sync
+    assert sync_step("Delete replaced snapshots")["if"] == only_on_sync
+    assert sync_step("Check the rollback target is ready")["if"] == "github.event_name != 'push' && inputs.rollback_to != ''"
+    assert sync_step("Check the rollback target is ready")["run"].endswith('workflow.deploy check --commit "$TARGET"')
     assert "if" not in sync_step("Point current.json at the chosen commit")
 
 
 def test_sync_points_at_the_checked_commit_and_never_deletes_it():
-    check = sync_step("Check the snapshot is complete")["run"]
-    assert 'git ls-tree -r --name-only "$TARGET"' in check and "diff wanted.txt uploaded.txt" in check
+    names = [s.get("name") for s in load(SYNC)["jobs"]["sync"]["steps"]]
+    order = ["Mark this commit ready for drafting", "Point current.json at the chosen commit", "Delete replaced snapshots"]
+    assert [n for n in names if n in order] == order  # the marker before the pointer, the pruning last
     assert '"$TARGET" > current.json' in sync_step("Point current.json at the chosen commit")["run"]
-    assert '[ "$old" = "$TARGET" ] && continue' in sync_step("Delete old copies")["run"]
-    assert "$GITHUB_SHA" not in check + sync_step("Delete old copies")["run"]
+    assert sync_step("Mark this commit ready for drafting")["env"]["FWAGENT_PROJECT_ENDPOINT"] == (
+        "${{ vars.FWAGENT_PROJECT_ENDPOINT }}")
+    for name in order:
+        assert "$GITHUB_SHA" not in sync_step(name)["run"]
 
 
 def test_sync_checkout_has_history_for_a_rollback():

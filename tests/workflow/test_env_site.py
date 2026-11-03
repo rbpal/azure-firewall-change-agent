@@ -45,7 +45,7 @@ def registered_tools():
 
 
 def test_the_agent_may_call_resolve_env_site_and_every_allowed_tool_is_registered():
-    body = definition(instructions(REPO), "a" * 40)
+    body = definition(instructions(REPO))
     assert "resolve_env_site" in body["tools"][0]["allowed_tools"]
     assert set(TOOLS) <= registered_tools()
 

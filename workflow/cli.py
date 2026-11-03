@@ -2,6 +2,8 @@
 
 Example: every ticket waits for the engineer, even one with no findings.
     uv run --python 3.11 python -m workflow.cli submit data/tickets/RITM0010043.yaml
+    uv run --python 3.11 python -m workflow.cli accept RITM0010043 --ticket-version 3f9a0c51d2e7 --engineer "Jordan Patel" --reason "Checked"
+    uv run --python 3.11 python -m workflow.cli draft RITM0010043
     uv run --python 3.11 python -m workflow.cli accept RITM0010043 --ticket-version 3f9a0c51d2e7 --engineer "Jordan Patel" --reason "Checked" --reply reply.json
     uv run --python 3.11 python -m workflow.cli fix RITM0010043 "Port should be 443" --reply fixed.json
     uv run --python 3.11 python -m workflow.cli approve RITM0010043
@@ -17,7 +19,11 @@ the same change the pull request reviewers will see. Each command is a function,
 so pytest drives it like the rest of the workflow.
 
 The agent: accept calls the drafter on Foundry (workflow/agent.py) when
-FWAGENT_PROJECT_ENDPOINT is set and no --reply is given. `--reply` names a JSON
+FWAGENT_PROJECT_ENDPOINT is set and no --reply is given. It drafts from the latest GitHub main
+(workflow/mainline.py): it fetches main, waits for that commit's snapshot to be ready for
+drafting, and writes the draft on a new branch agent/<ticket>-<commit> in its own worktree. The
+acceptance is saved first, so a sync delay or a moving main never costs it; draft runs the
+same step again for the same unchanged ticket. `--reply` names a JSON
 file holding the reply a model would give: the replay stand-in the tests use.
 fix needs --reply for now; the live fix, which must pass the engineer's note to
 the agent, is not built. A failed agent call or an invalid reply writes nothing.
@@ -74,7 +80,8 @@ from pathlib import Path
 
 import yaml
 
-from workflow.agent import AgentError, FoundryAgent
+from workflow.agent import AgentError, FoundryAgent, snapshot_container
+from workflow.mainline import draft_from_main
 from workflow.bypass import BypassRequested, bypass_message, bypass_requests, check_no_bypass
 from workflow.intake import NEEDS_PLANNED, finding, intake_findings, ticket_version
 from workflow.planned import check_planned, missing_spoke_files
@@ -84,7 +91,7 @@ from workflow.tickets import load_ticket
 
 REPO = Path(__file__).resolve().parents[1]
 DONE, REFUSED, BACKUPS, REVIEW = 0, 1, 3, 4  # exit codes; REVIEW = waiting for the engineer
-OPEN = ("awaiting_review", "awaiting_platform_change")  # statuses the engineer can edit, accept or reject
+OPEN = ("awaiting_review", "awaiting_platform_change", "accepted")  # statuses the engineer can edit, accept or reject
 
 
 class Refused(Exception):
@@ -131,19 +138,40 @@ def save_record(repo: Path, record: dict) -> None:
     os.replace(tmp, path)
 
 
-def live_agent(repo: Path) -> FoundryAgent:
-    """The drafter on Foundry, published from agents/ if its definition changed."""
-    return FoundryAgent.from_env(repo)
+def live_agent(worktree: Path, commit: str, marker: dict, container) -> FoundryAgent:
+    """The drafter on Foundry: the version main's ready marker names, pinned to that commit; never published here."""
+    return FoundryAgent.pinned(worktree, commit, marker, container)
+
+
+def _root(repo: Path, record: dict) -> Path:
+    """Where the ticket's draft files live: its branch worktree for a draft from main, else the repo itself."""
+    return Path(record["worktree"]) if record.get("worktree") else repo
+
+
+def _draft_live(repo: Path, record: dict) -> str:
+    """Draft an accepted ticket from the latest main on its own branch; keep the acceptance if drafting cannot finish."""
+    number, review = record["number"], record["review"]
+    try:
+        draft = draft_from_main(repo, state_dir(repo) / "worktrees", number, copy.deepcopy(record["ticket"]),
+                                copy.deepcopy(review), live_agent, snapshot_container())
+    except AgentError as error:
+        record["history"].append({"at": _now(), "action": "draft_stopped", "error": str(error).splitlines()[0],
+                                  "ticket_version": record["ticket_version"],
+                                  **({"detail": error.detail} if getattr(error, "detail", None) else {}),
+                                  **({"raw_reply": error.raw} if error.raw else {})})
+        save_record(repo, record)
+        raise Refused(f"{number}: {error}. Nothing was written. Your acceptance is kept; to try again run: "
+                      f"fwagent draft {number}") from error
+    record.update(worktree=str(draft.worktree), branch=draft.branch, drafting=draft.audit)
+    record["history"].append({"at": _now(), "action": "draft", "agent": "foundry", **draft.audit})
+    _apply_reply(draft.worktree, record, draft.reply)
+    save_record(repo, record)
+    return draft_note(record)
 
 
 def agent_reply(repo: Path, ticket: dict, review: dict, reply_path: str | None) -> tuple[dict, str]:
-    """The agent's reply and where it came from: the replay file when given, else the live drafter when configured."""
-    if reply_path is not None or not os.environ.get("FWAGENT_PROJECT_ENDPOINT"):
-        return read_reply(reply_path), "replay"
-    try:
-        return live_agent(repo)(copy.deepcopy(ticket), engineer_review=copy.deepcopy(review)), "foundry"
-    except AgentError as error:
-        raise Refused(f"{ticket['number']}: {error}. Nothing was written; the ticket keeps its state.") from error
+    """The replay stand-in's reply; a live draft goes through _draft_live instead."""
+    return read_reply(reply_path), "replay"
 
 
 def read_reply(path: str | None) -> dict:
@@ -165,7 +193,10 @@ def _drafted(record: dict) -> None:
 
 def _unchanged_since_draft(repo: Path, record: dict) -> None:
     """Refuse if any drafted file's bytes differ from what the draft wrote."""
-    moved = [rel for rel, f in record["files"].items() if _sha((repo / rel).read_bytes()) != f["after_sha256"]]
+    root = _root(repo, record)
+    if root != repo:
+        check_no_backups(root)  # a failed write in the ticket's worktree leaves its backups there
+    moved = [rel for rel, f in record["files"].items() if _sha((root / rel).read_bytes()) != f["after_sha256"]]
     if moved:
         raise Refused(f"{record['number']}: changed since the draft was written, so nothing was touched: "
                       + ", ".join(moved) + ". Undo that edit, or reject and submit again.")
@@ -194,7 +225,11 @@ def review_note(record: dict) -> str:
         lines += [f"      suggestion, not applied: {s['cidr']} {s.get('vnet', '')} {s['environment']} {s['site']} "
                   f"(from {s['source']})" for s in f.get("suggestions", [])]
     lines += [f"  missing: {m}" for m in record.get("missing", [])]
-    if not record["findings"] and not record.get("missing"):
+    if record["status"] == "accepted":
+        review = record.get("review") or {}
+        lines.append(f"  Accepted by {review.get('engineer')} for this exact version; the draft has not finished. "
+                     f"Run: fwagent draft {record['number']}")
+    elif not record["findings"] and not record.get("missing"):
         lines.append("  No findings. The agent has not run: accept this exact version to let it draft.")
     lines.append(f"Engineer: fwagent edit {record['number']} TICKET --engineer NAME --note TEXT, "
                  f"accept {record['number']} --ticket-version {record['ticket_version'][:12]} --engineer NAME "
@@ -211,8 +246,15 @@ def draft_note(record: dict) -> str:
              + (f", reason {reply['reason']}" if reply.get("reason") else "")
              + (", action remove" if reply.get("action") == "remove" else "")]
     lines += [f"  {k['key']}  in {k['file']}" for k in record["keys"]]
+    if record.get("drafting"):
+        d = record["drafting"]
+        lines.append("Drafted from the latest GitHub main; the pre-call check passed and every tool read the same "
+                     "copy. Commits and agent version are in the audit record. Ready for drafting is not applied "
+                     "in Azure.")
+        lines.append(f"Branch {record['branch']} in {record['worktree']}")
     if record["files"]:
-        lines.append("Review the change as a diff: git diff -- infra/envs")
+        where = f"git -C {record['worktree']} diff" if record.get("worktree") else "git diff"
+        lines.append(f"Review the change as a diff: {where} -- infra/envs")
     lines.append("Not run yet: Tier 1 checks and terraform plan (Step 04 Task 06).")
     return "\n".join(lines)
 
@@ -342,6 +384,12 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     missing = missing_spoke_files(repo, record["ticket"], planned)
     review = acceptance(record["ticket_version"], engineer, reason, [f["code"] for f in record["findings"]], planned,
                         edits(record))
+    live = not missing and reply_path is None and os.environ.get("FWAGENT_PROJECT_ENDPOINT")
+    if live:  # save the acceptance before anything can wait or fail, then draft from main
+        record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"}})
+        record.update(review=review, missing=[], status="accepted")
+        save_record(repo, record)
+        return _draft_live(repo, record)
     try:
         reply, source = (None, None) if missing else agent_reply(repo, record["ticket"], review, reply_path)
     except Refused as error:
@@ -359,17 +407,38 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     return draft_note(record)
 
 
+def draft(repo: Path, number: str) -> str:
+    """Draft again from the latest main under the saved acceptance, while the ticket is exactly the accepted version."""
+    check_no_backups(repo)
+    record = load_record(repo, number)
+    review = record.get("review")
+    if record["status"] not in ("accepted", "drafted") or not review:
+        raise Refused(f"{number}: the ticket is {record['status']} with no acceptance to draft under; accept it first")
+    if review.get("ticket_version") != record["ticket_version"]:
+        raise Refused(f"{number}: the ticket changed after it was accepted; accept the new version first")
+    if not os.environ.get("FWAGENT_PROJECT_ENDPOINT"):
+        raise Refused("no agent is configured: set FWAGENT_PROJECT_ENDPOINT for the drafter on Foundry")
+    _refuse_bypass(repo, record, review.get("engineer"))
+    if record["status"] == "drafted":
+        record["history"].append({"at": _now(), "action": "redraft", "previous_branch": record.get("branch"),
+                                  "previous_worktree": record.get("worktree")})
+        record.update(status="accepted", worktree=None, branch=None, keys=[], files={})
+        save_record(repo, record)
+    return _draft_live(repo, record)
+
+
 def fix(repo: Path, number: str, note: str, reply_path: str | None) -> str:
     """Replace the draft with the agent's fixed reply, in one write, after checking nothing changed since."""
     check_no_backups(repo)
     record = load_record(repo, number)
     _drafted(record)
     _unchanged_since_draft(repo, record)
+    root = _root(repo, record)
     reply = read_reply(reply_path)
     if reply["outcome"] != "draft":
         raise Refused(f"{number}: a fix must return a draft; the reply says {reply['outcome']!r}. Reject instead.")
-    base = {repo / rel: f["before"] for rel, f in record["files"].items()}
-    keys, files = _write_draft(repo, record["ticket"], reply, base)
+    base = {root / rel: f["before"] for rel, f in record["files"].items()}
+    keys, files = _write_draft(root, record["ticket"], reply, base)
     record.update(reply=reply, keys=keys, files=files)
     record["history"].append({"at": _now(), "action": "fix", "note": note, "agent": "replay", "reply_file": reply_path})
     save_record(repo, record)
@@ -383,7 +452,7 @@ def reject(repo: Path, number: str, reason: str, engineer: str | None = None) ->
     if record["status"] not in OPEN:
         _drafted(record)
         _unchanged_since_draft(repo, record)
-        write_all({repo / rel: f["before"] for rel, f in record["files"].items()})
+        write_all({_root(repo, record) / rel: f["before"] for rel, f in record["files"].items()})
     record["status"] = "rejected"
     record["history"].append({"at": _now(), "action": "reject", "reason": reason, "engineer": engineer})
     save_record(repo, record)
@@ -402,7 +471,7 @@ def approve(repo: Path, number: str) -> str:
     record["history"].append({"at": _now(), "action": "approve"})
     save_record(repo, record)
     return (f"{number}: approved; {len(record['keys'])} rule change(s) in {len(record['files'])} file(s).\n"
-            "Not done yet: the pull request on agent/" + number + " (stage 4).")
+            f"Not done yet: the pull request on {record.get('branch') or 'agent/' + number} (stage 4).")
 
 
 def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
@@ -432,6 +501,8 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     c.add_argument("--planned", help="YAML list confirming each planned address: cidr, environment, site, "
                                      "firewall_policy, spoke, placement")
     c.add_argument("--reply", help="replay stand-in: JSON file with the agent's reply")
+    d = sub.add_parser("draft", help="draft again from the latest main under the saved acceptance")
+    d.add_argument("number")
     a = sub.add_parser("approve", help="approve the draft for the pull request step")
     a.add_argument("number")
     args = parser.parse_args(argv)
@@ -446,6 +517,8 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
             out = edit(repo, args.number, args.ticket, args.engineer, args.note)
         elif args.command == "accept":
             out = accept(repo, args.number, args.ticket_version, args.engineer, args.reason, args.planned, args.reply)
+        elif args.command == "draft":
+            out = draft(repo, args.number)
         else:
             out = approve(repo, args.number)
     except (BackupsRemainError, PartialWriteError) as error:

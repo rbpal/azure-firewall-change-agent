@@ -34,14 +34,14 @@ V3_DRAFT = {"outcome": "draft", "rules": [
 
 
 @pytest.fixture
-def calls(monkeypatch):
+def calls(monkeypatch, offline_main):
     """Every agent call fwagent makes, replay or live; a live call is configured so none can slip by unseen."""
     seen = []
     real = cli.read_reply
     monkeypatch.setattr(cli, "read_reply", lambda path: seen.append(("replay", path)) or real(path))
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
 
-    def live(root):
+    def live(*_):
         """A live drafter that only records that it was asked."""
         def agent(ticket, engineer_review=None):
             seen.append(("foundry", ticket["number"]))

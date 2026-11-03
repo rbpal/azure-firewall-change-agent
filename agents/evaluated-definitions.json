@@ -1,4 +1,13 @@
 {
   "about": "Agent definitions that passed their validation-split evaluation, keyed by definition hash. Drafting refuses any definition not listed here. Add an entry only through a reviewed pull request, after the evaluation has passed.",
-  "definitions": {}
+  "definitions": {
+    "f896cff67d6fbf04": {
+      "agent_version": "11",
+      "evaluation": "validation split, passed",
+      "evaluated_on": "2026-11-03",
+      "main_commit": "1efa3ad9b19d981989f34f2f2393bbf22c4d91e9",
+      "result": "65 of 65 scored tickets passed and complete; 0 of 25 missed stops; 0 too wide; 0 agent errors",
+      "not_scored": "RITM0011069 needs a controlled DNS answer the deployed tool cannot get"
+    }
+  }
 }

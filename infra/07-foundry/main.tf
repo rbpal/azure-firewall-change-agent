@@ -50,6 +50,17 @@ module "terraform_user_foundry_user" {
   principal_type       = "User"
 }
 
+# sync-network publishes and reads back the drafter's agent versions (workflow/deploy.py).
+# Scoped to this project, not the whole Foundry resource.
+module "sync_identity_foundry_user" {
+  source = "../modules/role-assignment"
+
+  scope                = module.foundry_project.id
+  role_definition_name = "Foundry User"
+  principal_id         = data.azurerm_user_assigned_identity.sync.principal_id
+  principal_type       = "ServicePrincipal"
+}
+
 module "appi_connection" {
   source = "../modules/foundry-project-connection"
 

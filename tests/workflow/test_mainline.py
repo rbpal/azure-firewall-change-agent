@@ -325,7 +325,7 @@ def test_a_relevant_change_on_main_during_the_draft_regenerates_from_the_new_mai
     assert calls == [world.first, second] and draft.commit == second
     assert [a["main_commit"] for a in draft.audit["attempts"]] == [world.first, second]
     assert draft.audit["attempts"][0]["relevant_changes"] == ["infra/envs/dev-eastus2/ip-groups.tfvars"]
-    assert git(world.engineer, "branch", "--list", "agent/*").split() == [f"agent/RITM0011001-{second[:7]}"]
+    assert git(world.engineer, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/").split() == [f"agent/RITM0011001-{second[:7]}"]
 
 
 def test_a_docs_only_change_on_main_keeps_the_draft(world):
@@ -761,7 +761,7 @@ def test_regeneration_keeps_a_branch_the_engineer_edited_and_drafts_on_a_new_one
                             container, report=lambda m: None, wait=no_wait)
     assert (calls[0] / "notes.txt").read_text() == "my notes\n"  # kept, untouched
     assert {"kept_branch": f"agent/RITM0011001-{world.first[:7]}", "kept_worktree": str(calls[0])} in draft.audit["attempts"]
-    assert len(git(world.engineer, "branch", "--list", "agent/*").split()) == 2
+    assert len(git(world.engineer, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/").split()) == 2
 
 
 def test_cleanup_keeps_a_branch_with_a_commit_the_run_did_not_make(world, monkeypatch):

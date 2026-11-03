@@ -18,6 +18,8 @@ from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 
 import workflow.cli as cli
 import workflow.snapshot as snap
+
+REAL_LIVE_AGENT = cli.live_agent  # captured before any test patches it
 from tests.workflow.test_agent import FakeAgents, FakeResponses, mcp_call, read, wrapped
 from workflow.agent import AgentError, FoundryAgent, definition_sha, local_definition
 from workflow.deploy import mark_ready
@@ -77,6 +79,7 @@ def world(tmp_path, monkeypatch):
     git(pusher, "checkout", "-q", "-b", "main")
     shutil.copytree(REPO / "data" / "network", pusher / "data" / "network")
     shutil.copytree(REPO / "infra" / "envs", pusher / "infra" / "envs", ignore=shutil.ignore_patterns("*.tfplan", ".terraform*"))
+    shutil.copytree(REPO / "agents", pusher / "agents")  # main's own instructions and reply formats
     (pusher / "README.md").write_text("demo\n")
     first = commit_all(pusher, "first")
     git(pusher, "push", "-q", "origin", "main")
@@ -105,6 +108,15 @@ def settle(agents):
     """Make the versions created so far listed by Foundry, as they are once published."""
     listed = [agents.get_version("x", str(len(agents.versions) + i + 1)) for i in range(len(agents.created))]
     agents.versions, agents.created, agents.missing = agents.versions + listed, [], False
+
+
+def evaluate(repo, marker):
+    """Record the marker's agent definition as evaluated in repo's register, as a reviewed PR would."""
+    path = Path(repo) / "agents" / "evaluated-definitions.json"
+    data = json.loads(path.read_text())
+    data["definitions"][marker["agent"]["definition_sha"]] = {"agent_version": marker["agent"]["version"],
+                                                               "evaluation": "validation split, passed"}
+    path.write_text(json.dumps(data, indent=2) + "\n")
 
 
 def no_wait(repo, container, commit, report=print):
@@ -394,6 +406,7 @@ def test_the_pinned_agent_uses_the_markers_version_and_never_publishes(world, en
     settle(agents)
     project = SimpleNamespace(agents=agents, get_openai_client=lambda **o: SimpleNamespace(options=o))
     monkeypatch.setattr("workflow.agent.connect", lambda e: project)
+    evaluate(world.pusher, marker)
     a = FoundryAgent.pinned(world.pusher, world.first, marker, container)
     assert (a.version, a.snapshot, a.marker) == ("1", world.first, marker) and agents.created == []
 
@@ -404,16 +417,18 @@ def test_the_pinned_agent_stops_when_mains_instructions_differ_from_the_ready_ve
     monkeypatch.setattr("workflow.agent.connect", lambda e: pytest.fail("Foundry must not be called"))
     (world.pusher / "data/standards").mkdir(parents=True, exist_ok=True)
     (world.pusher / "data/standards/extra.md").write_text("# not yet published\n")
-    with pytest.raises(AgentError, match="instructions, model or tools differ from ready agent version 1"):
+    with pytest.raises(AgentError, match="does not match GitHub main's instructions, model or tools") as stopped:
         FoundryAgent.pinned(world.pusher, world.first, marker, container)
+    assert stopped.value.detail["ready_version"] == "1" and stopped.value.detail["main_commit"] == world.first
 
 
 def test_the_pinned_agent_stops_when_the_branch_files_differ_from_the_snapshot(world, endpoint):
     container = FakeContainer()
     marker = ready(world, container)
     (world.pusher / "data/network/routing.yaml").write_text("edited\n")
-    with pytest.raises(AgentError, match="would use two revisions: data/network/routing.yaml"):
+    with pytest.raises(AgentError, match="ticket branch's files differ from GitHub main") as stopped:
         FoundryAgent.pinned(world.pusher, world.first, marker, container)
+    assert stopped.value.detail["differing"] == ["data/network/routing.yaml"]
 
 
 def test_every_request_supplies_the_pinned_commit_as_the_snapshot_input(world):
@@ -525,13 +540,14 @@ def tamper_after_branching(monkeypatch, change):
     monkeypatch.setattr(mainline, "add_branch", add_branch)
 
 
-def blocked(world, container, said=None):
-    """Draft once and return the PreflightFailed it raises; the agent must never be built."""
+def blocked(world, container, said=None, kept=False):
+    """Draft once and return the PreflightFailed it raises; the agent is never built; the branch stays only if edited."""
     make = agent_for(STOP)
     with pytest.raises(mainline.PreflightFailed) as stopped:
         draft_from_main(world.engineer, world.tmp / "wt", "RITM0011001", {"number": "RITM0011001"}, {}, make,
                         container, report=(said.append if said is not None else lambda m: None), wait=no_wait)
-    assert make.built == [] and git(world.engineer, "branch", "--list", "agent/*") == ""
+    assert make.built == []
+    assert (git(world.engineer, "branch", "--list", "agent/*") != "") is kept
     assert not HEX_ID.search(str(stopped.value))  # a plain message; the IDs are in .detail
     return stopped.value
 
@@ -574,7 +590,9 @@ def test_a_mismatch_found_right_before_the_call_blocks_the_draft(world, monkeypa
     container = FakeContainer()
     ready(world, container)  # the wait passes: everything matched a moment ago
     tamper_after_branching(monkeypatch, lambda w, c: change(w, c, container))
-    error = blocked(world, container)
+    edits_branch = check == "branch_files_match_main"  # someone else's change on the branch: kept, never deleted
+    error = blocked(world, container, kept=edits_branch)
+    assert ("kept_worktree" in error.detail) is edits_branch
     assert str(error).startswith("Check failed: ") and message in str(error)
     assert str(error).endswith("Nothing was sent to the agent")
     failed = [k for k, ok in error.detail["checks"].items() if not ok]
@@ -587,7 +605,7 @@ def test_a_branch_at_another_commit_is_blocked_even_when_its_files_match(world, 
     second = push(world, "README.md", "docs only\n")  # same data files, different commit
     ready(world, container)
     tamper_after_branching(monkeypatch, lambda w, c: git(w, "reset", "-q", "--hard", world.first))
-    error = blocked(world, container)
+    error = blocked(world, container)  # moved but unedited and with no new commits: removed
     assert "does not start from the latest GitHub main" in str(error)
     assert (error.detail["branch_commit"], error.detail["main_commit"]) == (world.first, second)
     assert error.detail["checks"]["branch_files_match_main"] is True  # the commit ID alone caught it
@@ -641,3 +659,128 @@ def test_fwagent_records_the_passed_check_in_the_draft_audit(world, live):
     record = cli.load_record(world.engineer, "RITM0011001")
     check = record["history"][-1]["attempts"][0]["preflight"]
     assert record["status"] == "drafted" and check["passed"] is True and check["branch_commit"] == world.first
+
+
+
+# ------------------------------------------------------------ main's instructions, the evaluation gate, safe cleanup
+
+from workflow.agent import NotEvaluated, instructions  # noqa: E402
+
+
+@pytest.fixture
+def foundry_project(endpoint, monkeypatch):
+    """A fake Foundry project the pinned agent connects to; it lists whatever the sync job published."""
+    agents = FakeAgents(missing=True)
+    project = SimpleNamespace(agents=agents, get_openai_client=lambda **o: SimpleNamespace(options=o))
+    monkeypatch.setattr("workflow.agent.connect", lambda e: project)
+    return agents
+
+
+def test_the_definition_comes_from_mains_files_not_from_this_macs_code(world, foundry_project):
+    container = FakeContainer()
+    push(world, "agents/drafter.md", (REPO / "agents/drafter.md").read_text() + "\nA rule merged on main.\n")
+    marker = ready(world, container, foundry_project)  # published from main's drafter.md
+    settle(foundry_project)
+    evaluate(world.pusher, marker)
+    assert "A rule merged on main." in instructions(world.pusher)
+    assert "A rule merged on main." not in (REPO / "agents/drafter.md").read_text()  # this Mac's copy is older
+    a = FoundryAgent.pinned(world.pusher, marker["commit"], marker, container)
+    assert a.version == marker["agent"]["version"]
+
+
+def test_older_reply_checks_on_this_mac_block_the_draft_with_a_plain_message(world, foundry_project):
+    container = FakeContainer()
+    schema = json.loads((REPO / "agents/reply.schema.json").read_text())
+    push(world, "agents/reply.schema.json", json.dumps({**schema, "description": "changed on main"}, indent=2))
+    marker = ready(world, container, foundry_project)
+    with pytest.raises(AgentError, match="Pull main and try again") as stopped:
+        FoundryAgent.pinned(world.pusher, marker["commit"], marker, container)
+    assert stopped.value.detail["differing"] == ["agents/reply.schema.json"]
+
+
+def test_an_unevaluated_definition_is_blocked_before_any_foundry_call(world, endpoint, monkeypatch):
+    container = FakeContainer()
+    marker = ready(world, container)
+    monkeypatch.setattr("workflow.agent.connect", lambda e: pytest.fail("Foundry must not be called"))
+    with pytest.raises(NotEvaluated, match="has not passed its evaluation") as stopped:
+        FoundryAgent.pinned(world.pusher, world.first, marker, container)
+    assert not HEX_ID.search(str(stopped.value))
+    assert stopped.value.detail["definition_sha"] == marker["agent"]["definition_sha"]
+    assert stopped.value.detail["register"] == "agents/evaluated-definitions.json"
+
+
+def test_an_entry_for_another_definition_does_not_open_the_gate(world, endpoint, monkeypatch):
+    container = FakeContainer()
+    marker = ready(world, container)
+    evaluate(world.pusher, {"agent": {"definition_sha": "0" * 16, "version": "9"}})  # an older, evaluated definition
+    monkeypatch.setattr("workflow.agent.connect", lambda e: pytest.fail("Foundry must not be called"))
+    with pytest.raises(NotEvaluated):
+        FoundryAgent.pinned(world.pusher, world.first, marker, container)
+
+
+def test_the_eval_runner_may_use_an_unevaluated_definition_since_it_is_how_one_gets_evaluated(world, foundry_project, monkeypatch):
+    container = FakeContainer()
+    marker = ready(world, container, foundry_project)
+    settle(foundry_project)
+    git(world.pusher, "checkout", "-q", world.first)
+    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
+    assert FoundryAgent.from_env(world.pusher, container=container).version == marker["agent"]["version"]
+
+
+def test_the_real_register_starts_empty_so_nothing_drafts_until_an_evaluation_passes():
+    assert json.loads((REPO / "agents/evaluated-definitions.json").read_text())["definitions"] == {}
+
+
+def test_fwagent_blocks_an_unevaluated_agent_plainly_and_audits_it(world, live, foundry_project, monkeypatch, capsys):
+    ready(world, live.container, foundry_project)
+    settle(foundry_project)
+    monkeypatch.setattr(cli, "live_agent", REAL_LIVE_AGENT)  # the real pinned agent, gate included
+    _, code = _submit_and_accept(world)
+    out = capsys.readouterr().out.split("refused:")[-1]
+    assert code == cli.REFUSED and "has not passed its evaluation" in out and not HEX_ID.search(out)
+    record = cli.load_record(world.engineer, "RITM0011001")
+    assert record["status"] == "accepted" and "definition_sha" in record["history"][-1]["detail"]
+    assert git(world.engineer, "branch", "--list", "agent/*") == ""  # an unedited branch is removed
+
+
+def test_regeneration_keeps_a_branch_the_engineer_edited_and_drafts_on_a_new_one(world, monkeypatch):
+    container = FakeContainer()
+    ready(world, container)
+    calls = []
+
+    def make(worktree, commit, marker, container_):
+        calls.append(worktree)
+        if len(calls) == 1:
+            (Path(worktree) / "notes.txt").write_text("my notes\n")  # the engineer works in the branch meanwhile
+            push(world, "infra/envs/dev-eastus2/ip-groups.tfvars", "# merged meanwhile\n")
+            ready(world, container)
+        return agent_for(STOP)(worktree, commit, marker, container_)
+    draft = draft_from_main(world.engineer, world.tmp / "wt", "RITM0011001", {"number": "RITM0011001"}, {}, make,
+                            container, report=lambda m: None, wait=no_wait)
+    assert (calls[0] / "notes.txt").read_text() == "my notes\n"  # kept, untouched
+    assert {"kept_branch": f"agent/RITM0011001-{world.first[:7]}", "kept_worktree": str(calls[0])} in draft.audit["attempts"]
+    assert len(git(world.engineer, "branch", "--list", "agent/*").split()) == 2
+
+
+def test_cleanup_keeps_a_branch_with_a_commit_the_run_did_not_make(world, monkeypatch):
+    container = FakeContainer()
+    ready(world, container)
+
+    def commit_then_fail(worktree, commit, marker, container_):
+        (Path(worktree) / "notes.txt").write_text("x\n")
+        commit_all(Path(worktree), "engineer's commit")
+        raise AgentError("the agent call failed")
+    with pytest.raises(AgentError) as stopped:
+        draft_from_main(world.engineer, world.tmp / "wt", "RITM0011001", {"number": "RITM0011001"}, {},
+                        commit_then_fail, container, report=lambda m: None, wait=no_wait)
+    assert stopped.value.detail["kept_branch"] == f"agent/RITM0011001-{world.first[:7]}"
+    assert "engineer's commit" in git(world.engineer, "log", "-1", "--format=%s", stopped.value.detail["kept_branch"])
+
+
+def test_a_ticket_that_ends_without_a_draft_leaves_no_branch(world, live, monkeypatch):
+    ready(world, live.container)
+    monkeypatch.setattr(cli, "live_agent", agent_for(STOP))
+    _submit_and_accept(world)
+    record = cli.load_record(world.engineer, "RITM0011001")
+    assert record["status"] == "awaiting_review" and not record.get("worktree")
+    assert git(world.engineer, "branch", "--list", "agent/*") == ""

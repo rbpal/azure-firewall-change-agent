@@ -782,3 +782,25 @@ def test_stop_on_failure_does_not_stop_a_passing_run():
     not_run = []
     results = run(perfect(KEYS), not_run=not_run, stop_on_failure=True)
     assert len(results) == len(REQUESTS) and not_run == []
+
+
+def test_the_foundry_report_names_the_definition_a_register_entry_needs(monkeypatch, capsys):
+    import workflow.agent as agent_mod
+
+    class Ready:
+        """A pinned agent whose ready marker names its definition hash."""
+        version, snapshot, calls, controlled_dns = "11", "c" * 40, [], False
+        marker = {"agent": {"definition_sha": "5e1f00d1c0ffee42"}}
+
+        def __call__(self, ticket, **extra):
+            """Answer like the stop-only stand-in."""
+            return always_stop(ticket, **extra)
+
+        def pointer_now(self):
+            """The pointer has not moved."""
+            return self.snapshot
+
+    monkeypatch.setattr(agent_mod.FoundryAgent, "from_env", classmethod(lambda cls, repo, allowed_differences=(): Ready()))
+    assert main(["--agent", "foundry", "--only", "RITM0011001"]) == 0
+    out = capsys.readouterr().out
+    assert "Agent version: 11\nAgent definition: 5e1f00d1c0ffee42" in out

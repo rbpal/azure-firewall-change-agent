@@ -53,6 +53,7 @@ AGENTS = Path(__file__).resolve().parent.parent / "agents"
 GUIDANCE = ("data/standards", "data/runbooks")
 REPLY_SCHEMA = json.loads((AGENTS / "reply.schema.json").read_text())
 STRICT_SCHEMA = json.loads((AGENTS / "reply.strict.schema.json").read_text())
+EVALUATED = "agents/evaluated-definitions.json"  # definitions that passed their evaluation; read from main
 REPLY_FORMAT = {"type": "json_schema", "name": "fwagent_reply", "strict": True, "schema": STRICT_SCHEMA,
                 "description": ("The reply described in the instructions, wrapped as {\"reply\": ...}. A stop keeps "
                                 "rules as an empty list; action appears only on a draft that removes rules.")}
@@ -73,10 +74,14 @@ SNAPSHOT_CONTAINER = "network-snapshot"
 class AgentError(Exception):
     """The agent's call failed or its reply is not a valid reply; nothing is written."""
 
-    def __init__(self, message: str, raw: str | None = None):
-        """Keep the message and, for an invalid reply, the agent's raw text (cut to RAW_LIMIT) for diagnosis."""
+    def __init__(self, message: str, raw: str | None = None, detail: dict | None = None):
+        """Keep the plain message, an invalid reply's raw text (cut to RAW_LIMIT), and technical detail for the audit."""
         super().__init__(message)
-        self.raw = raw
+        self.raw, self.detail = raw, detail or {}
+
+
+class NotEvaluated(AgentError):
+    """GitHub main's agent definition has not passed its evaluation, so it may not draft."""
 
 
 class InfraError(AgentError):
@@ -141,27 +146,41 @@ def unfinished(response) -> AgentError | None:
 
 def instructions(repo: Path) -> str:
     """What the agent is told on every call: agents/drafter.md, then each standard and runbook page."""
-    parts = [(AGENTS / "drafter.md").read_text().strip()]
+    parts = [(Path(repo) / "agents" / "drafter.md").read_text().strip()]  # main's instructions, not this Mac's
     for folder in GUIDANCE:
         for page in sorted((Path(repo) / folder).glob("*.md")):
             parts.append(f"<!-- {folder}/{page.name} -->\n{page.read_text().strip()}")
     return "\n\n---\n\n".join(parts) + "\n"
 
 
-def definition(text: str, model: str = DEFAULT_MODEL, connection: str = DEFAULT_CONNECTION) -> dict:
+def definition(text: str, model: str = DEFAULT_MODEL, connection: str = DEFAULT_CONNECTION,
+               strict_schema: dict | None = None) -> dict:
     """The prompt agent: model, instructions, strict reply format, and the read tools over MCP; the snapshot comes per request."""
     return {"kind": "prompt", "model": model, "instructions": text,
             "tools": [{"type": "mcp", "server_label": "fwtools", "server_url": MCP_URL, "allowed_tools": list(TOOLS),
                        "require_approval": "never", "project_connection_id": connection,
                        "headers": {SNAPSHOT_HEADER: SNAPSHOT_TEMPLATE}}],
             "structured_inputs": {SNAPSHOT_INPUT: dict(SNAPSHOT_INPUT_SPEC)},
-            "text": {"format": REPLY_FORMAT}}
+            "text": {"format": REPLY_FORMAT if strict_schema is None else {**REPLY_FORMAT, "schema": strict_schema}}}
 
 
 def local_definition(repo: Path) -> dict:
-    """The definition built from repo's own agents/, standards and runbooks, with the configured model and connection."""
+    """The definition built only from repo's files: its agents/, standards, runbooks and strict reply schema."""
+    strict = json.loads((Path(repo) / "agents" / "reply.strict.schema.json").read_text())
     return definition(instructions(repo), os.environ.get("FWAGENT_MODEL", DEFAULT_MODEL),
-                      os.environ.get("FWAGENT_MCP_CONNECTION", DEFAULT_CONNECTION))
+                      os.environ.get("FWAGENT_MCP_CONNECTION", DEFAULT_CONNECTION), strict)
+
+
+def validators_behind(repo: Path) -> list[str]:
+    """The reply schemas this Mac's code checks with that differ from repo's (main's) copies; [] when they agree."""
+    names = ("reply.schema.json", "reply.strict.schema.json")
+    return [f"agents/{n}" for n in names if (AGENTS / n).read_bytes() != (Path(repo) / "agents" / n).read_bytes()]
+
+
+def evaluated(repo: Path) -> dict:
+    """The definitions on repo's main that passed their evaluation, by definition hash."""
+    path = Path(repo) / EVALUATED
+    return json.loads(path.read_text()).get("definitions", {}) if path.exists() else {}
 
 
 def data_differences(repo: Path, commit: str) -> list[str]:
@@ -363,23 +382,35 @@ class FoundryAgent:
             return None
 
     @classmethod
-    def pinned(cls, repo: Path, commit: str, marker: dict, container=None, allowed_differences=()) -> "FoundryAgent":
-        """The ready agent version for one main commit, checked against repo's files; it never publishes."""
+    def pinned(cls, repo: Path, commit: str, marker: dict, container=None, allowed_differences=(),
+               require_evaluation: bool = True) -> "FoundryAgent":
+        """The ready, evaluated agent version for one main commit, checked against repo's files; it never publishes."""
         endpoint = os.environ.get("FWAGENT_PROJECT_ENDPOINT")
         if not endpoint:
             raise AgentError("FWAGENT_PROJECT_ENDPOINT is not set: the Foundry project endpoint, "
                              "https://<account>.services.ai.azure.com/api/projects/<project>")
         if not COMMIT.fullmatch(commit or "") or marker.get("commit") != commit:
-            raise AgentError(f"the ready marker does not belong to commit {commit!r}")
+            raise AgentError("Azure's ready record does not belong to this version of GitHub main",
+                             detail={"main_commit": commit, "marker_commit": marker.get("commit")})
         differ = sorted(set(data_differences(repo, commit)) - set(allowed_differences))
         if differ:
-            raise AgentError(f"these files differ from snapshot {commit[:12]}, so the draft and the tools would "
-                             "use two revisions: " + ", ".join(differ))
+            raise AgentError("the ticket branch's files differ from GitHub main, so the draft and the tools would "
+                             "use two revisions", detail={"main_commit": commit, "differing": differ[:20]})
+        behind = validators_behind(repo)
+        if behind:
+            raise AgentError("this Mac's workflow code checks replies with a different format from GitHub main. "
+                             "Pull main and try again", detail={"main_commit": commit, "differing": behind})
         body = local_definition(repo)
-        agent = marker.get("agent") or {}
-        if agent.get("definition_sha") != definition_sha(body):
-            raise AgentError(f"main {commit[:12]}'s instructions, model or tools differ from ready agent version "
-                             f"{agent.get('version')}; the sync job must publish and mark a matching version first")
+        agent, sha = marker.get("agent") or {}, definition_sha(body)
+        if agent.get("definition_sha") != sha:
+            raise AgentError("the agent version marked ready does not match GitHub main's instructions, model or "
+                             "tools; the sync job must publish a matching version first",
+                             detail={"main_commit": commit, "definition_sha": sha, "ready_version": agent.get("version"),
+                                     "ready_definition_sha": agent.get("definition_sha")})
+        if require_evaluation and sha not in evaluated(repo):
+            raise NotEvaluated("the agent on GitHub main has not passed its evaluation, so it may not draft yet",
+                               detail={"main_commit": commit, "definition_sha": sha,
+                                       "agent_version": agent.get("version"), "register": EVALUATED})
         project = connect(endpoint)
         check_version(project, str(agent["version"]), body)
         # No hidden retries in the SDK: the runner retries, waits and records every attempt.
@@ -396,7 +427,8 @@ class FoundryAgent:
         if marker is None:
             raise SyncPending(f"commit {commit[:12]} has no snapshot ready for drafting; push it to main and let "
                               "sync-network finish. An older snapshot is never used instead")
-        return cls.pinned(repo, commit, marker, container, allowed_differences)
+        # The eval runner is how a definition earns its place in the register, so it is not gated by it.
+        return cls.pinned(repo, commit, marker, container, allowed_differences, require_evaluation=False)
 
     def __call__(self, ticket: dict, engineer_review: dict | None = None, dns_lookup=None) -> dict:
         """Draft one ticket; refuse a controlled DNS condition, which cannot reach the deployed tools."""

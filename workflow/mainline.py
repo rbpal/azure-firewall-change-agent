@@ -37,7 +37,7 @@ RELEVANT = (*DATA, *GUIDANCE, "agents")  # a change here makes a draft from the 
 
 
 class MainMoving(AgentError):
-    """Main kept changing relevant files while the agent drafted; nothing was kept."""
+    """Main kept changing relevant files while the agent drafted; no draft was kept."""
 
 
 class PreflightFailed(SnapshotMismatch):
@@ -97,10 +97,22 @@ def add_branch(repo: Path, worktrees: Path, number: str, commit: str) -> tuple[s
     return branch, path
 
 
-def remove_branch(repo: Path, branch: str, path: Path) -> None:
-    """Remove a worktree and its branch that this run created."""
-    git(repo, "worktree", "remove", "--force", str(path))
-    git(repo, "branch", "-D", branch)
+def remove_branch(repo: Path, branch: str, path: Path, commit: str) -> bool:
+    """Remove a worktree and branch this run made, unless they hold edits or commits it did not make; True if removed."""
+    edited = git(path, "status", "--porcelain", "--untracked-files=all").strip()
+    committed = git(repo, "rev-list", f"{commit}..{branch}").strip()
+    if edited or committed:
+        return False  # the engineer's work is never deleted
+    git(repo, "worktree", "remove", str(path))  # no --force: git itself refuses a worktree with changes
+    git(repo, "branch", "-D", branch)  # safe: the branch has no commits beyond main's
+    return True
+
+
+def clean_up(repo: Path, branch: str, path: Path, commit: str, report, attempts: list) -> None:
+    """Remove this attempt's branch, or keep it and say so when it holds the engineer's changes."""
+    if not remove_branch(repo, branch, path, commit):
+        report("Kept the ticket branch because it holds changes this run did not make; nothing in it was deleted.")
+        attempts.append({"kept_branch": branch, "kept_worktree": str(path)})
 
 
 def preflight(repo: Path, worktree: Path, container, commit: str, marker: dict) -> dict:
@@ -153,7 +165,7 @@ def draft_from_main(repo: Path, worktrees: Path, number: str, ticket: dict, revi
                 report("GitHub main changed while the ticket branch was being prepared. Starting again from the new main.")
                 attempts.append({"attempt": attempt, "main_commit": commit, "preflight": check,
                                  "restarted": "main moved before the agent call"})
-                remove_branch(repo, branch, path)
+                clean_up(repo, branch, path, commit, report, attempts)
                 continue
             if not check["passed"]:
                 raise PreflightFailed(failure_message(check), check)
@@ -178,14 +190,17 @@ def draft_from_main(repo: Path, worktrees: Path, number: str, ticket: dict, revi
             if changed:
                 report(f"GitHub main changed {len(changed)} relevant file(s) while the agent was drafting. "
                        "Drafting again from the new main.")
-                remove_branch(repo, branch, path)
+                clean_up(repo, branch, path, commit, report, attempts)
                 continue
             return Draft(reply, commit, branch, path, {"attempts": attempts, "branch": branch,
                                                        "worktree": str(path), "main_commit": commit,
                                                        "snapshot": commit, "agent_version": agent.version})
-        except BaseException:
+        except BaseException as error:
             if path.exists():
-                remove_branch(repo, branch, path)
+                kept: list = []
+                clean_up(repo, branch, path, commit, report, kept)
+                if kept and isinstance(error, AgentError):
+                    error.detail = {**error.detail, **kept[0]}
             raise
-    raise MainMoving(f"main changed relevant files during each of {max_attempts} attempts; nothing was kept. "
+    raise MainMoving(f"main changed relevant files during each of {max_attempts} attempts; no draft was kept. "
                      "Draft again when main is quiet")

@@ -81,7 +81,7 @@ from pathlib import Path
 import yaml
 
 from workflow.agent import AgentError, FoundryAgent, snapshot_container
-from workflow.mainline import draft_from_main
+from workflow.mainline import clean_up, draft_from_main
 from workflow.bypass import BypassRequested, bypass_message, bypass_requests, check_no_bypass
 from workflow.intake import NEEDS_PLANNED, finding, intake_findings, ticket_version
 from workflow.planned import check_planned, missing_spoke_files
@@ -162,9 +162,17 @@ def _draft_live(repo: Path, record: dict) -> str:
         save_record(repo, record)
         raise Refused(f"{number}: {error}. Nothing was written. Your acceptance is kept; to try again run: "
                       f"fwagent draft {number}") from error
-    record.update(worktree=str(draft.worktree), branch=draft.branch, drafting=draft.audit)
+    try:
+        _apply_reply(draft.worktree, record, draft.reply)
+    except BaseException:  # a refused or failed write: the branch goes too, unless it holds someone's edits
+        clean_up(repo, draft.branch, draft.worktree, draft.commit, print, [])
+        raise
+    if record["status"] == "drafted":
+        record.update(worktree=str(draft.worktree), branch=draft.branch)
+    else:  # a stop or already_allowed writes no file, so its branch has nothing to review
+        clean_up(repo, draft.branch, draft.worktree, draft.commit, print, [])
+    record["drafting"] = draft.audit
     record["history"].append({"at": _now(), "action": "draft", "agent": "foundry", **draft.audit})
-    _apply_reply(draft.worktree, record, draft.reply)
     save_record(repo, record)
     return draft_note(record)
 
@@ -251,7 +259,8 @@ def draft_note(record: dict) -> str:
         lines.append("Drafted from the latest GitHub main; the pre-call check passed and every tool read the same "
                      "copy. Commits and agent version are in the audit record. Ready for drafting is not applied "
                      "in Azure.")
-        lines.append(f"Branch {record['branch']} in {record['worktree']}")
+        if record.get("branch"):
+            lines.append(f"Branch {record['branch']} in {record['worktree']}")
     if record["files"]:
         where = f"git -C {record['worktree']} diff" if record.get("worktree") else "git diff"
         lines.append(f"Review the change as a diff: {where} -- infra/envs")

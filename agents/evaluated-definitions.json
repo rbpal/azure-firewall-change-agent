@@ -1,0 +1,4 @@
+{
+  "about": "Agent definitions that passed their validation-split evaluation, keyed by definition hash. Drafting refuses any definition not listed here. Add an entry only through a reviewed pull request, after the evaluation has passed.",
+  "definitions": {}
+}

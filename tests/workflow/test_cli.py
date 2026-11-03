@@ -336,6 +336,8 @@ def test_a_failed_undo_leaves_a_backup_and_the_next_command_is_refused(repo, tmp
     real, calls = scope.os.replace, []
 
     def flaky(*args):
+        if not str(args[-1]).endswith(".tfvars"):  # other writes, such as the active-ticket register, are not the disk under test
+            return real(*args)
         calls.append(args)
         if len(calls) in (2, 3):  # 1 primary swapped, 2 DR fails, 3 undo of primary fails
             raise OSError(28, "No space left on device")

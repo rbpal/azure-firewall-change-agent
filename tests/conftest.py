@@ -7,6 +7,9 @@ import pytest
 def no_live_agent(monkeypatch):
     """Clear the Foundry endpoint, so a command without --reply refuses instead of calling a model."""
     monkeypatch.delenv("FWAGENT_PROJECT_ENDPOINT", raising=False)
+    import workflow.lifecycle as lifecycle
+    monkeypatch.setattr(lifecycle, "whoami", lambda gh=None: "tester")  # no test asks GitHub who you are
+    monkeypatch.setattr(lifecycle, "run_gh", lambda *a: "[]")  # no test reaches GitHub: no pull requests
 
 
 OFFLINE_MAIN = "a" * 40  # the main commit the offline stand-in pretends to draft from

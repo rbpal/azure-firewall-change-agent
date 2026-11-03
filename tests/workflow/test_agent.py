@@ -59,7 +59,7 @@ def test_nothing_the_agent_sees_names_a_test_ticket_or_holds_label_text():
 # ------------------------------------------------------------ the agent definition
 
 def test_the_definition_gives_four_read_tools_over_the_project_connection_with_no_approval_step():
-    body = definition("x", SNAP, "gpt-6-luna-agent", "mcp-fwagentic-tools")
+    body = definition("x", "gpt-6-luna-agent", "mcp-fwagentic-tools")
     tool = body["tools"][0]
     assert body["model"] == "gpt-6-luna-agent" and len(body["tools"]) == 1
     assert tool["type"] == "mcp" and tool["project_connection_id"] == "mcp-fwagentic-tools"
@@ -67,20 +67,19 @@ def test_the_definition_gives_four_read_tools_over_the_project_connection_with_n
     assert sorted(tool["allowed_tools"]) == ["dnat_port_check", "dns_lookup_for_fqdn", "duplicate_rule_check",
                                              "locate_address_for_env_site", "resolve_env_site"]
     assert tool["require_approval"] == "never"
-    assert tool["headers"] == {"X-Fwagent-Snapshot": SNAP}  # every tool call of the ticket reads this commit
+    # every tool call reads the commit the request supplies; the version itself names no commit
+    assert tool["headers"] == {"X-Fwagent-Snapshot": "{{snapshot}}"}
+    assert body["structured_inputs"] == {"snapshot": {"description": agent_mod.SNAPSHOT_INPUT_SPEC["description"],
+                                                      "required": True, "schema": {"type": "string"}}}
     fmt = body["text"]["format"]
     assert fmt["type"] == "json_schema" and fmt["strict"] is True
     assert fmt["schema"] == json.loads((REPO / "agents" / "reply.strict.schema.json").read_text())
 
 
-@pytest.mark.parametrize("snapshot", ["", "main", "c" * 39, "C" * 40, "c" * 40 + "\n"])
-def test_the_definition_needs_a_full_snapshot_sha(snapshot):
-    with pytest.raises(AgentError, match="full commit SHA"):
-        definition("x", snapshot)
-
-
-def test_another_snapshot_makes_another_agent_version():
-    assert agent_mod.definition_sha(definition("x", SNAP)) != agent_mod.definition_sha(definition("x", "d" * 40))
+def test_the_definition_names_no_snapshot_so_new_network_data_needs_no_new_version():
+    body = definition("x")
+    assert SNAP not in json.dumps(body) and agent_mod.definition_sha(body) == agent_mod.definition_sha(definition("x"))
+    assert agent_mod.definition_sha(definition("y")) != agent_mod.definition_sha(body)  # instructions still count
 
 
 class FakeAgents:
@@ -88,6 +87,18 @@ class FakeAgents:
 
     def __init__(self, versions=(), missing=False):
         self.versions, self.missing, self.created = list(versions), missing, []
+
+    def get_version(self, name, version):
+        """The published version as Foundry returns it: metadata plus a dict-like definition."""
+        for v in self.versions:
+            if str(v.version) == str(version):
+                return v
+        for i, (_, made, metadata) in enumerate(self.created):
+            if str(len(self.versions) + i + 1) == str(version):
+                found = {"tools": [{"headers": made.tools[0].headers}],
+                         "structured_inputs": {k: {"required": d.required} for k, d in made.structured_inputs.items()}}
+                return SimpleNamespace(version=version, metadata=metadata, definition=found)
+        raise type("ResourceNotFoundError", (Exception,), {"status_code": 404})("no version")
 
     def list_versions(self, name):
         if self.missing:
@@ -100,16 +111,17 @@ class FakeAgents:
 
 
 def test_an_unchanged_definition_reuses_its_version_and_a_changed_one_makes_a_new_version():
-    body = definition("instructions v1", SNAP)
+    body = definition("instructions v1")
     sha = agent_mod.definition_sha(body)
     same = FakeAgents([SimpleNamespace(version="3", metadata={"definition_sha": sha})])
     assert ensure_version(SimpleNamespace(agents=same), body) == "3" and same.created == []
     other = FakeAgents([SimpleNamespace(version="3", metadata={"definition_sha": sha})])
-    assert ensure_version(SimpleNamespace(agents=other), definition("instructions v2", SNAP)) == "2"
+    assert ensure_version(SimpleNamespace(agents=other), definition("instructions v2")) == "2"
     name, made, metadata = other.created[0]
     assert name == AGENT_NAME and made.model == "gpt-6-luna-agent" and made.instructions == "instructions v2"
     assert made.tools[0].project_connection_id == "mcp-fwagentic-tools" and made.tools[0].require_approval == "never"
-    assert made.tools[0].headers == {"X-Fwagent-Snapshot": SNAP}
+    assert made.tools[0].headers == {"X-Fwagent-Snapshot": "{{snapshot}}"}
+    assert made.structured_inputs["snapshot"].required is True
     assert made.text.format.strict is True and made.text.format.name == "fwagent_reply"
     assert made.text.format.schema["properties"] == {"reply": made.text.format.schema["properties"]["reply"]}
     assert metadata["definition_sha"] != sha
@@ -117,7 +129,7 @@ def test_an_unchanged_definition_reuses_its_version_and_a_changed_one_makes_a_ne
 
 def test_the_first_version_is_created_when_no_agent_exists():
     agents = FakeAgents(missing=True)
-    assert ensure_version(SimpleNamespace(agents=agents), definition("x", SNAP)) == "1"
+    assert ensure_version(SimpleNamespace(agents=agents), definition("x")) == "1"
 
 
 # ------------------------------------------------------------ the reply
@@ -197,7 +209,8 @@ def test_a_call_sends_only_the_ticket_and_review_to_the_pinned_version_and_recor
     reply = a(copy.deepcopy(data["ticket"]))
     sent = a.openai.responses.requests[0]
     assert reply["reason"] == "both_ends_onprem"
-    assert sent["extra_body"] == {"agent_reference": {"name": AGENT_NAME, "version": "7", "type": "agent_reference"}}
+    assert sent["extra_body"] == {"agent_reference": {"name": AGENT_NAME, "version": "7", "type": "agent_reference"},
+                                  "structured_inputs": {"snapshot": SNAP}}  # every tool call reads this commit
     assert json.loads(sent["input"]) == {"ticket": data["ticket"], "engineer_review": None}
     call = a.calls[0]
     assert (call.number, call.input_tokens, call.output_tokens, call.tools, call.commits) == (
@@ -359,120 +372,6 @@ def test_data_differences_refuses_a_commit_this_repo_does_not_have(tmp_path):
         data_differences(root, "e" * 40)
 
 
-class FakeContainer:
-    """Stands in for the snapshot container: blobs by name, current.json included."""
-
-    def __init__(self, blobs):
-        self.blobs = dict(blobs)
-
-    def download_blob(self, name):
-        if name not in self.blobs:
-            raise FileNotFoundError(name)
-        data = self.blobs[name]
-        return SimpleNamespace(readall=lambda: data)
-
-    def list_blobs(self, name_starts_with):
-        return [SimpleNamespace(name=n) for n in self.blobs if n.startswith(name_starts_with)]
-
-
-def synced(root, *commits, current=None):
-    """The container as the sync job leaves it: each commit's data files, and current.json naming one commit."""
-    import subprocess
-    blobs = {"current.json": json.dumps({"commit": current or commits[-1]}).encode()}
-    for c in commits:
-        names = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "--name-only", c], capture_output=True,
-                               text=True, check=True).stdout.split()
-        blobs.update({f"snapshots/{c}/{n}": b"x" for n in names})
-    return FakeContainer(blobs)
-
-
-def _second_commit(root):
-    """Commit a change to the data, as the next push to main would; return its SHA."""
-    import subprocess
-    (root / "data/network/routing.yaml").write_text("second\n")
-    run = lambda *a: subprocess.run(["git", "-C", str(root), *a], check=True, capture_output=True, text=True).stdout  # noqa: E731
-    run("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qam", "second")
-    return run("rev-parse", "HEAD").strip()
-
-
-def test_the_run_pins_the_commit_current_json_names(tmp_path, monkeypatch):
-    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
-    root, first = _git_repo(tmp_path)
-    second = _second_commit(root)
-    assert agent_mod.pin_snapshot(root, synced(root, first, second)) == second
-
-
-def test_the_previous_snapshot_is_never_used_when_current_json_does_not_match_the_required_commit(tmp_path, monkeypatch):
-    root, first = _git_repo(tmp_path)
-    second = _second_commit(root)
-    monkeypatch.setenv("FWAGENT_SNAPSHOT_COMMIT", second)
-    container = synced(root, first, second, current=first)  # a rollback left current.json on the previous snapshot
-    with pytest.raises(AgentError, match=f"current.json names {first[:12]}, but this run requires {second[:12]}.*never used"):
-        agent_mod.pin_snapshot(root, container)
-
-
-BAD_SNAPSHOTS = {
-    "pointer not a SHA": (lambda c, sha: c.blobs.update({"current.json": b'{"commit": "main"}'}), "does not name a full commit SHA"),
-    "pointer missing": (lambda c, sha: c.blobs.pop("current.json"), "current.json could not be read"),
-    "a file missing": (lambda c, sha: c.blobs.pop(f"snapshots/{sha}/data/network/routing.yaml"), "1 files missing"),
-    "an extra file": (lambda c, sha: c.blobs.update({f"snapshots/{sha}/infra/envs/stray.tfvars": b"x"}), "1 extra"),
-    "commit not in this checkout": (lambda c, sha: c.blobs.update({"current.json": json.dumps({"commit": "e" * 40}).encode()}),
-                                    "this checkout does not have commit"),
-}
-
-
-@pytest.mark.parametrize("break_it, why", BAD_SNAPSHOTS.values(), ids=BAD_SNAPSHOTS.keys())
-def test_an_invalid_current_snapshot_stops_the_run(tmp_path, monkeypatch, break_it, why):
-    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
-    root, first = _git_repo(tmp_path)
-    second = _second_commit(root)
-    container = synced(root, first, second)
-    break_it(container, second)
-    with pytest.raises(AgentError, match=why):
-        agent_mod.pin_snapshot(root, container)
-
-
-def test_the_checkout_must_hold_the_pinned_snapshots_data(tmp_path, monkeypatch):
-    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
-    root, first = _git_repo(tmp_path)
-    (root / "data/network/routing.yaml").write_text("changed\n")
-    with pytest.raises(AgentError, match="would use two revisions: data/network/routing.yaml"):
-        agent_mod.pin_snapshot(root, synced(root, first))
-    assert agent_mod.pin_snapshot(root, synced(root, first), allowed_differences=["data/network/routing.yaml"]) == first
-
-
-def test_from_env_pins_before_any_foundry_call(tmp_path, monkeypatch):
-    root, first = _git_repo(tmp_path)
-    second = _second_commit(root)
-    monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
-    monkeypatch.setenv("FWAGENT_SNAPSHOT_COMMIT", second)
-    monkeypatch.setattr(agent_mod, "connect", lambda endpoint: pytest.fail("Foundry must not be called"))
-    with pytest.raises(AgentError, match="never used"):
-        FoundryAgent.from_env(root, container=synced(root, first, second, current=first))
-
-
-def test_from_env_publishes_the_version_pinned_to_current_and_reports_a_moved_pointer(tmp_path, monkeypatch):
-    monkeypatch.delenv("FWAGENT_SNAPSHOT_COMMIT", raising=False)
-    root, first = _git_repo(tmp_path)
-    (root / "data/standards").mkdir(parents=True)
-    agents = FakeAgents(missing=True)
-    project = SimpleNamespace(agents=agents, get_openai_client=lambda **options: SimpleNamespace(options=options))
-    monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
-    monkeypatch.setattr(agent_mod, "connect", lambda endpoint: project)
-    container = synced(root, first)
-    a = FoundryAgent.from_env(root, container=container)
-    assert a.snapshot == first and agents.created[0][1].tools[0].headers == {"X-Fwagent-Snapshot": first}
-    assert a.openai.options == {"max_retries": 0}  # the runner retries, so every attempt is recorded
-    container.blobs["current.json"] = json.dumps({"commit": "f" * 40}).encode()  # a push during the run
-    assert a.pointer_now() == "f" * 40 and a.snapshot == first
-
-
-def test_from_env_needs_the_project_endpoint(monkeypatch):
-    monkeypatch.delenv("FWAGENT_PROJECT_ENDPOINT", raising=False)
-    with pytest.raises(AgentError, match="FWAGENT_PROJECT_ENDPOINT is not set"):
-        FoundryAgent.from_env(REPO)
-
-
 # ------------------------------------------------------------ through fwagent accept
 
 @pytest.fixture
@@ -497,32 +396,35 @@ def _accept(repo, tmp_path, number):
                            "--reason", "checked"], repo=repo)
 
 
-def test_accept_without_reply_or_endpoint_refuses_and_calls_nothing(repo, tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr(cli, "live_agent", lambda root: pytest.fail("the live agent must not be built"))
+def test_accept_without_reply_or_endpoint_refuses_and_calls_nothing(repo, tmp_path, capsys, monkeypatch, offline_main):
+    monkeypatch.setattr(cli, "live_agent", lambda *_: pytest.fail("the live agent must not be built"))
     _, code = _accept(repo, tmp_path, "RITM0011001")
     assert code == cli.REFUSED and "set FWAGENT_PROJECT_ENDPOINT" in capsys.readouterr().out
 
 
-def test_accept_with_the_endpoint_drafts_through_the_live_agent_and_records_it(repo, tmp_path, monkeypatch):
+def test_accept_with_the_endpoint_drafts_through_the_live_agent_and_records_it(repo, tmp_path, monkeypatch, offline_main):
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
     data = yaml.safe_load((REQUESTS / "validation" / "validation_RITM0011001.yaml").read_text())
     fake = foundry(wrapped({**_reply_keys(data["expected"]), "explanation": "Drafted for both selected sites."}))
-    monkeypatch.setattr(cli, "live_agent", lambda root: fake)
+    monkeypatch.setattr(cli, "live_agent", lambda *_: fake)
     _, code = _accept(repo, tmp_path, "RITM0011001")
     record = cli.load_record(repo, "RITM0011001")
     assert code == cli.DONE and record["status"] == "drafted" and len(record["files"]) == 2
-    assert record["history"][-1]["agent"] == "foundry"
+    assert [h["action"] for h in record["history"][-2:]] == ["accept", "draft"]
+    assert record["history"][-1]["agent"] == "foundry" and record["drafting"]["main_commit"] == "a" * 40
     assert json.loads(fake.openai.responses.requests[0]["input"])["engineer_review"]["engineer"] == "Jordan Patel"
 
 
-def test_a_live_agent_error_writes_nothing_and_leaves_the_ticket_waiting(repo, tmp_path, capsys, monkeypatch):
+def test_a_live_agent_error_writes_nothing_and_keeps_the_acceptance(repo, tmp_path, capsys, monkeypatch, offline_main):
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
-    monkeypatch.setattr(cli, "live_agent", lambda root: foundry("not json"))
+    monkeypatch.setattr(cli, "live_agent", lambda *_: foundry("not json"))
     before = {p: p.read_bytes() for p in (repo / "infra").rglob("*") if p.is_file()}
     _, code = _accept(repo, tmp_path, "RITM0011001")
-    assert code == cli.REFUSED and "Nothing was written" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert code == cli.REFUSED and "Nothing was written" in out and "Your acceptance is kept" in out
     assert {p: p.read_bytes() for p in (repo / "infra").rglob("*") if p.is_file()} == before
-    assert cli.load_record(repo, "RITM0011001")["status"] == "awaiting_review"
+    record = cli.load_record(repo, "RITM0011001")
+    assert record["status"] == "accepted" and record["review"]["ticket_version"] == record["ticket_version"]
 
 
 def _step_one() -> str:

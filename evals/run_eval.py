@@ -542,6 +542,9 @@ def main(argv: list[str] | None = None) -> int:
     inner = getattr(agent, "inner", agent)
     if getattr(inner, "version", None):
         report += f"\n\nAgent version: {inner.version}"
+        sha = ((getattr(inner, "marker", None) or {}).get("agent") or {}).get("definition_sha")
+        if sha:  # the key a reviewed entry in agents/evaluated-definitions.json needs once this run has passed
+            report += f"\nAgent definition: {sha}"
     if getattr(inner, "snapshot", None):
         now = inner.pointer_now()
         report += f"\n\nSnapshot pinned for every tool call: {inner.snapshot}"

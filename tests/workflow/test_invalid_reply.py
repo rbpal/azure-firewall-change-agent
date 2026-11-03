@@ -59,9 +59,9 @@ def test_the_eval_output_keeps_the_raw_reply_of_an_agent_error():
     assert entry["reply"] is None and entry["raw_reply"] == V3_TEXT
 
 
-def test_the_workflow_record_keeps_the_raw_reply_and_nothing_else_changes(repo, tmp_path, monkeypatch, capsys):
+def test_the_workflow_record_keeps_the_raw_reply_and_nothing_else_changes(repo, tmp_path, monkeypatch, capsys, offline_main):
     monkeypatch.setenv("FWAGENT_PROJECT_ENDPOINT", "https://example.services.ai.azure.com/api/projects/p")
-    monkeypatch.setattr(cli, "live_agent", lambda root: lambda ticket, engineer_review=None: parse_reply(V3_TEXT))
+    monkeypatch.setattr(cli, "live_agent", lambda *_: lambda ticket, engineer_review=None: parse_reply(V3_TEXT))
     ticket = tmp_path / "t.json"
     ticket.write_text(json.dumps(request(NUMBER)[0]))
     assert run(repo, "submit", str(ticket)) == cli.REVIEW
@@ -72,8 +72,9 @@ def test_the_workflow_record_keeps_the_raw_reply_and_nothing_else_changes(repo, 
     assert "'reason' is a required property" in capsys.readouterr().out
     record = cli.load_record(repo, NUMBER)
     kept = record["history"][-1]
-    assert (kept["action"], kept["raw_reply"], kept["ticket_version"]) == ("agent_error", V3_TEXT, version)
-    assert record["status"] == "awaiting_review" and record["reply"] is None and "review" not in record
+    assert (kept["action"], kept["raw_reply"], kept["ticket_version"]) == ("draft_stopped", V3_TEXT, version)
+    # the acceptance of this exact, unchanged ticket is kept, so fwagent draft can try again without a new accept
+    assert record["status"] == "accepted" and record["reply"] is None and record["review"]["ticket_version"] == version
     assert changed(before, repo) == set()
 
 

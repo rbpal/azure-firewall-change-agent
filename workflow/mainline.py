@@ -152,7 +152,7 @@ def draft_from_main(repo: Path, worktrees: Path, number: str, ticket: dict, revi
         commit = fetch_main(repo)
         report(f"Fetched the latest GitHub main (attempt {attempt} of {max_attempts}).")
         try:
-            marker = wait(repo, container, commit, report=report)
+            marker = wait(repo, container, commit, report=report, contents=False)  # bytes: once, in preflight
         except SyncSuperseded as error:
             report(f"{str(error)[:1].upper()}{str(error)[1:]}. Drafting from the newer main.")
             attempts.append({"attempt": attempt, "main_commit": commit, "superseded": True, **error.detail})

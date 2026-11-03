@@ -46,6 +46,7 @@ class FakeContainer:
         self.blobs[name], self.modified[name] = bytes(data), NOW
 
     def download_blob(self, name):
+        self.downloads = getattr(self, "downloads", []) + [name]
         if name not in self.blobs:
             raise ResourceNotFoundError(name)
         return SimpleNamespace(readall=lambda: self.blobs[name])
@@ -119,9 +120,10 @@ def evaluate(repo, marker):
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def no_wait(repo, container, commit, report=print):
+def no_wait(repo, container, commit, report=print, contents=True):
     """The wait with no waiting: a missing marker stops at once."""
-    return snap.wait_for_ready(repo, container, commit, report=report, sync_state=lambda c: None, timeout=0, sleep=lambda s: None)
+    return snap.wait_for_ready(repo, container, commit, report=report, sync_state=lambda c: None, timeout=0,
+                               sleep=lambda s: None, contents=contents)
 
 
 def agent_for(text):
@@ -357,13 +359,13 @@ def test_a_cancelled_sync_moves_on_to_the_newer_main(world):
     container = FakeContainer()
     first_seen = []
 
-    def wait(repo, container_, commit, report=print):
+    def wait(repo, container_, commit, report=print, **options):
         if not first_seen:
             first_seen.append(commit)
             push(world, "README.md", "newer\n")  # the push whose sync replaced this one
             ready(world, container)
             raise snap.SyncSuperseded("cancelled")
-        return no_wait(repo, container_, commit)
+        return no_wait(repo, container_, commit, **options)
     draft = draft_from_main(world.engineer, world.tmp / "wt", "RITM0011001", {"number": "RITM0011001"}, {},
                             agent_for(STOP), container, report=lambda m: None, wait=wait)
     assert first_seen == [world.first] and draft.commit == git(world.pusher, "rev-parse", "HEAD").strip()
@@ -784,3 +786,40 @@ def test_a_ticket_that_ends_without_a_draft_leaves_no_branch(world, live, monkey
     record = cli.load_record(world.engineer, "RITM0011001")
     assert record["status"] == "awaiting_review" and not record.get("worktree")
     assert git(world.engineer, "branch", "--list", "agent/*") == ""
+
+
+
+# ------------------------------------------------------------ one byte check per draft; the register is not the definition
+
+
+def test_a_draft_downloads_each_snapshot_file_once_right_before_the_call(world):
+    container = FakeContainer()
+    ready(world, container)
+    container.downloads = []
+    draft_from_main(world.engineer, world.tmp / "wt", "RITM0011001", {"number": "RITM0011001"}, {}, agent_for(STOP),
+                    container, report=lambda m: None, wait=no_wait)
+    files = [n for n in container.downloads if n.startswith("snapshots/")]
+    wanted = snap.commit_files(world.pusher, world.first)
+    assert len(files) == len(set(files)) == len(wanted)  # every file once: the wait checks only the record and the list
+
+
+def test_the_eval_runner_and_the_sync_check_still_check_every_byte(world):
+    container = FakeContainer()
+    ready(world, container)
+    container.blobs[f"snapshots/{world.first}/{ROUTING}"] = b"tampered"
+    with pytest.raises(snap.SnapshotMismatch):
+        snap.verify_ready(world.pusher, container, world.first)  # contents=True is the default
+    assert snap.verify_ready(world.pusher, container, world.first, contents=False)["commit"] == world.first
+
+
+def test_an_evaluation_register_entry_does_not_change_the_agent_definition_hash(world):
+    container, agents = FakeContainer(), FakeAgents(missing=True)
+    marker = ready(world, container, agents)
+    before = definition_sha(local_definition(world.pusher))
+    evaluate(world.pusher, marker)  # the reviewed entry, committed and pushed as its own change to main
+    commit_all(world.pusher, "Record the passed evaluation")
+    git(world.pusher, "push", "-q", "origin", "main")
+    assert definition_sha(local_definition(world.pusher)) == before == marker["agent"]["definition_sha"]
+    settle(agents)
+    after = ready(world, container, agents)
+    assert after["agent"]["version"] == marker["agent"]["version"] and agents.created == []  # no new version

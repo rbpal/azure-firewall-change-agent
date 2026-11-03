@@ -110,13 +110,13 @@ def differing(a: dict[str, str], b: dict[str, str]) -> list[str]:
     return sorted(p for p in set(a) | set(b) if a.get(p) != b.get(p))
 
 
-def blob_problems(container, commit: str, wanted: dict[str, str]) -> list[str]:
-    """Every way the uploaded snapshot differs from the wanted manifest: missing, extra or changed files."""
+def blob_problems(container, commit: str, wanted: dict[str, str], contents: bool = True) -> list[str]:
+    """Every way the uploaded snapshot differs from the wanted manifest: missing, extra or (with contents) changed files."""
     prefix = SNAPSHOTS.format(commit=commit)
     names = {b.name[len(prefix):] for b in container.list_blobs(name_starts_with=prefix)}
     problems = [f"missing {p}" for p in sorted(set(wanted) - names)]
     problems += [f"extra {p}" for p in sorted(names - set(wanted))]
-    for path in sorted(set(wanted) & names):
+    for path in sorted(set(wanted) & names) if contents else ():
         data = container.download_blob(prefix + path).readall()
         if hashlib.sha256(data).hexdigest() != wanted[path]:
             problems.append(f"changed {path}")
@@ -134,8 +134,12 @@ def read_marker(container, commit: str) -> dict | None:
         raise SnapshotMismatch(f"the ready marker for {commit[:12]} is not valid JSON") from error
 
 
-def verify_ready(repo: Path, container, commit: str) -> dict | None:
-    """The marker for commit after checking it and every snapshot file against Git; None while it is not written."""
+def verify_ready(repo: Path, container, commit: str, contents: bool = True) -> dict | None:
+    """The marker for commit after checking it and the snapshot files against Git; None while it is not written.
+
+    contents=False checks the file list only. Drafting uses it while waiting, because the pre-call check
+    downloads every file right before the agent call; the eval runner and the sync job check bytes here.
+    """
     marker = read_marker(container, commit)
     if marker is None:
         return None
@@ -146,7 +150,7 @@ def verify_ready(repo: Path, container, commit: str) -> dict | None:
     if marker.get("files") != wanted:
         raise SnapshotMismatch("Azure's ready record lists different files from GitHub main",
                                {"main_commit": commit, "differing": differing(marker.get("files") or {}, wanted)[:20]})
-    problems = blob_problems(container, commit, wanted)
+    problems = blob_problems(container, commit, wanted, contents)
     if problems:
         raise SnapshotMismatch(f"Azure's copy of GitHub main differs in {len(problems)} file(s)",
                                {"main_commit": commit, "problems": problems[:20]})
@@ -171,11 +175,11 @@ def github_sync_state(commit: str) -> str | None:
 
 def wait_for_ready(repo: Path, container, commit: str, report=print, sync_state=github_sync_state,
                    timeout: float = WAIT_TIMEOUT, interval: float = WAIT_INTERVAL, clock=time.monotonic,
-                   sleep=time.sleep) -> dict:
+                   sleep=time.sleep, contents: bool = True) -> dict:
     """Wait a bounded time for main's snapshot to be marked ready, reporting progress; stop on failure or timeout."""
     start = clock()
     while True:
-        marker = verify_ready(repo, container, commit)
+        marker = verify_ready(repo, container, commit, contents)
         if marker is not None:
             return marker
         state = sync_state(commit)

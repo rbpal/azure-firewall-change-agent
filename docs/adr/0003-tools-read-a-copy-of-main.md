@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-11
+- **Superseded in part:** item 3 and the pointer in item 4 by ADR 0006. Drafts pin the commit per request and never read `current.json`.
 
 ## The problem
 

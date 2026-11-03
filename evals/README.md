@@ -95,7 +95,9 @@ The first real score comes after the agent and its model are configured.
 
 ## Running the real agent
 
-`--agent foundry` calls the drafter on Foundry (`workflow/agent.py`). It needs `FWAGENT_PROJECT_ENDPOINT`. The run pins the snapshot `current.json` names, after checking it holds exactly that commit's files; if `FWAGENT_SNAPSHOT_COMMIT` is set, the snapshot must be that commit (`docs/snapshots.md`). Every tool call of every ticket reads that one snapshot, and a reply is refused if any tool answer names another commit.
+`--agent foundry` calls the drafter on Foundry (`workflow/agent.py`). It needs `FWAGENT_PROJECT_ENDPOINT`. The run pins this checkout's commit, or `FWAGENT_SNAPSHOT_COMMIT` when set. That commit must already be ready for drafting, and the run checks every snapshot file's bytes against Git (`docs/snapshots.md`). It uses the agent version the ready record names and never publishes one.
+
+The report prints `Agent definition: <hash>`. After a passing validation run, a reviewed pull request adds that hash to `agents/evaluated-definitions.json`. Only then can that definition draft tickets. The eval runner is not gated by that register, since a run is how a definition earns its entry.
 
 The run refuses to start when this repo's `data/network` or `infra/envs` differ from that snapshot, because the labels and the tools would then rest on two revisions. Each differing file must be named with `--data-diff-ok`, and each ticket that depends on it left out with `--not-run RITM…=reason`. For a measured run, push instead, so the snapshot is the checkout's commit.
 

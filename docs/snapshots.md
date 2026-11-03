@@ -1,59 +1,58 @@
 # Network snapshots
 
-The agent's tools never read GitHub. On every push to `main`, the `sync-network` workflow copies `data/network` and `infra/envs` into Blob storage (ADR 0003). Each copy is a folder named after its commit. A small file, `current.json`, names the folder the tools read.
+The agent's tools never read GitHub. On every push to `main`, the `sync-network` workflow copies `data/network` and `infra/envs` into Blob storage (ADR 0003), checks the copy, and marks the commit ready for drafting (ADR 0006).
 
 Storage account `stfwagentfuncdev`, container `network-snapshot`:
 
 ```
-current.json                       {"commit": "<40-character SHA>"}
-snapshots/<sha>/data/network/...
+snapshots/<sha>/data/network/...    one folder per main commit, written once
 snapshots/<sha>/infra/envs/...
+ready/<sha>.json                    the ready record: file hashes, agent version, checks
+current.json                        {"commit": "<sha>"} for tools called without a pinned commit
 ```
+
+A snapshot of `main` holds 74 files today.
+
+## What the sync job does
+
+1. Uploads each file of the pushed commit once. A file that already exists must hold the same bytes.
+2. Downloads every file and compares its SHA-256 with Git. A missing, extra or changed file stops the job.
+3. Reuses the agent version whose definition matches the commit's instructions, or publishes a new one.
+4. Reads that version back and checks its hash, its `{{snapshot}}` header and its required input. It makes no model call.
+5. Writes `ready/<sha>.json` once. Any earlier failure leaves no record, so drafting waits or stops.
+
+Every push gets a record, including commits that change only docs or tests. The job never touches a firewall policy.
+
+## Ready for drafting is not applied in Azure
+
+A ready record says the commit's configuration files are copied and checked, and which agent version matches its instructions. It says nothing about any firewall. Firewall changes reach Azure only through the release pipeline.
+
+## How a draft uses a snapshot
+
+1. `fwagent accept` fetches `origin/main` and waits up to 10 minutes for its ready record. While it waits, it checks the record and the file list.
+2. It creates branch `agent/<ticket>-<commit>` at that commit, in its own worktree.
+3. Right before the agent call, it downloads every snapshot file once. The branch, the ready record and Azure's files must match `main`, by commit and by each file's bytes. A mismatch sends nothing to the agent.
+4. Each request supplies the commit as the `snapshot` structured input, so every tool call reads that snapshot. A reply is refused if any tool answer names another commit.
+5. If `main` changes relevant files during the call, the draft is made again from the new `main`, up to 3 times.
+
+The agent version must also be listed in `agents/evaluated-definitions.json` on `main`. Until its evaluation has passed and a reviewed pull request has added it, drafting stops.
 
 ## What is kept
 
-Two snapshots: the one `current.json` names, and the one before it. Older folders are deleted at the end of each sync from a push. The sync never deletes the folder `current.json` names, and a rollback deletes nothing.
-
-Before `current.json` moves, the sync checks that the folder holds exactly the commit's tracked files (`git ls-tree` of that commit). A missing or extra file stops the sync, and the pointer stays where it was.
-
-## How a run uses a snapshot
-
-1. The eval runner reads `current.json` and checks the folder against that commit's file list, the same check the sync makes.
-2. It refuses to start when this checkout's `data/network` or `infra/envs` differ from that commit, whether the difference is committed, uncommitted or an untracked file. The labels and the tools must rest on one revision. `evals/README.md` describes `--data-diff-ok`, which names a differing file the run may ignore.
-3. It pins that commit for the whole run. Every tool call sends it in the `X-Fwagent-Snapshot` header, and a reply is refused if any tool answer names another commit.
-
-An invalid snapshot, or one that is not the required commit (`FWAGENT_SNAPSHOT_COMMIT`, when set), stops the run. The previous snapshot is never used instead.
-
-## No push during a controlled run
-
-Nothing records which runs are active. A push during a run would sync a new commit and could delete the folder the run has pinned. Finish the run before pushing.
+A snapshot is deleted only when another commit replaced it more than 24 hours ago. A draft attempt may run 30 minutes at most, so no run loses its snapshot. Ready records are kept for the audit.
 
 ## Compare two snapshots
 
 Reading needs `az login` and Storage Blob Data Reader on the container or the storage account; shared keys are off.
 
 ```
-az storage blob download --auth-mode login --account-name stfwagentfuncdev \
-  --container-name network-snapshot --name current.json --file /dev/stdout --no-progress --output none
 az storage blob list --auth-mode login --account-name stfwagentfuncdev \
-  --container-name network-snapshot --prefix snapshots/ --num-results "*" \
-  --query "[].name" --output tsv | cut -d/ -f2 | sort -u
+  --container-name network-snapshot --prefix ready/ --num-results "*" --query "[].name" --output tsv
 git diff --stat <older-sha> <newer-sha> -- data/network infra/envs
 ```
 
-The folders hold exactly each commit's files, so `git diff` between the two commits shows what differs between the two snapshots.
+Each folder holds exactly its commit's files, so `git diff` between two commits shows what differs between their snapshots.
 
 ## Roll back the pointer
 
-Rollback moves `current.json` to a kept snapshot. It uploads nothing and deletes nothing.
-
-1. In GitHub, run the `sync-network` workflow on `main` with `rollback_to` set to the full 40-character SHA of a kept snapshot.
-2. The workflow refuses anything that is not a full SHA of a commit on `main`. It checks the folder against that commit's file list before moving the pointer.
-3. Check `current.json` names the commit (first command above).
-4. Before another run, check out that commit's data, so the checkout and the snapshot match:
-
-```
-git worktree add ../fwagent-at-<short-sha> <sha>
-```
-
-Run the eval from that worktree. The worktree holds that commit's code and eval labels too, not only its data. The next push to `main` syncs that push's commit and moves the pointer forward again.
+A manual run of `sync-network` with `rollback_to` moves `current.json` to a commit that is still ready. It uploads and deletes nothing. Drafting always follows `main`, never `current.json`.

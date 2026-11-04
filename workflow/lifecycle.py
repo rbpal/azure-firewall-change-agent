@@ -13,10 +13,12 @@ GitHub authenticated that sign-in, and the same account opens and merges the pul
 If it cannot be read, the command stops rather than guess.
 
 Safety rule: nothing is decided from local files alone. finish and abandon read the pull
-request on GitHub first, and stop when its status cannot be read. Artifacts are copied,
-checked by hash, and only then removed from where they were; an existing file is never
-overwritten, and an interrupted move resumes from its manifest. A branch or worktree holding
-the engineer's work is deleted only after the engineer types its name to confirm.
+request on GitHub first, and stop when its status cannot be read. finish also checks that
+the network snapshot in Azure, which the agent's tools read, already holds the merge.
+Artifacts are copied, checked by hash, and only then removed from where they were; an
+existing file is never overwritten, and an interrupted move resumes from its manifest. A
+branch or worktree holding the engineer's work is deleted only after the engineer types its
+name to confirm; finish keeps and reports such a branch and still archives the ticket.
 """
 
 from __future__ import annotations
@@ -290,13 +292,62 @@ def summary(record: dict | None, ticket: dict | None) -> str:
             f"{t.get('protocol', '')} {','.join(map(str, t.get('ports', [])))} ({t.get('partner') or 'no partner'})").strip()
 
 
+# ------------------------------------------------------------ the merge in Azure's snapshot
+
+
+def azure_synced(repo: Path, merge_commit: str, container=None) -> dict:
+    """Check the snapshot Azure's tools read now holds merge_commit and matches Git byte for byte."""
+    from workflow.agent import AgentError, snapshot_container
+    from workflow.snapshot import verify_ready
+    try:
+        container = container if container is not None else snapshot_container()
+        current = json.loads(container.download_blob("current.json").readall()).get("commit") or ""
+    except Exception as error:  # any storage or sign-in failure: the sync cannot be confirmed
+        raise Unverified(f"Azure's network snapshot could not be read ({type(error).__name__}). "
+                         "Check az login, then run finish again. Nothing was archived") from error
+    holds = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", merge_commit, current],
+                           capture_output=True).returncode if current else 1
+    if holds == 1:
+        raise Blocked(f"the merge {merge_commit[:12]} is not in Azure's network snapshot yet (it holds "
+                      f"{current[:12] or 'nothing'}). Wait for sync-network to finish, then run finish again")
+    if holds != 0:
+        raise Unverified(f"Azure's network snapshot names commit {current[:12]}, which this checkout does not have. "
+                         "Run git fetch origin, then run finish again. Nothing was archived")
+    try:
+        marker = verify_ready(repo, container, current)  # file list and every file's bytes against Git
+    except AgentError as error:
+        raise Unverified(f"Azure's network snapshot for {current[:12]} does not match Git: {error}. "
+                         "Nothing was archived") from error
+    if marker is None:
+        raise Blocked(f"Azure's network snapshot for {current[:12]} is not marked ready yet. Wait for sync-network "
+                      "to finish, then run finish again")
+    return {"commit": current, "files_checked": len(marker["files"]), "bytes_match_git": True,
+            "agent_version": (marker.get("agent") or {}).get("version")}
+
+
+def _clean_up_branch(repo: Path, branch: str | None, worktree: Path | None) -> str | None:
+    """Delete a fully merged, clean ticket branch; return why it was kept instead, or None."""
+    if not branch:
+        return None
+    try:
+        work = branch_work(repo, branch, worktree, "origin/main")
+        if work:
+            return f"it holds work not in main ({len(work)} item(s): {', '.join(work[:3])})"
+        delete_branch(repo, branch, worktree)  # fully merged and nothing uncommitted: nothing to lose
+    except Unverified as error:
+        return f"it could not be deleted ({error})"
+    return None
+
+
 # ------------------------------------------------------------ finish and abandon
 
 
 def finish(repo: Path, state: Path, number: str, owner: str, archive: Path, sources: dict[str, Path],
-           record: dict | None, ticket: dict | None = None, label: str | None = None, gh=None) -> str:
-    """Archive a ticket whose pull request GitHub shows merged into main; record merged, not applied."""
+           record: dict | None, ticket: dict | None = None, label: str | None = None, gh=None,
+           sync_check=None) -> str:
+    """Archive a ticket merged into main and present in Azure's network snapshot; record merged, not applied."""
     gh = gh or run_gh
+    sync_check = sync_check or azure_synced
     done = existing_folder(archive, number)
     current = entry(state, number)
     if done is not None and current is None:
@@ -321,10 +372,11 @@ def finish(repo: Path, state: Path, number: str, owner: str, archive: Path, sour
                                                "origin/main"]).returncode != 0:
             raise Unverified(f"GitHub says {pr['url']} is merged, but its merge commit is not on origin/main here. "
                              "Nothing was archived")
+        synced = sync_check(repo, merge_commit)  # before anything moves: the merge must be in Azure's snapshot
         resolution = {"outcome": "merged", "number": number, "engineer": owner, "at": now(), "pr_url": pr["url"],
                       "pr_number": pr["number"], "merge_commit": merge_commit, "merged_at": pr.get("mergedAt"),
                       "branch": branch, "summary": summary(record, ticket),
-                      "merged_into_main": True,
+                      "merged_into_main": True, "network_snapshot_in_azure": synced,
                       "applied_in_azure": "not recorded: merged into main is not the same as applied by the release"}
         if record is not None:
             record["status"] = "merged"
@@ -337,12 +389,17 @@ def finish(repo: Path, state: Path, number: str, owner: str, archive: Path, sour
         move_artifacts(artifacts(number, sources), Path(archive) / name, extra)
         done = Path(archive) / name
         worktree = Path(current["worktree"]) if current.get("worktree") else None
-        if branch and not branch_work(repo, branch, worktree, "origin/main"):
-            delete_branch(repo, branch, worktree)  # fully merged and nothing uncommitted: nothing to lose
+        kept = _clean_up_branch(repo, branch, worktree)  # after the archive, so a kept branch never blocks it
+        resolution.update(branch_kept=kept is not None, branch_kept_reason=kept)
+        (done / RESOLUTION).write_text(json.dumps(resolution, indent=2) + "\n")
     else:
         move_artifacts([], done, {})  # finish an interrupted move from its manifest
+        branch = current.get("branch")
+        kept = _clean_up_branch(repo, branch, Path(current["worktree"]) if current.get("worktree") else None)
     unregister(state, number)
-    return f"{number} is merged into main and archived in {done.name}. Applying it in Azure is a separate release step."
+    tail = f" Branch {branch} was kept: {kept}." if kept else ""
+    return (f"{number} is merged into main, in Azure's network snapshot, and archived in {done.name}. "
+            f"Applying it to the firewalls is a separate release step.{tail}")
 
 
 def abandon(repo: Path, state: Path, number: str, owner: str, reason: str, abandoned: Path, sources: dict[str, Path],

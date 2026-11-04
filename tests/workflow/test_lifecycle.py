@@ -12,9 +12,10 @@ import pytest
 
 import workflow.cli as cli
 import workflow.lifecycle as lc
-from tests.workflow.test_mainline import commit_all, git, world  # noqa: F401  (world is a fixture)
+from tests.workflow.test_mainline import FakeContainer, commit_all, git, push, ready, world  # noqa: F401
 
 REAL_WHOAMI = lc.whoami  # captured before the autouse fixture replaces it
+REAL_AZURE_SYNCED = lc.azure_synced  # likewise: the autouse fixture makes every merge count as synced
 REPO_NAME = "rbpal/azure-firewall-change-agent"
 NUMBER, OTHER = "RITM0013002", "RITM0013003"
 BRANCH = f"agent/{NUMBER}-3899dc4"
@@ -264,11 +265,11 @@ def merged_branch(world):
     return tip, git(world.pusher, "rev-parse", "HEAD").strip()
 
 
-def finish(world, place, gh, owner="rbpal"):
+def finish(world, place, gh, owner="rbpal", **options):
     """Run finish for the ticket with the place's folders."""
     state, sources, archive, _ = place
     return lc.finish(world.engineer, state, NUMBER, owner, archive, sources,
-                     json.loads((state / f"{NUMBER}.json").read_text()), gh=gh)
+                     json.loads((state / f"{NUMBER}.json").read_text()), gh=gh, **options)
 
 
 def test_finish_archives_a_merged_ticket_and_records_merged_apart_from_applied(world, place):
@@ -280,6 +281,7 @@ def test_finish_archives_a_merged_ticket_and_records_merged_apart_from_applied(w
     resolution = json.loads((dest / lc.RESOLUTION).read_text())
     assert resolution["outcome"] == "merged" and resolution["merge_commit"] == merge
     assert resolution["merged_into_main"] is True and resolution["applied_in_azure"].startswith("not recorded")
+    assert resolution["network_snapshot_in_azure"]["commit"] == merge and resolution["branch_kept"] is False
     assert resolution["pr_url"].endswith("/pull/7") and "10.104.14.0/24 to 198.51.100.64/28" in resolution["summary"]
     assert "Adds TCP 443" in (dest / "pull-request.md").read_text()
     assert json.loads((dest / "records" / f"{NUMBER}.json").read_text())["status"] == "merged"
@@ -302,6 +304,109 @@ def test_finish_moves_nothing_unless_github_and_main_confirm_the_merge(world, pl
         finish(world, place, FakeGH({BRANCH: answer}))
     assert not archive.exists() and lc.entry(state, NUMBER) is not None
     assert json.loads((state / f"{NUMBER}.json").read_text())["status"] == "approved"
+
+
+def test_finish_moves_nothing_while_the_merge_is_not_in_azures_snapshot(world, place):
+    state, sources, archive, _ = place
+    _, merge = merged_branch(world)
+    lc.register(state, NUMBER, "rbpal", REPO_NAME, branch=BRANCH, base=world.first)
+
+    def not_yet(repo, commit):
+        raise lc.Blocked(f"the merge {commit[:12]} is not in Azure's network snapshot yet")
+    with pytest.raises(lc.Blocked, match="not in Azure's network snapshot yet"):
+        finish(world, place, FakeGH({BRANCH: pr("MERGED", merge)}), sync_check=not_yet)
+    assert not archive.exists() and lc.entry(state, NUMBER) is not None
+    assert json.loads((state / f"{NUMBER}.json").read_text())["status"] == "approved"
+    assert git(world.engineer, "branch", "--list", BRANCH) != ""  # nothing cleaned up either
+
+
+def test_a_branch_holding_work_is_kept_and_reported_but_the_ticket_is_archived(world, place):
+    state, sources, archive, _ = place
+    _, merge = merged_branch(world)
+    git(world.engineer, "checkout", "-q", BRANCH)
+    (world.engineer / "notes.txt").write_text("engineer's follow-up\n")
+    extra = commit_all(world.engineer, "follow-up not in the pull request")
+    git(world.engineer, "checkout", "-q", "main")
+    lc.register(state, NUMBER, "rbpal", REPO_NAME, branch=BRANCH, base=world.first)
+    out = finish(world, place, FakeGH({BRANCH: pr("MERGED", merge)}))
+    resolution = json.loads((archive / "RITM0013002-sett443" / lc.RESOLUTION).read_text())
+    assert resolution["branch_kept"] is True and f"commit: {extra}" in resolution["branch_kept_reason"]
+    assert f"Branch {BRANCH} was kept: it holds work not in main" in out and lc.entry(state, NUMBER) is None
+    assert git(world.engineer, "rev-parse", BRANCH).strip() == extra  # the work is untouched
+
+
+def test_a_branch_that_cannot_be_deleted_is_kept_and_reported_but_the_ticket_is_archived(world, place, monkeypatch):
+    state, sources, archive, _ = place
+    _, merge = merged_branch(world)
+    lc.register(state, NUMBER, "rbpal", REPO_NAME, branch=BRANCH, base=world.first)
+
+    def locked(repo, branch, worktree):
+        raise lc.Unverified(f"git branch -D {branch} failed: locked")
+    monkeypatch.setattr(lc, "delete_branch", locked)
+    out = finish(world, place, FakeGH({BRANCH: pr("MERGED", merge)}))
+    resolution = json.loads((archive / "RITM0013002-sett443" / lc.RESOLUTION).read_text())
+    assert resolution["branch_kept"] is True and "could not be deleted" in resolution["branch_kept_reason"]
+    assert f"Branch {BRANCH} was kept: it could not be deleted" in out and lc.entry(state, NUMBER) is None
+    assert (archive / "RITM0013002-sett443" / "records" / f"{NUMBER}.json").exists()
+
+
+# ------------------------------------------------------------ the merge in Azure's network snapshot
+
+
+def synced_world(world, point_at=None, mark=True):
+    """Merge the ticket branch, mark main ready as sync-network does, and point current.json; return (container, merge)."""
+    _, merge = merged_branch(world)
+    container = FakeContainer()
+    if mark:
+        ready(world, container)
+    target = merge if point_at is None else point_at(world, merge, container)
+    container.upload_blob("current.json", json.dumps({"commit": target}).encode())
+    git(world.engineer, "fetch", "-q", "origin", "main")  # finish fetches main before this check
+    return container, merge
+
+
+def test_the_merge_is_synced_when_azure_holds_it_marked_ready_and_byte_for_byte(world):
+    container, merge = synced_world(world)
+    found = REAL_AZURE_SYNCED(world.engineer, merge, container)
+    assert found["commit"] == merge and found["files_checked"] > 0 and found["bytes_match_git"] is True
+
+
+def test_a_newer_snapshot_that_contains_the_merge_also_counts(world):
+    def newer(world, merge, container):
+        newest = push(world, "README.md", "docs only\n")
+        ready(world, container)
+        return newest
+    container, merge = synced_world(world, point_at=newer, mark=False)
+    assert REAL_AZURE_SYNCED(world.engineer, merge, container)["commit"] != merge
+
+
+@pytest.mark.parametrize("breaks, error, why", [
+    ("older", lc.Blocked, "is not in Azure's network snapshot yet"),
+    ("empty", lc.Blocked, "yet \\(it holds nothing\\)"),
+    ("unmarked", lc.Blocked, "is not marked ready yet"),
+    ("changed", lc.Unverified, "does not match Git"),
+    ("unknown", lc.Unverified, "which this checkout does not have"),
+    ("unreadable", lc.Unverified, "could not be read"),
+])
+def test_finish_stops_unless_azures_snapshot_holds_the_merge_and_matches_git(world, place, breaks, error, why):
+    state, sources, archive, _ = place
+    container, merge = synced_world(world, mark=breaks != "unmarked")
+    if breaks == "older":
+        container.blobs["current.json"] = json.dumps({"commit": world.first}).encode()
+    if breaks == "empty":
+        container.blobs["current.json"] = b"{}"
+    if breaks == "changed":
+        name = next(n for n in container.blobs if n.startswith(f"snapshots/{merge}/"))
+        container.blobs[name] += b"# edited in Azure\n"
+    if breaks == "unknown":
+        container.blobs["current.json"] = json.dumps({"commit": "e" * 40}).encode()
+    if breaks == "unreadable":
+        del container.blobs["current.json"]
+    lc.register(state, NUMBER, "rbpal", REPO_NAME, branch=BRANCH, base=world.first)
+    with pytest.raises(error, match=why):
+        finish(world, place, FakeGH({BRANCH: pr("MERGED", merge)}),
+               sync_check=lambda repo, commit: REAL_AZURE_SYNCED(repo, commit, container))
+    assert not archive.exists() and lc.entry(state, NUMBER) is not None
 
 
 def test_only_the_owner_can_finish_or_abandon_a_ticket(world, place):

@@ -80,6 +80,7 @@ from pathlib import Path
 
 import yaml
 
+from workflow import lifecycle
 from workflow.agent import AgentError, FoundryAgent, snapshot_container
 from workflow.mainline import clean_up, draft_from_main
 from workflow.bypass import BypassRequested, bypass_message, bypass_requests, check_no_bypass
@@ -148,6 +149,54 @@ def _root(repo: Path, record: dict) -> Path:
     return Path(record["worktree"]) if record.get("worktree") else repo
 
 
+def _start_draft(repo: Path, number: str) -> str:
+    """Stop if this engineer has another unfinished ticket in this repository; then mark this one active."""
+    owner, rid = lifecycle.whoami(), lifecycle.repo_id(repo)
+    lifecycle.check_no_unfinished(state_dir(repo), owner, rid, number)
+    lifecycle.register(state_dir(repo), number, owner, rid)
+    return owner
+
+
+def _archive_places(repo: Path) -> tuple[Path, Path, dict[str, Path]]:
+    """Where finished and abandoned tickets go, and the folders their files are collected from."""
+    state = state_dir(repo)
+    archive = Path(os.environ.get("FWAGENT_ARCHIVE_DIR") or state / "archive")
+    abandoned = Path(os.environ.get("FWAGENT_ABANDONED_DIR") or state / "abandoned")
+    sources = {"records": state}
+    for folder in filter(None, os.environ.get("FWAGENT_ARTIFACT_DIRS", "").split(os.pathsep)):
+        sources[Path(folder).name] = Path(folder)
+    return archive, abandoned, sources
+
+
+def _record_or_none(repo: Path, number: str) -> dict | None:
+    """The ticket's workflow record, or None when this ticket was run without one."""
+    path = record_path(repo, number)
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def active(repo: Path) -> str:
+    """List the unfinished tickets in this state folder, with owner and branch."""
+    found = lifecycle.entries(state_dir(repo))
+    if not found:
+        return "No unfinished tickets."
+    return "Unfinished tickets:\n" + "\n".join(
+        f"  {e['number']}  {e['owner']}  {e.get('branch') or 'not drafted yet'}  since {e.get('started_at')}" for e in found)
+
+
+def finish(repo: Path, number: str, label: str | None) -> str:
+    """Archive a ticket after GitHub confirms its pull request is merged into main."""
+    archive, _, sources = _archive_places(repo)
+    return lifecycle.finish(repo, state_dir(repo), number, lifecycle.whoami(), archive, sources,
+                            _record_or_none(repo, number), label=label)
+
+
+def abandon(repo: Path, number: str, reason: str, label: str | None, remove_branch: bool) -> str:
+    """Explicitly abandon a ticket: close its open pull request, void its draft and approval, move its files."""
+    _, abandoned, sources = _archive_places(repo)
+    return lifecycle.abandon(repo, state_dir(repo), number, lifecycle.whoami(), reason, abandoned, sources,
+                             _record_or_none(repo, number), label=label, remove_branch=remove_branch)
+
+
 def _draft_live(repo: Path, record: dict) -> str:
     """Draft an accepted ticket from the latest main on its own branch; keep the acceptance if drafting cannot finish."""
     number, review = record["number"], record["review"]
@@ -169,6 +218,8 @@ def _draft_live(repo: Path, record: dict) -> str:
         raise
     if record["status"] == "drafted":
         record.update(worktree=str(draft.worktree), branch=draft.branch)
+        lifecycle.register(state_dir(repo), number, None, None, branch=draft.branch, worktree=str(draft.worktree),
+                           base=draft.commit)
     else:  # a stop or already_allowed writes no file, so its branch has nothing to review
         clean_up(repo, draft.branch, draft.worktree, draft.commit, print, [])
     record["drafting"] = draft.audit
@@ -391,6 +442,7 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     if errors:
         raise Refused(f"{number}: the planned-address record does not fit the ticket:\n  " + "\n  ".join(errors))
     missing = missing_spoke_files(repo, record["ticket"], planned)
+    _start_draft(repo, number)  # one unfinished ticket per engineer, checked before any draft starts
     review = acceptance(record["ticket_version"], engineer, reason, [f["code"] for f in record["findings"]], planned,
                         edits(record))
     live = not missing and reply_path is None and os.environ.get("FWAGENT_PROJECT_ENDPOINT")
@@ -428,6 +480,7 @@ def draft(repo: Path, number: str) -> str:
     if not os.environ.get("FWAGENT_PROJECT_ENDPOINT"):
         raise Refused("no agent is configured: set FWAGENT_PROJECT_ENDPOINT for the drafter on Foundry")
     _refuse_bypass(repo, record, review.get("engineer"))
+    _start_draft(repo, number)
     if record["status"] == "drafted":
         record["history"].append({"at": _now(), "action": "redraft", "previous_branch": record.get("branch"),
                                   "previous_worktree": record.get("worktree")})
@@ -512,6 +565,16 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     c.add_argument("--reply", help="replay stand-in: JSON file with the agent's reply")
     d = sub.add_parser("draft", help="draft again from the latest main under the saved acceptance")
     d.add_argument("number")
+    sub.add_parser("active", help="list unfinished tickets")
+    m = sub.add_parser("finish", help="archive a ticket once GitHub shows its pull request merged into main")
+    m.add_argument("number")
+    m.add_argument("--label", help="short description for the folder name, e.g. sett443")
+    b = sub.add_parser("abandon", help="explicitly abandon a ticket: close its PR, void its draft, move its files")
+    b.add_argument("number")
+    b.add_argument("--reason", required=True)
+    b.add_argument("--label", help="short description for the folder name, e.g. sett443")
+    b.add_argument("--remove-branch", action="store_true",
+                   help="delete its branch and worktree; asks you to type the branch name if they hold work")
     a = sub.add_parser("approve", help="approve the draft for the pull request step")
     a.add_argument("number")
     args = parser.parse_args(argv)
@@ -528,12 +591,18 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
             out = accept(repo, args.number, args.ticket_version, args.engineer, args.reason, args.planned, args.reply)
         elif args.command == "draft":
             out = draft(repo, args.number)
+        elif args.command == "active":
+            out = active(repo)
+        elif args.command == "finish":
+            out = finish(repo, args.number, args.label)
+        elif args.command == "abandon":
+            out = abandon(repo, args.number, args.reason, args.label, args.remove_branch)
         else:
             out = approve(repo, args.number)
     except (BackupsRemainError, PartialWriteError) as error:
         print(f"refused: {error}")
         return BACKUPS
-    except (Refused, DraftError, BypassRequested) as error:
+    except (Refused, DraftError, BypassRequested, lifecycle.Blocked, lifecycle.Unverified) as error:
         print(f"refused: {error}")
         return REFUSED
     except OSError as error:  # write_all put every file back before raising this

@@ -6,6 +6,7 @@ and the engineer's clone) and an in-memory blob container. No test reaches Azure
 
 import copy
 import json
+import re
 import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -729,8 +730,14 @@ def test_the_eval_runner_may_use_an_unevaluated_definition_since_it_is_how_one_g
     assert FoundryAgent.from_env(world.pusher, container=container).version == marker["agent"]["version"]
 
 
-def test_the_real_register_starts_empty_so_nothing_drafts_until_an_evaluation_passes():
-    assert json.loads((REPO / "agents/evaluated-definitions.json").read_text())["definitions"] == {}
+def test_every_real_register_entry_names_a_definition_hash_and_its_passed_evaluation():
+    entries = json.loads((REPO / "agents/evaluated-definitions.json").read_text())["definitions"]
+    for sha, entry in entries.items():
+        assert re.fullmatch(r"[0-9a-f]{16}", sha), sha
+        assert entry["evaluation"] == "validation split, passed", sha
+        assert re.fullmatch(r"\d+", entry["agent_version"]), sha
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", entry["evaluated_on"]), sha
+        assert re.fullmatch(r"[0-9a-f]{40}", entry["main_commit"]), sha
 
 
 def test_fwagent_blocks_an_unevaluated_agent_plainly_and_audits_it(world, live, foundry_project, monkeypatch, capsys):

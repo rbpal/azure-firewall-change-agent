@@ -4,6 +4,7 @@ committed. Each test breaks one thing and expects exactly that finding."""
 
 import copy
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -94,10 +95,17 @@ def test_dev_eastus2_has_only_the_two_wildcard_cautions(plan):
     ]
 
 
+RULE_KEY = re.compile(r'^\s*"(\d{3}-[^"]+)"\s*=\s*\{', re.M)  # a rule entry such as "021-tcp-sett-to-fourthCoffeeFs" = {
+
+
 def test_model_reads_every_rule_with_its_key(plan):
+    """The model holds every rule key in the dev-eastus2 files, counted from the file text rather than a fixed number."""
     m = tier1.model(plan)
     rules = [r for g in m["groups"] for c in g["collections"] for r in c["rules"]]
-    assert len(rules) == 62 and all(r["key"] for r in rules)  # 62 since the 2026-10-21 drift rule in rprt
+    files = sorted((ENV / "firewall_policy_rule_collection_groups").glob("*.tfvars"))
+    in_files = sorted(k for f in files for k in RULE_KEY.findall(f.read_text()))
+    assert all(RULE_KEY.search(f.read_text()) for f in files) and len(files) == len(m["groups"])
+    assert sorted(r["key"] for r in rules) == in_files  # a rule the model drops, or reads without its key, fails here
     assert m["policy"] == "afwp-hub-dev-eastus2" and "ipg-xfer-dev" in m["ip_groups"]
 
 

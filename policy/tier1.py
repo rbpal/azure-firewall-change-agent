@@ -39,7 +39,7 @@ VAR_KEY = {"nat_rule_collection": "nat_rule_collections", "network_rule_collecti
 GROUP_PRIORITY = 200
 SPOKE = re.compile(r"^[a-z]{4}$")
 RULE_KEY = re.compile(r"^(\d{3})-([a-z]+)-([a-z][a-zA-Z]*)-to-([a-z][a-zA-Z]+)$")
-IP_GROUP = re.compile(r"^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|partner-[a-z]+|onprem-(primary|secondary))$")
+IP_GROUP = re.compile(r"^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|partner-[a-z]+|onprem-(primary|secondary)(-dr)?)$")
 TICKET = re.compile(r"(RITM|REQ|CHG|INC)-?\d+|\d{4}-?\d{2}-?\d{2}", re.IGNORECASE)
 OPEN = {"*", "0.0.0.0/0", "any", "Any"}
 TOOL_TYPE = {"nat_rule_collection": "dnat", "network_rule_collection": "network",
@@ -104,8 +104,12 @@ def model(plan: dict) -> dict:
                 cols.append({"block": block, "type": word, "name": c["name"], "priority": c["priority"],
                              "action": c["action"], "rules": rules})
         groups.append({"name": v["name"], "priority": v["priority"], "collections": cols})
-    ip_groups = {r["values"]["name"]: r["values"].get("cidrs", []) for r in res if r["type"] == "azurerm_ip_group"}
+    # Rules name a group by its for_each key (plan "index"); Azure may add -dr to the name.
+    ipg = [r for r in res if r["type"] == "azurerm_ip_group"]
+    ip_groups = {r.get("index", r["values"]["name"]): r["values"].get("cidrs", []) for r in ipg}
+    ip_group_names = {r.get("index", r["values"]["name"]): r["values"]["name"] for r in ipg}
     return {"policy": policies[0]["name"] if policies else None, "groups": groups, "ip_groups": ip_groups,
+            "ip_group_names": ip_group_names,
             "changes": _changes(plan)}
 
 
@@ -274,9 +278,11 @@ def check_names(m: dict, **_) -> list[Finding]:
             if indexes and sorted(indexes) != list(range(1, len(indexes) + 1)):
                 out.append(Finding("caution", "STD-NAME-03", f"{g['name']}/{c['name']}",
                                    f"indexes {sorted(indexes)} do not run from 001 with no gaps"))
-    for name in m["ip_groups"]:
+    for key, name in m["ip_group_names"].items():
+        if name not in (key, f"{key}-dr"):
+            out.append(Finding("caution", "STD-NAME-04", name, f"IP group Azure name differs from its key {key} by more than a -dr suffix"))
         if not IP_GROUP.match(name):
-            out.append(Finding("caution", "STD-NAME-04", name, "IP group name does not follow STD-NAME-04 (ipg-<spoke>-<env>[-dr], ipg-partner-<partner>, ipg-onprem-primary|secondary)"))
+            out.append(Finding("caution", "STD-NAME-04", name, "IP group name does not follow STD-NAME-04 (ipg-<spoke>-<env>[-dr], ipg-partner-<partner>, ipg-onprem-primary|secondary[-dr])"))
     return out
 
 

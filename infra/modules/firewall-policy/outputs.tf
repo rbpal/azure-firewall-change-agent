@@ -9,6 +9,6 @@ output "name" {
 }
 
 output "ip_group_ids" {
-  description = "Resource ID of each IP group, by name."
+  description = "Resource ID of each IP group, by its key in ip-groups.tfvars."
   value       = local.ip_group_ids
 }

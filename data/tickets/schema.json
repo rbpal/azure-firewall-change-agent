@@ -65,11 +65,10 @@
       "maxLength": 80
     },
     "partner": {
-      "enum": [
-        "Northwind Traders", "Fabrikam", "Woodgrove Bank", "Litware", "Fourth Coffee",
-        "Tailspin", "Proseware", "Lamna Healthcare", "Adventure Works", "Wingtip Toys",
-        null
-      ]
+      "description": "The external party the engineer names from the ticket, or null when there is none. Free text: no partner list is kept.",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 80
     },
     "justification": { "type": "string", "minLength": 1, "maxLength": 2000 },
     "approvals": {

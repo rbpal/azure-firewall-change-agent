@@ -2,8 +2,10 @@
 #
 # The code here never changes for a rule request. The rules are data: one
 # tfvars file per spoke in infra/envs/<env-site>/. Rules refer to IP groups by
-# name; this module swaps each name for the group's resource ID. An unknown
-# group name fails the plan, so a typing mistake never drops a source.
+# their key in ip-groups.tfvars; this module swaps each key for the group's
+# resource ID. An unknown key fails the plan, so a typing mistake never drops a
+# source. The key is the name tickets use; the Azure name can add -dr at a DR
+# site, because both sites of an env share one resource group.
 
 resource "azurerm_firewall_policy" "this" {
   name                = var.name
@@ -24,7 +26,7 @@ resource "azurerm_ip_group" "this" {
 }
 
 locals {
-  ip_group_ids = { for k, g in azurerm_ip_group.this : g.name => g.id }
+  ip_group_ids = { for k, g in azurerm_ip_group.this : k => g.id }
 }
 
 resource "azurerm_firewall_policy_rule_collection_group" "this" {

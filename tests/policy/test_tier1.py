@@ -297,6 +297,42 @@ def test_bad_ip_group_name(plan):
     assert ("caution", "STD-NAME-04") in found(plan)
 
 
+def _dr_onprem_group(plan, cidrs, name="ipg-onprem-primary-dr"):
+    """Add a DR-site on-prem group the way Terraform plans it: key in "index", Azure name with -dr."""
+    plan["planned_values"]["root_module"]["child_modules"][0]["resources"].append(
+        {"type": "azurerm_ip_group", "index": "ipg-onprem-primary", "values": {"name": name, "cidrs": cidrs}})
+
+
+def test_ip_groups_are_keyed_by_the_plan_index(plan):
+    """Rules name a group by its tfvars key, so the model keys groups the same way, not by Azure name."""
+    _dr_onprem_group(plan, ["172.20.10.0/23"])
+    m = tier1.model(plan)
+    assert m["ip_groups"]["ipg-onprem-primary"] == ["172.20.10.0/23"]
+    assert m["ip_group_names"]["ipg-onprem-primary"] == "ipg-onprem-primary-dr"
+
+
+def test_dr_suffix_on_an_on_prem_group_is_not_a_naming_caution(plan):
+    _dr_onprem_group(plan, ["172.20.10.0/23"])
+    assert not [f for f in tier1.check_names(tier1.model(plan)) if f.standard == "STD-NAME-04"]
+
+
+def test_azure_name_that_differs_from_its_key_beyond_dr(plan):
+    _dr_onprem_group(plan, ["172.20.10.0/23"], name="ipg-onprem-secondary")
+    assert ("caution", "STD-NAME-04") in found(plan)
+
+
+def test_open_dnat_is_caught_through_a_dr_named_group(plan):
+    """Membership is looked up by key: a DNAT rule naming ipg-onprem-primary sees the -dr group's 0.0.0.0/0."""
+    _dr_onprem_group(plan, ["0.0.0.0/0"])
+    rule = dnat(plan)
+    rule["source_addresses"], rule["source_ip_groups"] = [], ["/ipGroups/ipg-onprem-primary-dr"]
+    name = next(iter(plan["variables"]["xfer"]["value"]["nat_rule_collections"]))
+    tf_rules = plan["variables"]["xfer"]["value"]["nat_rule_collections"][name]["rules"]
+    next(v for v in tf_rules.values() if v["name"] == rule["name"])["source_ip_groups"] = ["ipg-onprem-primary"]
+    first = tier1.run(plan)[0]
+    assert (first.level, first.standard) == ("block", "STD-COLL-04") and "ipg-onprem-primary" in first.detail
+
+
 def test_blocks_come_first(plan):
     dnat(plan)["source_addresses"] = ["*"]
     group(plan, "hub")["priority"] = 300

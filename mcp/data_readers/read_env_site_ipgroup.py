@@ -70,10 +70,15 @@ def read_env_site(source: Source, env_site: str) -> list[dict]:
 
 
 def read_ip_groups(source: Source, env_site: str) -> dict[str, list[str]]:
-    """Read one env-site's IP groups as a map of group name to its CIDRs."""
+    """Read one env-site's IP groups as a map of group key (the name rules and tickets use) to its CIDRs."""
     path = IP_GROUPS_FILE.format(env_site=env_site)
     groups = load_hcl(source.read(path), "ip_groups", path)
     try:
-        return {g["name"]: list(g["cidrs"]) for g in groups.values()}
+        out = {}
+        for key, g in groups.items():
+            if not g["name"]:  # every group still needs its Azure name, even though rules use the key
+                raise KeyError("name")
+            out[key] = list(g["cidrs"])
+        return out
     except (KeyError, TypeError) as exc:
         raise NetworkDataError(f"{path} has an IP group without a name or cidrs: {exc}") from exc

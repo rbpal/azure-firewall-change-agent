@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from data_readers.read_addressplan_routing import ROUTING, LocalSource, NetworkDataError
-from data_readers.read_env_site_ipgroup import parse_rules, read_env_site, read_ip_groups
+from data_readers.read_env_site_ipgroup import load_hcl, parse_rules, read_env_site, read_ip_groups
 
 REPO = Path(__file__).resolve().parents[2]
 REAL = LocalSource(REPO)
@@ -213,9 +213,50 @@ def test_unknown_env_site_raises():
         read_env_site(REAL, "dev-westus")
 
 
+def test_ip_groups_are_keyed_by_the_tfvars_key_not_the_azure_name(tmp_path):
+    """A DR site's group can carry -dr in Azure; rules and tickets still find it by its key."""
+    path = tmp_path / "infra/envs/dev-centralus/ip-groups.tfvars"
+    path.parent.mkdir(parents=True)
+    path.write_text('ip_groups = {\n  ipg-onprem-primary = {\n    name  = "ipg-onprem-primary-dr"\n'
+                    '    cidrs = ["172.20.10.0/23"]\n  }\n}\n')
+    assert read_ip_groups(LocalSource(tmp_path), "dev-centralus") == {"ipg-onprem-primary": ["172.20.10.0/23"]}
+
+
+def test_ip_group_without_a_name_raises(tmp_path):
+    path = tmp_path / "infra/envs/dev-eastus2/ip-groups.tfvars"
+    path.parent.mkdir(parents=True)
+    path.write_text('ip_groups = {\n  ipg-x = {\n    cidrs = ["10.0.0.0/24"]\n  }\n}\n')
+    with pytest.raises(NetworkDataError):
+        read_ip_groups(LocalSource(tmp_path), "dev-eastus2")
+
+
 def test_ip_group_without_cidrs_raises(tmp_path):
     path = tmp_path / "infra/envs/dev-eastus2/ip-groups.tfvars"
     path.parent.mkdir(parents=True)
     path.write_text('ip_groups = {\n  ipg-x = {\n    name = "ipg-x"\n  }\n}\n')
     with pytest.raises(NetworkDataError):
         read_ip_groups(LocalSource(tmp_path), "dev-eastus2")
+
+
+# ---- Azure names: both sites of an env share one resource group
+
+def _azure_names(env_site: str) -> dict:
+    """Map each IP group key of one env-site to its Azure name, read straight from the tfvars."""
+    path = REPO / "infra/envs" / env_site / "ip-groups.tfvars"
+    return {k: g["name"] for k, g in load_hcl(path.read_text(), "ip_groups", str(path)).items()}
+
+
+@pytest.mark.parametrize("env", sorted({e.split("-")[0] for e in ENVS}))
+def test_the_two_sites_of_an_env_never_share_an_azure_ip_group_name(env):
+    """An IP group's Azure ID is resource group + name, so a shared name makes the DR apply collide (2026-11-07)."""
+    sites = [e for e in ENVS if e.split("-")[0] == env]
+    names = [n for site in sites for n in _azure_names(site).values()]
+    assert len(sites) == 2 and len(names) == len(set(names)), sorted(n for n in names if names.count(n) > 1)
+
+
+@pytest.mark.parametrize("env_site", [e for e in ENVS if e.endswith("-centralus")])
+def test_dr_site_on_prem_groups_keep_their_key_and_add_dr_in_azure(env_site):
+    """Tickets and rules name ipg-onprem-primary at every site; only the DR Azure name carries -dr."""
+    names = _azure_names(env_site)
+    assert names["ipg-onprem-primary"] == "ipg-onprem-primary-dr"
+    assert names["ipg-onprem-secondary"] == "ipg-onprem-secondary-dr"

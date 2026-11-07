@@ -89,7 +89,8 @@ BAD = {
     "two approvals": lambda t: t["approvals"].pop(),
     "duplicate approval group": lambda t: t["approvals"][2].update(group="security"),
     "approved ticket with pending approval": lambda t: t["approvals"][0].update(state="pending"),
-    "unknown partner": lambda t: t.update(partner="Globex"),
+    "empty partner": lambda t: t.update(partner=""),
+    "partner not text": lambda t: t.update(partner=7),
     "unknown field": lambda t: t.update(priority="high"),
     # Temporary rules never come through a ticket, so the fields are refused.
     "temporary field": lambda t: t.update(temporary=True),
@@ -245,3 +246,10 @@ def test_a_hostname_over_253_characters_passes_intake_but_the_dns_tool_refuses_i
     with pytest.raises(BadArguments, match="is not a valid hostname"):
         parse_target(f"https://{host}/v1/upload")
     assert parse_target(f"https://{host[len(label) + 1:]}/v1/upload")[0]  # 209 characters: the tool accepts it
+
+
+@pytest.mark.parametrize("partner", ["Globex", "Contoso Logistics", None])
+def test_partner_is_free_text_or_none(ticket, partner):
+    """The engineer names the partner from the ticket; any name, or none, passes the schema."""
+    ticket["partner"] = partner
+    assert ticket_errors(ticket) == []

@@ -38,6 +38,19 @@ NETWORK = REPO / "data" / "network"
 
 ENV_ORDER = ["lab", "dev", "stage", "prod"]
 REGION = {"primary": "eastus2", "dr": "centralus"}
+# Made-up external partners the generator invents tickets for: code -> name, public CIDR, API hostname.
+PARTNERS = {
+    "northwind": {"name": "Northwind Traders", "cidr": "203.0.113.16/28", "fqdn": "api.northwind.example"},
+    "fabrikam": {"name": "Fabrikam", "cidr": "203.0.113.32/28", "fqdn": "api.fabrikam.example"},
+    "woodgrove": {"name": "Woodgrove Bank", "cidr": "203.0.113.48/28", "fqdn": "api.woodgrove.example"},
+    "litware": {"name": "Litware", "cidr": "203.0.113.64/28", "fqdn": "api.litware.example"},
+    "fourthcoffee": {"name": "Fourth Coffee", "cidr": "203.0.113.80/28", "fqdn": "api.fourthcoffee.example"},
+    "tailspin": {"name": "Tailspin", "cidr": "198.51.100.16/28", "fqdn": "api.tailspin.example"},
+    "proseware": {"name": "Proseware", "cidr": "198.51.100.32/28", "fqdn": "api.proseware.example"},
+    "lamna": {"name": "Lamna Healthcare", "cidr": "198.51.100.48/28", "fqdn": "api.lamna.example"},
+    "adventureworks": {"name": "Adventure Works", "cidr": "198.51.100.64/28", "fqdn": "api.adventureworks.example"},
+    "wingtip": {"name": "Wingtip Toys", "cidr": "198.51.100.80/28", "fqdn": "api.wingtip.example"},
+}
 SPLITS = {"validation": 11, "test": 12}  # third and fourth digits of the RITM number
 
 SERVICES = {  # partner service suffix: (rule prefix, protocol, ports)
@@ -139,15 +152,14 @@ class Network:
     """The address plan and the committed rules, read once."""
 
     def __init__(self):
-        """Load spoke ranges from the address plan and rules from every env-site's tfvars."""
+        """Load spoke ranges from the address plan, the made-up partners, and rules from every env-site's tfvars."""
         plan = yaml.safe_load((NETWORK / "address-plan.yaml").read_text())
         self.spoke_cidr = {
             (r["environment"], r["site"], r["spoke"]): r["cidr"]
             for r in plan["ranges"] if r["kind"] == "spoke"
         }
         self.holds = {r["spoke"]: r["holds"] for r in plan["ranges"] if r["kind"] == "spoke"}
-        partners = yaml.safe_load((NETWORK / "partners.yaml").read_text())["partners"]
-        self.partners = {p["code"]: p for p in partners}
+        self.partners = PARTNERS
         self.rules = {}  # (env, site, spoke) -> {rule name: rule}
         for folder in sorted(ENVS_DIR.iterdir()):
             env, region = folder.name.split("-")

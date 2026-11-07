@@ -150,6 +150,13 @@ sett = {
           destination_addresses = ["198.51.100.32/28"]
           destination_ports     = ["443"]
         }
+        "021-tcp-sett-to-fourthCoffeeFs" = {
+          name                  = "tcp-sett-to-fourthCoffeeFs"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.104.14.0/24"]
+          destination_addresses = ["203.0.113.80/28"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

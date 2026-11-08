@@ -59,6 +59,13 @@ rprt = {
           destination_ip_groups = ["ipg-xfer-dev-dr"]
           destination_ports     = ["22"]
         }
+        "008-tcp-rprt-to-wingtipToys" = {
+          name                  = "tcp-rprt-to-wingtipToys"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.105.15.0/24"]
+          destination_addresses = ["203.0.113.96/28"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

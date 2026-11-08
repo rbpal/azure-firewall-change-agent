@@ -28,6 +28,15 @@ xfer = {
           translated_address  = "10.105.20.14"
           translated_port     = "22"
         }
+        "003-ftps-alpineSkiHouse-to-xferFtps" = {
+          name                = "ftps-alpineSkiHouse-to-xferFtps"
+          protocols           = ["TCP"]
+          source_addresses    = ["198.51.100.96/28"]
+          destination_address = "192.0.2.15"
+          destination_ports   = ["990"]
+          translated_address  = "10.105.20.15"
+          translated_port     = "990"
+        }
       }
     }
   }

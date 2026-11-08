@@ -89,6 +89,12 @@ rprt = {
           source_ip_groups  = ["ipg-rprt-dev"]
           destination_fqdns = ["api.litware.example"]
         }
+        "002-https-rprt-to-bellowsCollegeApi" = {
+          name              = "https-rprt-to-bellowsCollegeApi"
+          protocols         = ["Https:443"]
+          source_addresses  = ["10.104.15.0/24"]
+          destination_fqdns = ["api.bellowscollege.example"]
+        }
       }
     }
   }

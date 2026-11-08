@@ -19,6 +19,15 @@ xfer = {
           translated_address  = "10.105.20.14"
           translated_port     = "22"
         }
+        "002-ssh-fourthCoffee-to-xferSftp" = {
+          name                = "ssh-fourthCoffee-to-xferSftp"
+          protocols           = ["TCP"]
+          source_addresses    = ["203.0.113.80/28"]
+          destination_address = "192.0.2.15"
+          destination_ports   = ["22"]
+          translated_address  = "10.105.20.14"
+          translated_port     = "22"
+        }
       }
     }
   }

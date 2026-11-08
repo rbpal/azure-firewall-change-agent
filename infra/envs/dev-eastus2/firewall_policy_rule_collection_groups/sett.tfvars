@@ -157,6 +157,13 @@ sett = {
           destination_addresses = ["203.0.113.80/28"]
           destination_ports     = ["443"]
         }
+        "022-amqps-sett-to-wideWorldImporters" = {
+          name                  = "amqps-sett-to-wideWorldImporters"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.104.14.0/24"]
+          destination_addresses = ["198.51.100.128/28"]
+          destination_ports     = ["5671"]
+        }
       }
     }
   }

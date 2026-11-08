@@ -4,6 +4,25 @@ sett = {
   firewall_policy_key = "firewall_policy"
   priority            = 200
 
+  nat_rule_collections = {
+    allow-sett-dnat-rules = {
+      name     = "allow-sett-dnat-rules"
+      priority = 1000
+      action   = "Dnat"
+      rules = {
+        "001-api-cohoWinery-to-settSettlementApi" = {
+          name                = "api-cohoWinery-to-settSettlementApi"
+          protocols           = ["TCP"]
+          source_addresses    = ["203.0.113.112/28"]
+          destination_address = "192.0.2.15"
+          destination_ports   = ["8443"]
+          translated_address  = "10.105.14.20"
+          translated_port     = "8443"
+        }
+      }
+    }
+  }
+
   network_rule_collections = {
     allow-sett-network-rules = {
       name     = "allow-sett-network-rules"

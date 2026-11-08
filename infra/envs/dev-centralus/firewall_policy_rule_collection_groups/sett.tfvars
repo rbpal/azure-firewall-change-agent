@@ -203,6 +203,12 @@ sett = {
           source_ip_groups  = ["ipg-sett-dev-dr"]
           destination_fqdns = ["*.cnn.com"]
         }
+        "007-https-sett-to-secApi" = {
+          name              = "https-sett-to-secApi"
+          protocols         = ["Https:443"]
+          source_addresses  = ["10.105.14.0/24"]
+          destination_fqdns = ["api.sec.gov"]
+        }
       }
     }
   }

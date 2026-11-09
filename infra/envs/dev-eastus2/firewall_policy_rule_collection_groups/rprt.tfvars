@@ -92,6 +92,13 @@ rprt = {
           destination_addresses = ["203.0.113.96/28"]
           destination_ports     = ["443"]
         }
+        "010-tcp-rprt-to-adatumCorp" = {
+          name                  = "tcp-rprt-to-adatumCorp"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.104.15.0/24"]
+          destination_addresses = ["198.51.100.176/28"]
+          destination_ports     = ["8443"]
+        }
       }
     }
   }

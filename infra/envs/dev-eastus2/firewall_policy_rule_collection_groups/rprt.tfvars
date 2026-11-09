@@ -4,6 +4,25 @@ rprt = {
   firewall_policy_key = "firewall_policy"
   priority            = 200
 
+  nat_rule_collections = {
+    allow-rprt-dnat-rules = {
+      name     = "allow-rprt-dnat-rules"
+      priority = 1000
+      action   = "Dnat"
+      rules = {
+        "001-tcp-humongousInsurance-to-rprtReportingApi" = {
+          name                = "tcp-humongousInsurance-to-rprtReportingApi"
+          protocols           = ["TCP"]
+          source_addresses    = ["203.0.113.160/28"]
+          destination_address = "192.0.2.14"
+          destination_ports   = ["9443"]
+          translated_address  = "10.104.15.20"
+          translated_port     = "9443"
+        }
+      }
+    }
+  }
+
   network_rule_collections = {
     allow-rprt-network-rules = {
       name     = "allow-rprt-network-rules"

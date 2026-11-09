@@ -4,6 +4,25 @@ ledg = {
   firewall_policy_key = "firewall_policy"
   priority            = 200
 
+  nat_rule_collections = {
+    allow-ledg-dnat-rules = {
+      name     = "allow-ledg-dnat-rules"
+      priority = 1000
+      action   = "Dnat"
+      rules = {
+        "001-tcp-blueYonder-to-ledgLedgerApi" = {
+          name                = "tcp-blueYonder-to-ledgLedgerApi"
+          protocols           = ["TCP"]
+          source_addresses    = ["198.51.100.160/28"]
+          destination_address = "192.0.2.14"
+          destination_ports   = ["6443"]
+          translated_address  = "10.104.16.20"
+          translated_port     = "6443"
+        }
+      }
+    }
+  }
+
   network_rule_collections = {
     allow-ledg-network-rules = {
       name     = "allow-ledg-network-rules"

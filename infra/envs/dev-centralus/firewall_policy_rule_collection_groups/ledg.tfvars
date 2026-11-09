@@ -69,4 +69,20 @@ ledg = {
       }
     }
   }
+
+  application_rule_collections = {
+    allow-ledg-app-rules = {
+      name     = "allow-ledg-app-rules"
+      priority = 3000
+      action   = "Allow"
+      rules = {
+        "001-https-ledg-to-tasmaniantradersApi" = {
+          name              = "https-ledg-to-tasmaniantradersApi"
+          protocols         = ["Https:443"]
+          source_addresses  = ["10.105.16.0/24"]
+          destination_fqdns = ["api.tasmaniantraders.example"]
+        }
+      }
+    }
+  }
 }

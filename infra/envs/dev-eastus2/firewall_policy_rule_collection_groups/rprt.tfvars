@@ -121,6 +121,12 @@ rprt = {
           source_addresses  = ["10.104.15.0/24"]
           destination_fqdns = ["api.bellowscollege.example"]
         }
+        "003-https-rprt-to-nodPublishersApi" = {
+          name              = "https-rprt-to-nodPublishersApi"
+          protocols         = ["Https:443"]
+          source_addresses  = ["10.104.15.0/24"]
+          destination_fqdns = ["api.nodpublishers.example"]
+        }
       }
     }
   }

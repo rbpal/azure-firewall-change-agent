@@ -235,6 +235,12 @@ sett = {
           source_addresses  = ["10.104.14.0/24"]
           destination_fqdns = ["api.sec.gov"]
         }
+        "008-https-sett-to-vanarsdelApi" = {
+          name              = "https-sett-to-vanarsdelApi"
+          protocols         = ["Https:443"]
+          source_addresses  = ["10.104.14.0/24"]
+          destination_fqdns = ["api.vanarsdel.example"]
+        }
       }
     }
   }

@@ -66,6 +66,13 @@ ledg = {
           destination_addresses = ["203.0.113.16/28"]
           destination_ports     = ["5671"]
         }
+        "009-tcp-ledg-to-relecloud" = {
+          name                  = "tcp-ledg-to-relecloud"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.105.16.0/24"]
+          destination_addresses = ["203.0.113.144/28"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

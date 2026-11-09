@@ -113,4 +113,20 @@ xfer = {
       }
     }
   }
+
+  application_rule_collections = {
+    allow-xfer-app-rules = {
+      name     = "allow-xfer-app-rules"
+      priority = 3000
+      action   = "Allow"
+      rules = {
+        "001-https-xfer-to-graphicDesignInstituteApi" = {
+          name              = "https-xfer-to-graphicDesignInstituteApi"
+          protocols         = ["Https:443"]
+          source_addresses  = ["10.104.20.0/24"]
+          destination_fqdns = ["api.graphicdesigninstitute.example"]
+        }
+      }
+    }
+  }
 }

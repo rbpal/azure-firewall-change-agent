@@ -108,6 +108,12 @@ ledg = {
           source_addresses  = ["10.104.16.0/24"]
           destination_fqdns = ["api.tasmaniantraders.example"]
         }
+        "002-https-ledg-to-lucernePublishingApi" = {
+          name              = "https-ledg-to-lucernePublishingApi"
+          protocols         = ["Https:443"]
+          source_addresses  = ["10.104.16.0/24"]
+          destination_fqdns = ["api.lucernepublishing.example"]
+        }
       }
     }
   }

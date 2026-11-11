@@ -491,6 +491,38 @@ def test_https_to_a_hostname_as_a_tcp_rule_is_refused(repo):
     assert changed(before, repo) == set()
 
 
+NON_HTTP_TO_HOSTNAME = {  # (ticket and reply protocol, ports): a ticket that names a hostname, not a URL
+    "AMQPS on TCP 5671": ("TCP", ["5671"]),
+    "SFTP on TCP 22": ("TCP", ["22"]),
+    "DNS on UDP 53": ("UDP", ["53"]),
+    "Any on 443": ("Any", ["443"]),
+    "ICMP": ("ICMP", ["*"]),
+}
+
+
+@pytest.mark.parametrize("proto, ports", NON_HTTP_TO_HOSTNAME.values(), ids=NON_HTTP_TO_HOSTNAME.keys())
+def test_non_http_traffic_to_a_hostname_is_refused_even_when_the_ticket_asks(repo, proto, ports):
+    """RITM0011064 on 2026-11-11: the agent drafted TCP 5671 to a hostname; the write must refuse it, not the model."""
+    before = snapshot(repo)
+    host = "api.tailspin.example"
+    with pytest.raises(ApprovalError, match=f"{host} is a hostname, but the rule's protocol is {proto}.*"
+                                            "non_http_to_hostname"):
+        apply_reply(repo, flow_ticket(proto, ports, {"fqdn": host}), flow_reply(proto, ports, host))
+    assert changed(before, repo) == set()
+
+
+def test_the_hostname_check_passes_web_rules_addresses_and_dnat():
+    """Only a non-web rule that names a hostname is refused; an HTTP(S) rule, an address and a DNAT rule pass."""
+    from workflow.scope import hostname_network_error
+    host = "api.tailspin.example"
+    assert hostname_network_error({"protocol": "HTTPS", "destinations": [host]}) == ""
+    assert hostname_network_error({"protocol": "http", "destinations": [host]}) == ""
+    assert hostname_network_error({"protocol": "TCP", "destinations": ["203.0.113.80/28", "ipg-onprem-primary"]}) == ""
+    assert hostname_network_error({"protocol": "TCP", "destinations": ["192.0.2.10"], "translated_address": "10.0.0.4"}) == ""
+    assert "non_http_to_hostname" in hostname_network_error({"protocol": "TCP", "destinations": ["10.0.0.0/24", host]})
+    assert "(none)" in hostname_network_error({"destinations": [host]})
+
+
 REMOVAL_REFUSED = {  # (ticket protocol, ticket ports) for a reply that deletes the TCP 587 rule, and the refusal
     "ticket asks for 443": ("TCP", ["443"], r"ports \['587'\] are not exactly the ticket's \['443'\]"),
     "ticket asks for a wider set": ("TCP", ["587", "588"], "are not exactly the ticket's"),

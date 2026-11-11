@@ -4,8 +4,8 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 100 varied tickets, 66 for validation and 34 for test, spread
-over 43 kinds of request, including changes to the primary site only, the DR
+Why: the eval needs 102 varied tickets, 68 for validation and 34 for test, spread
+over 45 kinds of request, including changes to the primary site only, the DR
 site only, or both, IP groups, on-prem users, addresses wider or narrower than
 the plan, planned spokes, requests that resume after an engineer's review, and
 one validation case for each runbook escalation that has its own stop code.
@@ -136,6 +136,10 @@ CATEGORIES = [
     ("removal-one-site-matches", 1, 0),
     # Added 2026-10-22: a valid hostname whose lookup fails, apart from url-not-valid's input the tool refuses.
     ("dns-lookup-failed", 1, 0),
+    # Added 2026-11-11: an on-prem IP group at a DR site. At a DR env-site the group's key is
+    # ipg-onprem-*, but its Azure name ends in -dr; no validation ticket used one there before.
+    ("onprem-group-source-dr-only", 1, 0),
+    ("onprem-group-source-both-sites", 1, 0),
 ]
 
 ENGINEER = "Jordan Patel"
@@ -588,6 +592,20 @@ def build_onprem_location_mismatch(rng, net, used):
                              [{"location": "onprem-primary", "cidr": "172.24.64.0/22"}], "Fs")
     return "On-prem CIDR belongs to the secondary site; the ticket says primary.", fields, \
         "Head office Wi-Fi users need the prod client portal."
+
+
+def build_onprem_group_source_dr_only(rng, net, used):
+    """On-prem secondary users, by IP group, reach the prod settlement servers at the DR site only."""
+    fields = onprem_to_spoke(net, "prod", ["dr"], "sett", [{"ip_group": "ipg-onprem-secondary"}], "Fs")
+    return "On-prem secondary users (ipg-onprem-secondary) to prod settlement, DR only.", fields, \
+        "During the prod DR rehearsal, finance staff in ipg-onprem-secondary check settlement screens at the DR site on HTTPS."
+
+
+def build_onprem_group_source_both_sites(rng, net, used):
+    """On-prem primary users, by IP group, reach the stage reporting servers at both sites."""
+    fields = onprem_to_spoke(net, "stage", ["primary", "dr"], "rprt", [{"ip_group": "ipg-onprem-primary"}], "Fs")
+    return "On-prem primary users (ipg-onprem-primary) to stage reporting, both sites.", fields, \
+        "Analysts at the head office in ipg-onprem-primary download stage reports on HTTPS from both sites."
 
 
 def build_add_ip_group_source(rng, net, used):

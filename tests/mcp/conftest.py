@@ -1,5 +1,5 @@
 """mcp/ is the Functions app root, so its modules import each other as top-level
-names (auth, gateway, tools.whoami). The tests import them the same way."""
+names (auth, gateway, tools.code_version). The tests import them the same way."""
 
 import base64
 import json

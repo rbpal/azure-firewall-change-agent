@@ -35,7 +35,7 @@ def context(header_value=None, header_name="X-MS-CLIENT-PRINCIPAL", arguments=No
     if header_value is not None:
         headers[header_name] = header_value
     return {
-        "name": "whoami",
+        "name": "code_version",
         "arguments": arguments or {},
         "transport": {"name": "http-streamable", "properties": {"headers": headers}},
     }
@@ -68,7 +68,7 @@ def test_long_role_claim_type_is_read():
 
 def test_no_transport_is_refused():
     with pytest.raises(Unauthorized):
-        require_role({"name": "whoami", "arguments": {}})
+        require_role({"name": "code_version", "arguments": {}})
 
 
 def test_no_principal_header_is_refused():

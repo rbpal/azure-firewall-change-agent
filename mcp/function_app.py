@@ -12,19 +12,8 @@ from tools.dns_lookup_for_fqdn import dns_lookup_for_fqdn
 from tools.duplicate_rule_check import duplicate_rule_check
 from tools.locate_address_for_env_site import locate_address_for_env_site
 from tools.resolve_env_site import resolve_env_site
-from tools.whoami import whoami
 
 app = func.FunctionApp()
-
-
-@app.mcp_tool_trigger(
-    arg_name="context",
-    tool_name="whoami",
-    description="Report the caller's identity and roles as the tool server sees them. Diagnostic only.",
-    tool_properties="[]",
-)
-def whoami_tool(context: str) -> str:
-    return run(context, whoami)
 
 
 @app.mcp_tool_trigger(

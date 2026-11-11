@@ -52,7 +52,7 @@ def served(root: Path) -> dict:
 
 
 @pytest.mark.parametrize("path,expected", [
-    ("gateway.py", True), ("tools/whoami.py", True), ("host.json", True), ("requirements.txt", True),
+    ("gateway.py", True), ("tools/resolve_env_site.py", True), ("host.json", True), ("requirements.txt", True),
     ("README.md", False), ("tools/README.md", False), (".funcignore", False), ("tools/host.json", False),
     ("__pycache__/gateway.cpython-311.py", False), (".python_packages/lib/x.py", False),
 ])

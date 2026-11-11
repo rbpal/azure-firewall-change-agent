@@ -10,6 +10,7 @@ The MCP server, an Azure Functions app in Python that uses the Functions MCP ext
 | `host.json` | Runtime settings; the MCP webhook is anonymous, because the app's built-in Entra auth checks every request first |
 | `requirements.txt` | Python packages for the app |
 | `tools/` | The tool logic |
+| `tools/code_version.py` | Reports a SHA-256 hash of the server's own code, so the workflow can refuse a server that does not run main's code. The agent is not given this tool. |
 
 Every call passes two checks. Built-in auth on the function app rejects a request without a valid Entra token from an allowed caller. Then `auth.py` rejects a caller without `Tools.Read`. It reads the caller's claims from the `X-MS-CLIENT-PRINCIPAL` header, which built-in auth adds and the MCP extension passes to the tool in its context.
 

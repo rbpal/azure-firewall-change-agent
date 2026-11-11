@@ -372,6 +372,7 @@ class FoundryAgent:
         """Keep the clients, the agent version, the pinned snapshot, its container and its ready marker."""
         self.project, self.openai, self.version, self.snapshot = project, openai_client, version, snapshot
         self.container, self.marker = container, marker
+        self.tool_code: dict | None = None  # the tool server's code hash, checked against main by pinned()
         self.calls: list[Call] = []
 
     def pointer_now(self) -> str | None:
@@ -413,8 +414,12 @@ class FoundryAgent:
                                        "agent_version": agent.get("version"), "register": EVALUATED})
         project = connect(endpoint)
         check_version(project, str(agent["version"]), body)
+        from workflow import tool_server  # imported here: tool_server imports this module
+        code = tool_server.check(repo, commit)  # the deployed tools must run main's mcp/ code
         # No hidden retries in the SDK: the runner retries, waits and records every attempt.
-        return cls(project, project.get_openai_client(max_retries=0), str(agent["version"]), commit, container, marker)
+        made = cls(project, project.get_openai_client(max_retries=0), str(agent["version"]), commit, container, marker)
+        made.tool_code = code
+        return made
 
     @classmethod
     def from_env(cls, repo: Path, allowed_differences=(), container=None) -> "FoundryAgent":

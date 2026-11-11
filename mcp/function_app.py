@@ -6,6 +6,7 @@ import json
 import azure.functions as func
 
 from gateway import run
+from tools.code_version import code_version
 from tools.dnat_port_check import dnat_port_check
 from tools.dns_lookup_for_fqdn import dns_lookup_for_fqdn
 from tools.duplicate_rule_check import duplicate_rule_check
@@ -24,6 +25,17 @@ app = func.FunctionApp()
 )
 def whoami_tool(context: str) -> str:
     return run(context, whoami)
+
+
+@app.mcp_tool_trigger(
+    arg_name="context",
+    tool_name="code_version",
+    description=("Report a SHA-256 hash of the tool server's own code files, so the workflow can check the "
+                 "deployed server runs main's code. Diagnostic only."),
+    tool_properties="[]",
+)
+def code_version_tool(context: str) -> str:
+    return run(context, code_version)
 
 
 @app.mcp_tool_trigger(

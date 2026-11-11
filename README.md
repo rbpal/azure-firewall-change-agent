@@ -18,7 +18,20 @@ A YAML file stands in for the ServiceNow ticket.
 You start the workflow from your laptop with `fwagent submit`.
 GitHub Actions stands in for Azure DevOps, and you hold every human role.
 
-Status: the repo, the synthetic network and the standards are built. The workflow, the agent and the pipelines are next.
+### Status
+
+Built and running in the demo:
+
+- **Agent:** one Foundry agent (version 11) inside a fixed workflow. It reads the network data through five read-only MCP tools and returns a draft. It never holds write access to Azure or the repo.
+- **Evaluation:** version 11 passed the validation set, 65 of 65 scored tickets, with 0 of 25 missed stops. On the held-out test set, scored once, it passed 32 of 34, with 0 of 7 missed stops and no rule wider than approved. Both misses were stops, not wrong rules. One was the agent being too cautious. The other came from a tool deployment that lagged behind `main`; it was redeployed on 2026-11-10.
+- **Changes:** 18 firewall change tickets went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to both dev firewall policies.
+
+Not built yet:
+
+- **Release workflow:** the engineer applies each merge with Terraform from the laptop. The release step in the diagram is not automated yet.
+- **ServiceNow adapter:** a YAML file stands in for the ticket.
+- **Prompt Shields:** designed in ADR 0002, not built.
+- **Azure DevOps pipelines** for the enterprise flow.
 
 ### Trade-offs
 

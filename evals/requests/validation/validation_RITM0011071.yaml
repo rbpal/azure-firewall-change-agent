@@ -1,0 +1,57 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011071
+category: onprem-group-source-both-sites
+why: On-prem primary users (ipg-onprem-primary) to stage reporting, both sites.
+ticket:
+  number: RITM0011071
+  item: Firewall Change Request
+  state: approved
+  requested_for: Morgan Lee (Contoso reporting)
+  opened: '2026-10-08T11:40:00-04:00'
+  environments: [stage]
+  dr_site_built: {stage: true}
+  change_sites:
+    stage: [primary, dr]
+  sources:
+  - {ip_group: ipg-onprem-primary}
+  destination:
+  - {environment: stage, site: primary, cidr: 10.102.15.0/24}
+  - {environment: stage, site: dr, cidr: 10.103.15.0/24}
+  protocol: TCP
+  ports: ['443']
+  partner: null
+  justification: Analysts at the head office in ipg-onprem-primary download stage reports on HTTPS from both sites.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 90b6af3
+  review: pending
+  note: >-
+    Stage, both sites. On-prem source, so each rule goes in the rprt group at the site of its destination: 10.102.15.0/24 at stage-eastus2 and 10.103.15.0/24 at stage-centralus (STD-COLL-01, RB-05-4). The ticket names ipg-onprem-primary, so both rules use that IP group key; at stage-centralus its Azure name is ipg-onprem-primary-dr. duplicate_rule_check finds no rule that already allows it at either env-site, so both rules are new.
+  outcome: draft
+  rules:
+  - env_site: stage-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-onpremPrimary-to-rprtFs
+    sources: [ipg-onprem-primary]
+    destinations: [10.102.15.0/24]
+    ports: ['443']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-onpremPrimary-to-rprtFs
+    sources: [ipg-onprem-primary]
+    destinations: [10.103.15.0/24]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
+  - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

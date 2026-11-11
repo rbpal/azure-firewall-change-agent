@@ -22,6 +22,9 @@ a rule for other traffic was never approved (RB-03-2). An added DNAT rule
 translates to the same port it publishes (RB-02-2). The one documented substitute is HTTPS to
 addresses written as a TCP network rule (RB-01-4). Ports are read the way the
 ticket schema writes them, so a malformed port is refused, never corrected.
+An added rule names a hostname only as an HTTP or HTTPS application rule: a network
+or other rule to a hostname is refused (RB-01-6 non_http_to_hostname), because this
+project's Basic policy cannot filter a hostname there.
 A DNAT rule is never added with a source open to everyone, however it is written
 (0.0.0.0/0, 0.0.0.0/00, *, two halves, an IP group holding them), even when the
 ticket asks for it: STD-COLL-04 is the one standard that blocks. A removal of such
@@ -64,7 +67,7 @@ import yaml
 
 from workflow.bypass import check_no_bypass
 from workflow.rule_index import next_index
-from workflow.urls import name_findings, url_conflicts
+from workflow.urls import WEB, name_findings, url_conflicts
 from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_type, spoke_path
 from workflow.tickets import DNAT_PROTOCOL_CODE, SCHEMA_PATH, dnat_protocol_problem
 
@@ -199,6 +202,17 @@ def open_dnat_error(repo: Path, rule: dict) -> str:
             "even when the ticket asks (STD-COLL-04, RB-02-5 open_dnat_source)") if why else ""
 
 
+def hostname_network_error(rule: dict) -> str:
+    """Say why an added rule sends non-HTTP traffic to a hostname (RB-01-6 non_http_to_hostname), or return ''."""
+    if "translated_address" in rule or str(rule.get("protocol") or "").upper() in WEB:
+        return ""
+    names = [str(d) for d in rule.get("destinations") or [] if _kind(str(d)) == "fqdn"]
+    return (f"{', '.join(names)} is a hostname, but the rule's protocol is {rule.get('protocol') or '(none)'}. "
+            "Only an HTTP or HTTPS application rule may name a hostname; this project's Basic policy cannot "
+            "filter one in a network rule, and resolved addresses can change (RB-01-6 non_http_to_hostname)"
+            ) if names else ""
+
+
 def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
     """Every reply address, protocol or port the ticket does not approve at that rule's env-site, and every open DNAT add."""
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
@@ -234,6 +248,8 @@ def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
             errors += [f"{rule['env_site']} {rule['name']}: {side} {why}"
                        for v in values if (why := _not_approved(str(v), approved))]
         errors += [f"{rule['env_site']} {rule['name']}: {why}" for why in flow_errors(ticket, rule, removal)]
+        if not removal and (why := hostname_network_error(rule)):
+            errors.append(f"{rule['env_site']} {rule['name']}: {why}")
         if "translated_address" in rule and not removal and (why := open_dnat_error(repo, rule)):
             errors.append(f"{rule['env_site']} {rule['name']}: {why}")
     return errors

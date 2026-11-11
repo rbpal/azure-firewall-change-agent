@@ -39,7 +39,8 @@ expected:
     Standard and Premium filter hostnames in network rules through DNS proxy. Never replace the hostname with resolved
     IPs. Return the ticket to the engineer for edit or rejection, explaining that this project's Basic firewall policy
     cannot filter this hostname in a network rule for TCP 5671. Draft nothing. Step 1 requires both sources to be looked up and RB-01-4 requires a DNS lookup of the hostname; the DNS answer does not change this stop. If the agent drafts anyway, the draft check refuses resolved IPs in place of the
-    hostname (STD-COLL-03), but writes a network rule that names the hostname (security register 50.23).
+    hostname (STD-COLL-03) and, since 2026-11-11, a network rule that names the hostname (RB-01-6
+    non_http_to_hostname), writes nothing, and the ticket waits for the engineer.
   outcome: stop_and_ask
   reason: non_http_to_hostname
   rules: []

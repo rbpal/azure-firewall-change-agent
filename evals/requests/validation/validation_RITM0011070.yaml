@@ -29,7 +29,6 @@ ticket:
   assigned_to: Jordan Patel
 expected:
   labelled_against: 90b6af3
-  review: pending
   note: >-
     Prod DR only. On-prem source, so the rule goes in the sett group at prod-centralus, which owns the destination 10.101.14.0/24 (STD-COLL-01, RB-05-4). The ticket names ipg-onprem-secondary, so the rule uses that IP group key; at prod-centralus its Azure name is ipg-onprem-secondary-dr, which the rule never names. duplicate_rule_check at prod-centralus finds no rule that already allows it, so the rule is new. No rule at prod-eastus2: the ticket selects DR only.
   outcome: draft

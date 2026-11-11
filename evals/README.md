@@ -82,16 +82,23 @@ What changed in v7 (2026-10-22):
 3. **The 253-character gap has its own software test.** `tests/test_ticket_schema.py` shows a 273-character hostname passes the schema and intake and is refused only by the DNS tool.
 4. **Notes rewritten for RITM0011059 to RITM0011065.** Each now names the evidence checked, what the agent must not do, and what the workflow code does if the agent drafts anyway. `labelled_against` moved to `ce5daf0`. The answers did not change, and all eleven labels from RITM0011059 on stay `review: pending`.
 
-The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). v6 and v7 did not change it. No agent, real or stand-in, has been scored on the test split under any version, so no result was tuned against it.
+The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). v6 and v7 did not change it. No agent, real or stand-in, was scored on the test split before the one run on 2026-11-10, so no result was tuned against it.
 
 ## What has been measured
 
-No real model has been scored yet. The two stand-in agents in `stand_in_agents.py` check the scoring code only:
+Agent version 11 (definition `f896cff67d6fbf04`) passed the validation split on 2026-11-03: 65 of 65 scored tickets passed and complete, 0 of 25 missed stops, 0 too wide, 0 agent errors. RITM0011069 was not scored, because it needs a controlled DNS answer the deployed tool cannot get. `agents/evaluated-definitions.json` records the result.
+
+The same definition was scored once on the test split on 2026-11-10, against snapshot `78900f0`: 32 of 34 passed and complete, 0 of 7 missed stops, 0 too wide, 0 agent errors. Both failures stopped when the label says draft:
+
+- RITM0012009: the agent stopped with `dr_policy_not_built`. The ticket says the lab DR site is not built, and the agent read that against the lab DR hub in routing. The label means only the port spoke has no DR site.
+- RITM0012025: `duplicate_rule_check` reported `ipg-onprem-secondary` missing at lab-centralus. The deployed tool predated the change that looks IP groups up by key, not Azure name. The tool was redeployed from `main` on 2026-11-10.
+
+The test split is not rerun for this definition. A change to the agent makes a new definition, which needs a new held-out set.
+
+The two stand-in agents in `stand_in_agents.py` check the scoring code only:
 
 - `perfect` replays the labels. It passes 66 of 66 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
 - `always_stop` stops on every request. It passes 3 of 66. That is a baseline, not a floor.
-
-The first real score comes after the agent and its model are configured.
 
 ## Running the real agent
 

@@ -1,6 +1,6 @@
 """code_version: report a hash of the tool server's own code files.
 
-Example: {"code_sha256": "9c1e…", "files": {"auth.py": "5d2a…", "tools/whoami.py": "77f0…", …}}
+Example: {"code_sha256": "9c1e…", "files": {"auth.py": "5d2a…", "tools/resolve_env_site.py": "77f0…", …}}
 
 Why: the agent's tools run from the package last deployed to the function app, not from main.
 Before a ticket goes to the agent, the workflow hashes main's mcp/ folder the same way and

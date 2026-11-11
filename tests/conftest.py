@@ -13,6 +13,14 @@ def no_live_agent(monkeypatch):
     monkeypatch.setattr(lifecycle, "azure_synced",  # no test reads Azure: the merge counts as synced
                         lambda repo, commit, container=None: {"commit": commit, "files_checked": 0,
                                                               "bytes_match_git": True, "agent_version": "test"})
+    import workflow.tool_server as tool_server
+
+    def no_tool_server(*_a, **_k):
+        """Fail any test that would call the deployed tool server."""
+        raise AssertionError("a test tried to reach the deployed tool server")
+    monkeypatch.setattr(tool_server, "deployed_code", no_tool_server)
+    monkeypatch.setattr(tool_server, "check",  # no test reaches the tool server: its code counts as main's
+                        lambda repo, commit, reader=None: {"code_sha256": "test", "files": 0})
 
 
 OFFLINE_MAIN = "a" * 40  # the main commit the offline stand-in pretends to draft from

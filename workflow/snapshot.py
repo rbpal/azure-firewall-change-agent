@@ -73,9 +73,9 @@ def git(repo: Path, *args: str, binary: bool = False, stdin: bytes | None = None
     return done.stdout if binary else done.stdout.decode()
 
 
-def commit_files(repo: Path, commit: str) -> dict[str, bytes]:
-    """Every data file the commit holds, with its exact bytes, read from Git."""
-    listing = git(repo, "ls-tree", "-r", commit, "--", *DATA)
+def commit_files(repo: Path, commit: str, folders: tuple[str, ...] = DATA) -> dict[str, bytes]:
+    """Every file the commit holds under folders (the data files by default), with its exact bytes, read from Git."""
+    listing = git(repo, "ls-tree", "-r", commit, "--", *folders)
     entries = [line.split("\t", 1) for line in listing.splitlines() if line]
     paths = [path for _, path in entries]
     oids = [meta.split()[2] for meta, _ in entries]

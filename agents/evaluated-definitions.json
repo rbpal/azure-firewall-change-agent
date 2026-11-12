@@ -7,7 +7,24 @@
       "evaluated_on": "2026-11-03",
       "main_commit": "1efa3ad9b19d981989f34f2f2393bbf22c4d91e9",
       "result": "65 of 65 scored tickets passed and complete; 0 of 25 missed stops; 0 too wide; 0 agent errors",
-      "not_scored": "RITM0011069 needs a controlled DNS answer the deployed tool cannot get"
+      "not_scored": "RITM0011069 needs a controlled DNS answer the deployed tool cannot get",
+      "later_runs": [
+        {
+          "evaluation": "test split, scored once",
+          "evaluated_on": "2026-11-10",
+          "snapshot": "78900f005573fef61fb1c81b754731fc0d9db81e",
+          "result": "32 of 34 passed and complete; 0 of 7 missed stops; 0 too wide; 0 agent errors",
+          "failed": "2 tickets stopped where the label says draft; test-split ticket numbers are kept out of this folder"
+        },
+        {
+          "evaluation": "validation split, rerun",
+          "evaluated_on": "2026-11-11",
+          "snapshot": "90b6af3e1237c21c4880afd5b1fdb958aa09bc90",
+          "result": "65 of 67 scored tickets passed and complete; 1 of 25 missed stops; 1 too wide; 0 agent errors",
+          "failed": "RITM0011064 drafted instead of stopping with non_http_to_hostname; RITM0011062 skipped the required duplicate_rule_check",
+          "not_scored": "RITM0011069 needs a controlled DNS answer the deployed tool cannot get"
+        }
+      ]
     }
   }
 }

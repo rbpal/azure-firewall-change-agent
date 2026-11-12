@@ -24,7 +24,8 @@
           "failed": "RITM0011064 drafted instead of stopping with non_http_to_hostname; RITM0011062 skipped the required duplicate_rule_check",
           "not_scored": "RITM0011069 needs a controlled DNS answer the deployed tool cannot get"
         }
-      ]
+      ],
+      "caveat": "The 2026-11-11 validation rerun missed one stop: it drafted a network rule to a hostname. Since 2026-11-11 the draft check refuses that rule in code, so it is never written, and an engineer reviews every draft."
     }
   }
 }

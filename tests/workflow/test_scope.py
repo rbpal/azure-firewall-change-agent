@@ -853,3 +853,55 @@ def test_a_udp_inbound_ticket_writes_nothing_even_when_the_draft_says_tcp(repo, 
     with pytest.raises(ApprovalError, match="dnat_protocol_not_supported"):
         apply_reply(repo, t, e)
     assert changed(before, repo) == set()
+
+
+SMTP = "198.51.100.80/28"  # 008-smtp-sett-to-wingtipSmtp at both prod sites: each site's sett CIDR to here on TCP 587
+
+
+def smtp(scope="both", destination=SMTP, source_group=None):
+    """An add ticket and draft for TCP 587 to the Wingtip SMTP range, under a new rule name."""
+    t = ticket(scope)
+    t.update(destination=[{"cidr": destination}], ports=["587"])
+    r = reply([SITE[s] for s in SCOPES[scope]])
+    for rule in r["rules"]:
+        rule.update(name="smtp-sett-to-wingtipRelay", destinations=[destination], ports=["587"])
+    if source_group:
+        t["sources"] = [{"environment": "prod", "site": "primary", "ip_group": source_group}]
+        r["rules"][0]["sources"] = [source_group]
+    assert ticket_errors(t) == []
+    return t, r
+
+
+def test_an_add_that_an_existing_rule_already_allows_exactly_is_refused(repo):
+    """RITM0011062 on 2026-11-11: the agent skipped duplicate_rule_check; the write asks the tool itself."""
+    before = snapshot(repo)
+    with pytest.raises(ApprovalError) as refused:
+        apply_reply(repo, *smtp())
+    for e in (PRIMARY, DR):
+        assert (f"{e} smtp-sett-to-wingtipRelay: existing rule 008-smtp-sett-to-wingtipSmtp in "
+                f"{SPOKE_FILE.format(e)} already allows exactly this traffic") in str(refused.value)
+    assert "already_allowed (STD-COLL-07, RB-01-1)" in str(refused.value)
+    assert changed(before, repo) == set()
+
+
+def test_an_add_inside_a_wider_existing_rule_is_left_to_the_engineer(repo):
+    """008 covers one host of its /28 and more, so the narrower add is drafted; Tier 1 cautions on it."""
+    written = apply_reply(repo, *smtp("primary", destination="198.51.100.81/32"))
+    assert [k for _, k in written] == ["024-smtp-sett-to-wingtipRelay"]
+
+
+def test_the_same_traffic_written_as_an_ip_group_is_not_already_allowed(repo):
+    """ipg-sett-prod holds the CIDR 008 names, but a group ticket is not answered by an address rule (STD-COLL-03)."""
+    written = apply_reply(repo, *smtp("primary", source_group="ipg-sett-prod"))
+    assert [k for _, k in written] == ["024-smtp-sett-to-wingtipRelay"]
+
+
+def test_a_fix_is_not_refused_for_matching_its_own_earlier_draft(repo):
+    """A fix plans on the files from before the old draft, so the old draft is not an existing rule."""
+    from workflow.scope import plan_writes
+    path = repo / SPOKE_FILE.format(PRIMARY)
+    base = {path: path.read_text()}
+    apply_reply(repo, ticket("primary"), reply([PRIMARY]))
+    assert [k for _, _, k in plan_writes(repo, ticket("primary"), reply([PRIMARY]), base)] == ["024-https-sett-to-northwindFs"]
+    with pytest.raises(ApprovalError, match="existing rule 024-https-sett-to-northwindFs"):
+        plan_writes(repo, ticket("primary"), reply([PRIMARY]))

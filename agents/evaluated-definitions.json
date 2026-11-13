@@ -25,7 +25,7 @@
           "not_scored": "RITM0011069 needs a controlled DNS answer the deployed tool cannot get"
         }
       ],
-      "caveat": "The 2026-11-11 validation rerun missed one stop: it drafted a network rule to a hostname. Since 2026-11-11 the draft check refuses that rule in code, so it is never written, and an engineer reviews every draft."
+      "caveat": "The 2026-11-11 validation rerun made two mistakes. It drafted a network rule with an FQDN destination, which this project’s Basic firewall SKU does not support. It also skipped the duplicate check on one ticket. The draft check now blocks unsupported FQDN network rules and runs the duplicate check itself, refusing exact duplicates before files are written. An engineer still reviews every draft."
     }
   }
 }

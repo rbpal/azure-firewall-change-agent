@@ -25,6 +25,10 @@ ticket schema writes them, so a malformed port is refused, never corrected.
 An added rule names a hostname only as an HTTP or HTTPS application rule: a network
 or other rule to a hostname is refused (RB-01-6 non_http_to_hostname), because this
 project's Basic policy cannot filter a hostname there.
+An added rule is refused when duplicate_rule_check, the agent's own tool, finds an
+existing rule with exactly the same traffic, written the same way (same IP groups,
+or addresses for addresses): the answer is already_allowed (STD-COLL-07, RB-01-1).
+A rule that only covers it, allowing more, is left to the Tier 1 caution and the engineer.
 A DNAT rule is never added with a source open to everyone, however it is written
 (0.0.0.0/0, 0.0.0.0/00, *, two halves, an IP group holding them), even when the
 ticket asks for it: STD-COLL-04 is the one standard that blocks. A removal of such
@@ -68,13 +72,13 @@ import yaml
 from workflow.bypass import check_no_bypass
 from workflow.rule_index import next_index
 from workflow.urls import WEB, name_findings, url_conflicts
-from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_type, spoke_path
+from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_fields, rule_type, spoke_path
 from workflow.tickets import DNAT_PROTOCOL_CODE, SCHEMA_PATH, dnat_protocol_problem
 
 from data_readers.read_addressplan_routing import ROUTING, LocalSource  # noqa: E402  (tfvars_writer puts mcp/ on the path)
 from data_readers.read_env_site_ipgroup import read_ip_groups  # noqa: E402
 from errors import BadArguments  # noqa: E402
-from tools.duplicate_rule_check import _ports, _ports_within  # noqa: E402  (the agent tool's port maths, so the two agree)
+from tools.duplicate_rule_check import _ports, _ports_within, duplicate_rule_check  # noqa: E402  (the agent's own tool, so the two agree)
 from policy.tier1 import open_to_everyone  # noqa: E402  (Tier 1's own STD-COLL-04 test, so the two agree)
 
 REMOVAL_ITEM = "Firewall Rule Removal"
@@ -213,8 +217,36 @@ def hostname_network_error(rule: dict) -> str:
             ) if names else ""
 
 
-def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
-    """Every reply address, protocol or port the ticket does not approve at that rule's env-site, and every open DNAT add."""
+class _Before(LocalSource):
+    """Reads the repo's files, but a file an earlier draft changed is read as it was before that draft."""
+
+    def __init__(self, root: Path, before: dict[Path, str] | None):
+        """Keep the repo folder and the texts from before the earlier draft, keyed by full path."""
+        super().__init__(root)
+        self.before = before or {}
+
+    def read(self, path: str) -> str:
+        """Return a file's text, as it was before the earlier draft if that draft changed it."""
+        full = self.root / path
+        return self.before[full] if full in self.before else full.read_text()
+
+
+def already_allowed_error(source: LocalSource, rule: dict) -> str:
+    """Say which existing rule already allows exactly an added rule's traffic, like for like (STD-COLL-07), or return ''."""
+    draft = {k: v for k, v in rule.items() if k not in ("env_site", "spoke")}
+    try:
+        fields = {k: v for k, v in rule_fields(draft).items() if k != "name"}
+        answer = duplicate_rule_check(None, {"env_site": rule["env_site"], "type": rule_type(draft), "rule": fields},
+                                      source=source)
+    except (DraftError, BadArguments):
+        return ""  # a malformed rule is refused by the other checks or by the writer
+    same = [f"{m['key']} in {m['file']}" for m in answer["matches"] if m["relation"] == "duplicate" and m["like_for_like"]]
+    return (f"existing rule {', '.join(same)} already allows exactly this traffic, written the same way, so no new "
+            "rule is needed: the answer is already_allowed (STD-COLL-07, RB-01-1)") if same else ""
+
+
+def approval_errors(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None) -> list[str]:
+    """Every reply address, protocol or port the ticket does not approve at that rule's env-site, every open DNAT add, and every add already allowed."""
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
     removal = reply.get("action") == "remove"
     errors = [f"{c['where']}: {c['code']}: {c['message']}" for c in name_findings(ticket) + url_conflicts(ticket)]
@@ -252,6 +284,8 @@ def approval_errors(repo: Path, ticket: dict, reply: dict) -> list[str]:
             errors.append(f"{rule['env_site']} {rule['name']}: {why}")
         if "translated_address" in rule and not removal and (why := open_dnat_error(repo, rule)):
             errors.append(f"{rule['env_site']} {rule['name']}: {why}")
+        if not removal and (why := already_allowed_error(_Before(Path(repo), base), rule)):
+            errors.append(f"{rule['env_site']} {rule['name']}: {why}")
     return errors
 
 
@@ -276,7 +310,7 @@ def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | N
         raise ScopeError(f"reply changes {sorted(named - scope)}, which the ticket does not select")
     if scope - named:
         raise ScopeError(f"ticket selects {sorted(scope - named)}, but the reply has no rule there")
-    errors = approval_errors(repo, ticket, reply)
+    errors = approval_errors(repo, ticket, reply, base)
     if errors:
         raise ApprovalError("reply uses addresses, a protocol or ports the ticket does not approve, or breaks a "
                             "documented scope rule; nothing was written, and the ticket waits for the engineer to edit "

@@ -33,7 +33,7 @@ destination:
   - {cidr: 203.0.113.16/28}      # Northwind file service
 protocol: TCP
 ports: ["443"]
-partner: Northwind Traders
+external_party: Northwind Traders
 
 justification: |
   Nightly settlement file upload to Northwind's file service.

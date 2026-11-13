@@ -26,8 +26,8 @@ ticket:
   - {cidr: 198.51.100.16/28}
   protocol: TCP
   ports: ['5671']
-  partner: Tailspin
-  justification: The sftp and partner file transfer need Tailspin's service in lab and stage and prod.
+  external_party: Tailspin
+  justification: The sftp and external file transfer need Tailspin's service in lab and stage and prod.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}

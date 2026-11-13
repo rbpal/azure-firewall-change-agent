@@ -20,7 +20,7 @@ ticket:
   - {fqdn: api.litware.example}
   protocol: HTTPS
   ports: ['443']
-  partner: Litware
+  external_party: Litware
   justification: The settlement app servers call Litware's API.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

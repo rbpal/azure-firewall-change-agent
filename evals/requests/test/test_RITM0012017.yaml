@@ -20,8 +20,8 @@ ticket:
   - {cidr: 198.51.100.48/28}
   protocol: TCP
   ports: ['22']
-  partner: Lamna Healthcare
-  justification: New sftp and partner file transfer need Lamna Healthcare.
+  external_party: Lamna Healthcare
+  justification: New sftp and external file transfer need Lamna Healthcare.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}

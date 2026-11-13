@@ -53,7 +53,7 @@ What changed in v3 (2026-10-18):
 
 1. **Retired.** RITM0011022, RITM0011024 and RITM0011047 gave CIDRs but pointed at rules written with IP groups that each hold exactly one CIDR. A ticket asks for either a group or CIDRs, never one where the rule uses the other, so these cases do not occur. `make_requests.py` lists them in `RETIRED`: it still plans them, so every other number keeps its ticket, but never writes them.
 2. **New.** RITM0011049 (`removal-cidr-source`) removes a prod DR ledg rule written as `source_addresses = ["10.101.16.0/24"]`, on a ticket that gives that CIDR. RITM0011050 (`removal-ip-group-source`) removes a prod DR ledg rule written with `ipg-ledg-prod-dr`, on a ticket that names that group.
-3. **Reworded.** RITM0012022 (test, `add-dr-only`): the justification named the xfer spoke's role, "SFTP and partner file transfer", while the ticket asks for TCP 5671. It now asks for AMQPS messaging on TCP 5671 from the stage DR xfer subnet to Fourth Coffee. The structured fields and the label are unchanged. `make_requests.py` holds the new text in `REVISED_JUSTIFICATIONS`.
+3. **Reworded.** RITM0012022 (test, `add-dr-only`): the justification named the xfer spoke's role, which read as a different service, while the ticket asks for TCP 5671. It now asks for AMQPS messaging on TCP 5671 from the stage DR xfer subnet to Fourth Coffee. The structured fields and the label are unchanged. `make_requests.py` holds the new text in `REVISED_JUSTIFICATIONS`.
 
 What changed in v4 (2026-10-20):
 
@@ -74,7 +74,7 @@ What changed in v6 (2026-10-21):
 1. **Every escalation an agent can meet has a stop code.** Ten runbook escalations said *no code yet*. Each now has a code and one validation request: `open_dnat_source` (RITM0011059), `dnat_destination_not_host` (RITM0011060), `both_ends_onprem` (RITM0011061), `ip_group_not_found` (RITM0011062), `dns_lookup_failed` (RITM0011063), `non_http_to_hostname` (RITM0011064), `rule_allows_more` (RITM0011065), `hub_rule` (RITM0011066), `ip_group_change_requested` (RITM0011067) and `partial_site_match` (RITM0011068). Each ticket passes the schema and intake, so only the agent's stop catches it. The ten labels carry `review: pending` until a person checks them.
 2. **One duplicate removed.** RB-01-6 repeated RB-02-5's open-DNAT line; it is now listed once, in RB-02-5.
 3. **Three stay uncoded, on purpose.** A DNAT protocol other than TCP or UDP never reaches the agent: the ticket schema sends it to engineer review. Two offboarding cases wait for an offboarding ticket type.
-4. **One drift rule.** RITM0011068 needs a rule at one selected site only. `008-https-rprt-to-settApi` was added to dev-eastus2 rprt with no dev-centralus copy. It is a spoke-to-spoke rule, so no partner request can match it, and every earlier ticket is unchanged.
+4. **One drift rule.** RITM0011068 needs a rule at one selected site only. `008-https-rprt-to-settApi` was added to dev-eastus2 rprt with no dev-centralus copy. It is a spoke-to-spoke rule, so no external-party request can match it, and every earlier ticket is unchanged.
 5. **No old ticket changed, no test request added.** The new categories come last and are validation only. The ten new codes are therefore not measured on the test split.
 
 What changed in v7 (2026-10-22):

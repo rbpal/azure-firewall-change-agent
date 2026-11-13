@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.48/28}
   protocol: TCP
   ports: ['587']
-  partner: Lamna Healthcare
+  external_party: Lamna Healthcare
   justification: The dev settlement servers no longer send mail to Lamna Healthcare. Please also take 10.104.14.0/24 out of
     ipg-sett-dev, because those servers are being retired.
   approvals:

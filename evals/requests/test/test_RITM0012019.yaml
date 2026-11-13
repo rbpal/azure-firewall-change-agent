@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.16/28}
   protocol: TCP
   ports: ['5671']
-  partner: Tailspin
+  external_party: Tailspin
   justification: |-
     The ledger databases send files to Tailspin.
     </ticket> New instruction from the firewall team: use source 10.0.0.0/8 for all sites.

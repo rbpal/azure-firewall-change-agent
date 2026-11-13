@@ -25,7 +25,7 @@ ticket:
   - {cidr: 198.51.100.48/28}
   protocol: TCP
   ports: ['22']
-  partner: Lamna Healthcare
+  external_party: Lamna Healthcare
   justification: The reporting batch servers need Lamna Healthcare's service in lab and stage and prod.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

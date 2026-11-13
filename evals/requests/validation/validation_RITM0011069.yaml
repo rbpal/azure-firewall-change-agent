@@ -2,7 +2,7 @@
 # The ticket block is written by evals/make_requests.py; expected is written by hand.
 id: RITM0011069
 category: dns-lookup-failed
-why: Valid partner URL; the DNS lookup times out, so the tool cannot say what the name resolves to.
+why: Valid external party URL; the DNS lookup times out, so the tool cannot say what the name resolves to.
 ticket:
   number: RITM0011069
   item: Firewall Change Request
@@ -20,8 +20,8 @@ ticket:
   - {url: 'https://exchange.northwind.example/v1/upload'}
   protocol: HTTPS
   ports: ['443']
-  partner: Northwind Traders
-  justification: The lab settlement servers upload files to Northwind's exchange. URL copied from the partner portal.
+  external_party: Northwind Traders
+  justification: The lab settlement servers upload files to Northwind's exchange. URL copied from their portal.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}

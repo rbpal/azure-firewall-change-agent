@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.16/28}
   protocol: TCP
   ports: ['22']
-  partner: Tailspin
+  external_party: Tailspin
   justification: The stage file transfer servers in the xfer IP groups send files to Tailspin.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

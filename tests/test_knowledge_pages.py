@@ -14,10 +14,10 @@ DATA = Path(__file__).resolve().parent.parent / "data"
 PAGES = {
     "standards/naming.md": "STD-NAME",
     "standards/collections.md": "STD-COLL",
-    "runbooks/partner-egress.md": "RB-01",
+    "runbooks/egress.md": "RB-01",
     "runbooks/inbound-dnat.md": "RB-02",
     "runbooks/rule-removal.md": "RB-03",
-    "runbooks/partner-offboarding.md": "RB-04",
+    "runbooks/offboarding.md": "RB-04",
     "runbooks/onprem-access.md": "RB-05",
 }
 SECTION = re.compile(r"^## ((STD-[A-Z]+-\d{2})|(RB-\d{2}-\d+)) — \S", re.M)

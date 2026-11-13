@@ -63,7 +63,7 @@ ranges:
   region: eastus2
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-prod
   ip_group: ipg-xfer-prod
 - cidr: 10.101.0.0/16
@@ -129,7 +129,7 @@ ranges:
   region: centralus
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-prod-dr
   ip_group: ipg-xfer-prod-dr
 - cidr: 10.102.0.0/16
@@ -195,7 +195,7 @@ ranges:
   region: eastus2
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-stage
   ip_group: ipg-xfer-stage
 - cidr: 10.103.0.0/16
@@ -261,7 +261,7 @@ ranges:
   region: centralus
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-stage-dr
   ip_group: ipg-xfer-stage-dr
 - cidr: 10.104.0.0/16
@@ -327,7 +327,7 @@ ranges:
   region: eastus2
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-dev
   ip_group: ipg-xfer-dev
 - cidr: 10.105.0.0/16
@@ -384,7 +384,7 @@ ranges:
   region: centralus
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-dev-dr
   ip_group: ipg-xfer-dev-dr
 - cidr: 10.106.0.0/16
@@ -450,7 +450,7 @@ ranges:
   region: eastus2
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-lab
   ip_group: ipg-xfer-lab
 - cidr: 10.107.0.0/16
@@ -498,7 +498,7 @@ ranges:
   region: centralus
   kind: spoke
   spoke: xfer
-  holds: SFTP and partner file transfer
+  holds: SFTP and external file transfer
   vnet: vnet-xfer-lab-dr
   ip_group: ipg-xfer-lab-dr
 onprem:

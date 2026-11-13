@@ -20,8 +20,8 @@ ticket:
   - {url: 'https://api.litware.example/v1/upload'}
   protocol: HTTPS
   ports: ['443']
-  partner: Litware
-  justification: The sftp and partner file transfer call Litware's API.
+  external_party: Litware
+  justification: The sftp and external file transfer call Litware's API.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}

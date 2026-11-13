@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.16/28}
   protocol: TCP
   ports: ['443']
-  partner: Tailspin
+  external_party: Tailspin
   justification: The client portal web front ends need Tailspin in prod.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

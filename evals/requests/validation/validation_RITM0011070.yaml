@@ -19,7 +19,7 @@ ticket:
   - {environment: prod, site: dr, cidr: 10.101.14.0/24}
   protocol: TCP
   ports: ['443']
-  partner: null
+  external_party: null
   justification: During the prod DR rehearsal, finance staff in ipg-onprem-secondary check settlement screens at the DR site
     on HTTPS.
   approvals:

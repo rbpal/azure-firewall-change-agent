@@ -145,7 +145,7 @@ def test_open_dnat_blocks_however_it_is_written(plan, sources, members):
 
 
 @pytest.mark.parametrize("sources", [["0.0.0.0/1"], ["198.51.100.0/24", "203.0.113.0/24"]],
-                         ids=["half of every address", "two partner ranges"])
+                         ids=["half of every address", "two external ranges"])
 def test_a_wide_but_not_open_dnat_source_does_not_block(plan, sources):
     """Wider than a /24 is a caution under RB-02-6, not STD-COLL-04."""
     dnat(plan)["source_addresses"] = sources
@@ -401,7 +401,7 @@ def test_new_rule_covered_by_a_wider_rule(plan):
 
 def test_new_rule_with_new_traffic_is_not_flagged(plan):
     changing(plan, "ledg")
-    add_rule(plan, "https-ledg-to-newPartner", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
+    add_rule(plan, "https-ledg-to-newRemote", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
     assert not lines(plan, "STD-COLL-07")
 
 
@@ -467,7 +467,7 @@ def test_reordering_rules(plan):
 
 def test_new_rule_not_at_the_end(plan):
     changing(plan, "ledg")
-    add_rule(plan, "https-ledg-to-newPartner", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
+    add_rule(plan, "https-ledg-to-newRemote", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
     planned, _ = ledg_rules(plan)
     planned.insert(0, planned.pop())
     assert any("reordered" in x for x in lines(plan, "STD-COLL-08"))
@@ -475,7 +475,7 @@ def test_new_rule_not_at_the_end(plan):
 
 def test_new_rule_at_the_end_is_fine(plan):
     changing(plan, "ledg")
-    add_rule(plan, "https-ledg-to-newPartner", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
+    add_rule(plan, "https-ledg-to-newRemote", {**COPY_OF_001, "destination_addresses": ["198.51.100.200/32"]})
     assert not lines(plan, "STD-COLL-08")
 
 

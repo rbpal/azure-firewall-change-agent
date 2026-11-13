@@ -19,7 +19,7 @@ ticket:
   - {environment: dev, site: primary, cidr: 10.104.16.0/24}
   protocol: TCP
   ports: ['5671']
-  partner: null
+  external_party: null
   justification: A new lab floor at the head office needs to send messages to the dev ledger.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

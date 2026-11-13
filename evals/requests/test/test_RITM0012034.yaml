@@ -19,7 +19,7 @@ ticket:
   - {environment: prod, site: primary, cidr: 10.100.40.0/24}
   protocol: TCP
   ports: ['5671']
-  partner: null
+  external_party: null
   justification: The prod client portal web front ends will call the new payments servers in 10.100.40.0/24 once they are
     built.
   approvals:
@@ -31,7 +31,7 @@ engineer_review:
   decision: accept
   engineer: Jordan Patel
   reason: Payments spoke is planned; policy is prepared ahead of the build.
-  ticket_version: 76d24576f331ba69947618865ab236a3f79df7d9d684930272b0566d9e6c5218
+  ticket_version: 0748fa9f266dc765424c84ac4a98f3f17d16e223f9433c1f4ffa324a557e4ae5
   accepted: [planned_address]
   planned:
   - {cidr: 10.100.40.0/24, environment: prod, site: primary, firewall_policy: afwp-hub-prod-eastus2, spoke: pymt, placement: port}

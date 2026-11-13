@@ -20,7 +20,7 @@ Enforced: Tier 1
 Map key: `<index>-<service>-<source>-to-<destination>`. The rule's `name` is the key without the index.
 
 - `<service>` is the lower-case service or protocol, such as `https`, `ssh` or `sftp`.
-- `<source>` and `<destination>` are lowerCamelCase: a spoke code, a spoke plus a role, or a partner plus a system. Hub rules use `spokes` as the source. On-prem users are `onpremPrimary` or `onpremSecondary`, after the data centre, or `onprem` when the rule names both.
+- `<source>` and `<destination>` are lowerCamelCase: a spoke code, a spoke plus a role, or an external party plus a system. Hub rules use `spokes` as the source. On-prem users are `onpremPrimary` or `onpremSecondary`, after the data centre, or `onprem` when the rule names both.
 
 Examples: `024-https-sett-to-northwindFs`, `001-https-sett-to-northwindApi`, `001-sftp-northwind-to-xferSftp`, `005-https-onpremPrimary-to-portFs`
 

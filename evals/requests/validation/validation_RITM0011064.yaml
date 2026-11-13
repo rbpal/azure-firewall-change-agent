@@ -20,7 +20,7 @@ ticket:
   - {fqdn: api.tailspin.example}
   protocol: TCP
   ports: ['5671']
-  partner: Tailspin
+  external_party: Tailspin
   justification: The stage reporting servers publish report events to Tailspin's message broker.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

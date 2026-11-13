@@ -85,7 +85,7 @@ def test_wider_than_any_range_is_not_found_but_lists_coverage():
     assert "wider than every range" in out["reason"]
 
 
-def test_partner_address_is_not_found():
+def test_external_address_is_not_found():
     out = call("203.0.113.20")
     assert out["match"] is None and out["covers"] == []
     assert "not in the address plan" in out["reason"]
@@ -182,7 +182,7 @@ def test_each_env_site_names_a_different_firewall():
     assert len(firewalls) == 8
 
 
-def test_partner_address_names_no_firewall():
+def test_external_address_names_no_firewall():
     out = call("203.0.113.20")
     assert out["match"] is None and "firewall" not in out
 

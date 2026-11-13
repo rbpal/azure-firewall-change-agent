@@ -19,7 +19,7 @@ ticket:
   - {cidr: 203.0.113.32/28}
   protocol: TCP
   ports: ['443']
-  partner: Fabrikam
+  external_party: Fabrikam
   justification: The ledger databases in lab send files to Fabrikam. DR follows later.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

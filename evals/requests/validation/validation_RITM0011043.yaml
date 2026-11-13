@@ -19,7 +19,7 @@ ticket:
   - {cidr: 203.0.113.32/28}
   protocol: TCP
   ports: ['5671']
-  partner: Fabrikam
+  external_party: Fabrikam
   justification: The settlement app servers at the prod DR site need Fabrikam for the failover test.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

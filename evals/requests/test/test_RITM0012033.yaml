@@ -19,7 +19,7 @@ ticket:
   - {environment: stage, site: primary, cidr: 10.102.40.0/24}
   protocol: TCP
   ports: ['443']
-  partner: null
+  external_party: null
   justification: The stage reporting servers will read payment summaries from the new payments servers in 10.102.40.0/24.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

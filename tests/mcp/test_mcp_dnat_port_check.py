@@ -49,7 +49,7 @@ def dnat_file(env_site: str, name: str, rules: str) -> OverrideSource:
     return OverrideSource({RULES.format(env_site=env_site, name=name): text})
 
 
-def rule(key="001-sftp-partner-to-xferSftp", protocols='["TCP"]', destination='"192.0.2.12"', ports='["22"]',
+def rule(key="001-sftp-remote-to-xferSftp", protocols='["TCP"]', destination='"192.0.2.12"', ports='["22"]',
          source='["198.51.100.16/28"]') -> str:
     """One DNAT rule in tfvars form; the default publishes TCP 22 on the stage-eastus2 firewall."""
     return f"""
@@ -164,7 +164,7 @@ xfer = {
       priority = 2000
       action = "Allow"
       rules = {
-        001-ssh-xfer-to-partner = {
+        001-ssh-xfer-to-remote = {
           protocols = ["TCP"]
           source_addresses = ["10.102.20.0/24"]
           destination_addresses = ["198.51.100.16/28"]

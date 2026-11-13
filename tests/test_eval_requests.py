@@ -38,7 +38,7 @@ STOP_REASONS |= CODED_2026_10_21
 CODED_2026_10_25 = {  # coded after the v3 validation run; no validation case yet (a label change, reported apart)
     "url_port_conflict", "env_site_not_found",  # RB-01-6
     "dnat_protocol_not_supported",  # RB-02-5
-    "rule_shared_with_partner",  # RB-04-4, which also uses hub_rule
+    "rule_shared_with_another_party",  # RB-04-4, which also uses hub_rule
 }
 STOP_REASONS |= CODED_2026_10_25
 # RB-01-6 still lists ip_group_not_found for one of our own groups. Its validation case, RITM0011062,
@@ -97,7 +97,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     assert "expected: {outcome: draft}" in path.read_text()
 
 
-def test_draft_requests_never_share_a_spoke_and_partner_across_splits(generated):
+def test_draft_requests_never_share_a_spoke_and_external_party_across_splits(generated):
     # A near copy in the other split would leak tuning into the test score.
     # Within one split a pair may repeat (the one-sided cases of 2026-10-18).
     seen = {}
@@ -108,8 +108,8 @@ def test_draft_requests_never_share_a_spoke_and_partner_across_splits(generated)
         t = request["ticket"]
         internal = t["destination"] if request["category"] == "inbound-dnat" else t["sources"]
         first = internal[0]
-        key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"], t["partner"])
-        if t["partner"] is None:  # on-prem and spoke-to-spoke flows: the destination tells them apart
+        key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"], t["external_party"])
+        if t["external_party"] is None:  # on-prem and spoke-to-spoke flows: the destination tells them apart
             dest = t["destination"][0]
             key += (dest.get("cidr") or dest.get("ip_group"),)
         split = path.parent.name

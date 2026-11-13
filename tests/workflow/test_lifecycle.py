@@ -19,7 +19,7 @@ REAL_AZURE_SYNCED = lc.azure_synced  # likewise: the autouse fixture makes every
 REPO_NAME = "rbpal/azure-firewall-change-agent"
 NUMBER, OTHER = "RITM0013002", "RITM0013003"
 BRANCH = f"agent/{NUMBER}-3899dc4"
-TICKET = {"number": NUMBER, "environments": ["dev"], "protocol": "TCP", "ports": ["443"], "partner": "Adventure Works",
+TICKET = {"number": NUMBER, "environments": ["dev"], "protocol": "TCP", "ports": ["443"], "external_party": "Adventure Works",
           "sources": [{"environment": "dev", "site": "primary", "cidr": "10.104.14.0/24"}],
           "destination": [{"cidr": "198.51.100.64/28"}]}
 

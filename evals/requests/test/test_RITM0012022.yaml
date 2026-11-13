@@ -19,7 +19,7 @@ ticket:
   - {cidr: 203.0.113.80/28}
   protocol: TCP
   ports: ['5671']
-  partner: Fourth Coffee
+  external_party: Fourth Coffee
   justification: The stage DR xfer subnet (10.103.20.0/24) needs AMQPS messaging to Fourth Coffee on TCP 5671 for the failover
     test.
   approvals:

@@ -19,7 +19,7 @@ ticket:
   - {cidr: 198.51.100.32/28}
   protocol: TCP
   ports: ['5671']
-  partner: Proseware
+  external_party: Proseware
   justification: The prod DR site no longer sends to Proseware.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

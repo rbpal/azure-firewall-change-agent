@@ -21,7 +21,7 @@ ticket:
   - {environment: lab, site: dr, cidr: 10.107.20.0/24}
   protocol: TCP
   ports: ['22']
-  partner: null
+  external_party: null
   justification: Users at both on-prem data centres upload test files to the lab SFTP servers.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

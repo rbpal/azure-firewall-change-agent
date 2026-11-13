@@ -60,7 +60,7 @@ def dnat_protocol_problem(ticket: dict) -> str:
         why = (f"Azure Firewall DNAT takes TCP or UDP, not {protocol!r}, and this workflow drafts new inbound "
                "DNAT rules for TCP only (workflow policy)")
     return (f"This inbound ticket asks for {protocol}. {why}. The workflow will not change the protocol. "
-            "Edit the ticket to TCP if the partner connects over TCP, or reject it.")
+            "Edit the ticket to TCP if the external party connects over TCP, or reject it.")
 
 
 def _ip_group_errors(where: str, address: dict) -> list[str]:

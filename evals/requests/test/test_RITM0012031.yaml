@@ -19,7 +19,7 @@ ticket:
   - {environment: stage, site: primary, cidr: 10.102.17.0/24}
   protocol: TCP
   ports: ['443']
-  partner: null
+  external_party: null
   justification: Head office wired users need the stage client portal for acceptance testing.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

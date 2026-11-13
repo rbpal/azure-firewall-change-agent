@@ -20,7 +20,7 @@ ticket:
   - {cidr: 203.0.113.80/28}
   protocol: TCP
   ports: ['443']
-  partner: Fourth Coffee
+  external_party: Fourth Coffee
   justification: The settlement app servers in prod send files to Fourth Coffee.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

@@ -230,7 +230,7 @@ def test_reject_keeps_an_edit_made_before_the_draft(repo, tmp_path):
     ticket, reply = files(tmp_path, ADD)
     before = snapshot(repo)
     draft(repo, ticket, reply)
-    run(repo, "reject", ADD, "wrong partner")
+    run(repo, "reject", ADD, "wrong external party")
     assert changed(before, repo) == set()
     assert path.read_text().endswith("# an uncommitted edit by the engineer\n")
 
@@ -259,14 +259,14 @@ def test_fix_replaces_the_draft_in_one_write(repo, tmp_path, capsys):
     fixed["rules"][0]["name"] = "https-rprt-to-fourthcoffeeFiles"
     fixed_path = tmp_path / "fixed.json"
     fixed_path.write_text(json.dumps(fixed))
-    assert run(repo, "fix", ADD, "Use the partner's service name", "--reply", str(fixed_path)) == cli.DONE
+    assert run(repo, "fix", ADD, "Use the external party's service name", "--reply", str(fixed_path)) == cli.DONE
     text = (repo / ADD_FILE).read_text()
     assert "004-https-rprt-to-fourthcoffeeFiles" in text and "https-rprt-to-fourthcoffeeFs" not in text
     assert text.count('"004-') == 1 and '"005-' not in text  # the fix replaced the draft and left no second rule
     assert text.count('"203.0.113.80/28"') == 1  # the ticket's destination appears in that one rule only
     assert changed(before, repo) == {ADD_FILE}
     record = cli.load_record(repo, ADD)
-    assert record["history"][-1]["note"] == "Use the partner's service name"
+    assert record["history"][-1]["note"] == "Use the external party's service name"
     assert run(repo, "reject", ADD, "still wrong") == cli.DONE  # after a fix, reject still returns to the start
     assert changed(before, repo) == set()
 

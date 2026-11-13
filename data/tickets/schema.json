@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Firewall ticket",
-  "description": "Synthetic stand-in for a ServiceNow firewall requested item. The catalog item says add or remove; the addresses say egress or inbound. An inbound ticket's port is the port the partner connects to and the port on the internal host. Checks shape only; code checks meaning (address plan, routing, existing rules).",
+  "description": "Synthetic stand-in for a ServiceNow firewall requested item. The catalog item says add or remove; the addresses say egress or inbound. An inbound ticket's port is the port the external party connects to and the port on the internal host. Checks shape only; code checks meaning (address plan, routing, existing rules).",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "number", "item", "state", "requested_for", "opened",
     "environments", "dr_site_built", "change_sites",
-    "sources", "destination", "protocol", "ports", "partner",
+    "sources", "destination", "protocol", "ports", "external_party",
     "justification", "approvals", "assigned_to"
   ],
   "properties": {
@@ -64,8 +64,8 @@
       "minLength": 1,
       "maxLength": 80
     },
-    "partner": {
-      "description": "The external party the engineer names from the ticket, or null when there is none. Free text: no partner list is kept.",
+    "external_party": {
+      "description": "The external party the engineer names from the ticket, or null when there is none. Free text.",
       "type": ["string", "null"],
       "minLength": 1,
       "maxLength": 80

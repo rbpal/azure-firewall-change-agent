@@ -19,7 +19,7 @@ ticket:
   - {cidr: 198.51.100.16/28}
   protocol: TCP
   ports: ['587']
-  partner: Tailspin
+  external_party: Tailspin
   justification: The ledger databases at the prod primary site no longer use Tailspin.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

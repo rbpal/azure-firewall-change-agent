@@ -1,6 +1,6 @@
 """Env-site without an address: the agent resolves prod DR to prod-centralus with a tool, or stops for the engineer.
 
-RITM0011050 is the case: prod DR only, an IP-group source and a partner destination, so the
+RITM0011050 is the case: prod DR only, an IP-group source and an external destination, so the
 address lookup gives no env-site. On 2026-10-25 the drafter (version 3) made up "prod-dr" and
 stopped without a reason. Each check here must be able to fail.
 """

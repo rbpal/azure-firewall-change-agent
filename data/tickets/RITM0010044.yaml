@@ -23,7 +23,7 @@ destination:
   - {fqdn: api.northwind.example}
 protocol: HTTPS
 ports: ["443"]
-partner: Northwind Traders
+external_party: Northwind Traders
 existing_rule: https-sett-to-northwindApi   # optional; the requester knew it
 
 justification: |

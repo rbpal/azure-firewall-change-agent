@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.32/28}
   protocol: TCP
   ports: ['587']
-  partner: Proseware
+  external_party: Proseware
   justification: The reporting batch servers in dev send files to Proseware.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

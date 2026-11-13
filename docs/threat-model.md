@@ -56,7 +56,7 @@ The tools are small programs the agent calls to look things up. Search covers th
 | --- | --- | --- | --- |
 | Someone uses a tool without signing in, or without permission | S | Every call must carry a valid Entra sign-in and the right role | Planned |
 | A tool can change something | E | Every tool only reads. The agent's identity only has read access. Tests fail if a tool tries to change anything. | Planned |
-| Someone edits a runbook to say "allowing everything is fine for partners" | T | Search results are only guidance, never the decision. The Tier 1 checks enforce the standards in code, whatever the runbook says. Runbook changes need a reviewed PR. | Planned |
+| Someone edits a runbook to say "allowing everything is fine for external parties" | T | Search results are only guidance, never the decision. The Tier 1 checks enforce the standards in code, whatever the runbook says. Runbook changes need a reviewed PR. | Planned |
 | A tool shows firewall data to someone who should not see it | I | Every call checks the caller's role. The tools sit on a private network address. | Planned |
 
 ### The identities

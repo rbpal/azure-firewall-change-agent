@@ -20,7 +20,7 @@ ticket:
   - {cidr: 203.0.113.64/28}
   protocol: TCP
   ports: ['22']
-  partner: Litware
+  external_party: Litware
   justification: The client portal web front ends in prod send files to Litware.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

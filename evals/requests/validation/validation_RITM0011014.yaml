@@ -22,7 +22,7 @@ ticket:
   - {cidr: 198.51.100.32/28}
   protocol: TCP
   ports: ['443']
-  partner: Proseware
+  external_party: Proseware
   justification: The client portal web front ends need Proseware.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

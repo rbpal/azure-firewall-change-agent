@@ -1,7 +1,7 @@
 # RB-03 — Rule removal request
 
 Use for: a `Firewall Rule Removal` ticket. The traffic is no longer needed.
-Do not use for: a partner leaving altogether (use RB-04).
+Do not use for: an external party leaving altogether (use RB-04).
 
 ## RB-03-1 — Find the rules that match the flow
 

@@ -19,7 +19,7 @@ ticket:
   - {cidr: 198.51.100.64/28}
   protocol: TCP
   ports: ['587']
-  partner: Adventure Works
+  external_party: Adventure Works
   justification: Needed in dev before the dev release next week. Adventure Works confirmed.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

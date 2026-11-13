@@ -1,11 +1,11 @@
 # RB-02 — Inbound DNAT request
 
-Use for: a partner needs to reach an internal server from outside, such as an SFTP server. The ticket's source is a partner address and its destination is an internal address with an environment and site.
+Use for: an external party needs to reach an internal server from outside, such as an SFTP server. The ticket's source is an external party address and its destination is an internal address with an environment and site.
 Do not use for: outbound access (use RB-01) or removing a rule (use RB-03).
 
 ## RB-02-1 — Check what already exists
 
-Call `duplicate_rule_check`, as in RB-01-1. If it lists a DNAT rule that already publishes the same internal host and port to the same partner range, no change is needed: tell the requester the rule name and stop.
+Call `duplicate_rule_check`, as in RB-01-1. If it lists a DNAT rule that already publishes the same internal host and port to the same external party range, no change is needed: tell the requester the rule name and stop.
 
 ## RB-02-2 — Take the details from the approved ticket
 
@@ -13,7 +13,7 @@ From the ticket, take exactly:
 
 - the source: the address range the ticket gives
 - the destination: the internal host, one per environment and site
-- the port, from `ports`: the partner connects on it at the firewall's public IP, and it is translated to the same port on the internal host
+- the port, from `ports`: the external party connects on it at the firewall's public IP, and it is translated to the same port on the internal host
 - the protocol: TCP. Workflow policy drafts new inbound DNAT rules for TCP only; Azure Firewall itself also accepts UDP. Never change the ticket's protocol.
 
 Never widen the source. A source of `0.0.0.0/0` or `*` is never drafted (STD-COLL-04).
@@ -26,7 +26,7 @@ Call `dnat_port_check` for each selected env-site with the ticket's protocol and
 
 ## RB-02-4 — Place and name the rule
 
-Put the rule in the DNAT collection of the spoke that owns the internal host (STD-COLL-01). Name it by STD-NAME-03, with the partner as the source and the spoke plus role as the destination, such as `sftp-northwind-to-xferSftp`.
+Put the rule in the DNAT collection of the spoke that owns the internal host (STD-COLL-01). Name it by STD-NAME-03, with the external party as the source and the spoke plus role as the destination, such as `sftp-northwind-to-xferSftp`.
 
 Azure Firewall adds a matching allow rule for the translated traffic itself. Do not draft a separate network rule for it.
 
@@ -45,7 +45,7 @@ Each item gives the reason code the reply carries when it stops. Every stop carr
 
 ## RB-02-6 — Draft, but mark a caution, when
 
-- the partner's source range is wider than a `/24`
+- the external party's source range is wider than a `/24`
 - any Tier 1 check does not pass
 
 The engineer sees the caution and approves or rejects. The agent does not decide.

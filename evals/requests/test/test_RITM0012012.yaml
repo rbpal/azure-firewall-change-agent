@@ -20,7 +20,7 @@ ticket:
   - {environment: prod, site: dr, cidr: 10.101.20.14/32}
   protocol: TCP
   ports: ['22']
-  partner: Fourth Coffee
+  external_party: Fourth Coffee
   justification: Fourth Coffee pushes files to our SFTP server.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
@@ -31,7 +31,7 @@ expected:
   labelled_against: 6110060
   note: >-
     Inbound: one DNAT rule per destination site. The destination is that site's hub firewall public IP
-    from routing.yaml, never from the ticket (STD-COLL-06); the partner connects on the ticket's port,
+    from routing.yaml, never from the ticket (STD-COLL-06); the external party connects on the ticket's port,
     translated to the same port on the SFTP host. prod-eastus2 already publishes ports 2221 and 2223; 22
     is free. prod-centralus has no DNAT collection yet: code creates it (decided 2026-10-13).
   outcome: draft

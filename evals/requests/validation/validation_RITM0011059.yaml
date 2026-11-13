@@ -19,7 +19,7 @@ ticket:
   - {environment: stage, site: primary, cidr: 10.102.20.14/32}
   protocol: TCP
   ports: ['22']
-  partner: Tailspin
+  external_party: Tailspin
   justification: Tailspin connects from changing cloud addresses, so please allow SFTP from any address.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

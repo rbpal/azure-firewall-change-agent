@@ -19,7 +19,7 @@ ticket:
   - {environment: lab, site: primary, cidr: 10.106.20.0/24}
   protocol: TCP
   ports: ['22']
-  partner: null
+  external_party: null
   justification: Contact centre staff, including the overflow desks, upload files to the lab SFTP servers.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
@@ -30,7 +30,7 @@ engineer_review:
   decision: accept
   engineer: Jordan Patel
   reason: Requester confirmed the /23 holds the contact centre and its overflow desks.
-  ticket_version: a302de174f592ebe612e8218ae9ca6d70e628a0ef0b850e87a56ffcfe30fa73e
+  ticket_version: 0487c9b811cf08828d2c7cbbf4e862bcb9ec4e99b5a8d452892243830e5029d7
   accepted: [wider_than_plan]
   planned: []
 expected:

@@ -19,7 +19,7 @@ ticket:
   - {cidr: 203.0.113.80/28}
   protocol: TCP
   ports: ['22']
-  partner: Fourth Coffee
+  external_party: Fourth Coffee
   justification: The dev settlement and reporting servers send files to Fourth Coffee.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

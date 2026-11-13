@@ -5,7 +5,7 @@ The eval harness. Tier 2 scores the agent on the labelled requests in `requests/
 - `requests/validation/`: labelled requests that prompts and thresholds are tuned against.
 - `requests/test/`: labelled requests kept back for the final score. Nothing is tuned against them.
 
-Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. A few also carry part of the question: `engineer_review:` (the engineer's recorded acceptance) or `dns:` (what DNS does for one ticket hostname). `make_requests.py` writes the tickets: 102 requests across 45 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
+Each request is one YAML file, `validation_RITM00110xx.yaml` or `test_RITM00120xx.yaml`, with a `ticket:` block and an `expected:` label. A few also carry part of the question: `engineer_review:` (the engineer's recorded acceptance) or `dns:` (what DNS does for one ticket hostname). `make_requests.py` writes the tickets: 101 requests across 44 categories, the same every run. Each ticket says which sites it changes, primary, DR or both, and the categories cover all three for adds and removals. A ticket asks for an IP group by name or for CIDRs, never one in place of the other (STD-COLL-03). Removals cover both: RITM0011049 removes a rule written with the CIDR the ticket gives, and RITM0011050 a rule written with the IP group the ticket names. On-prem users appear as an on-prem CIDR with its `location`, or as `ipg-onprem-primary` / `ipg-onprem-secondary`, on either side of a flow (RB-05). It never writes a label and never overwrites a file; every `expected:` block is written by hand.
 
 Two scorers read an agent reply shaped like `expected:` and need no model:
 
@@ -38,6 +38,7 @@ Scores from different versions are not comparable. Each version is fixed by a co
 | v6 | 2026-10-21 | 99 (65 validation, 34 test) | 42 | labels against `91d3e04`; requests, labels and one drift rule in the commit after it |
 | v7 | 2026-10-22 | 100 (66 validation, 34 test) | 43 | labels against `ce5daf0`; RITM0011069, the `dns:` block and the rewritten notes in the commit after it |
 | v8 | 2026-11-11 | 102 (68 validation, 34 test) | 45 | labels against `90b6af3`; RITM0011070 and RITM0011071 in `f22a8e8` |
+| v9 | 2026-11-13 | 101 (67 validation, 34 test) | 44 | RITM0011062 retired |
 
 v1 stays readable in git, for example `git show bd8588b:evals/requests/test/test_RITM0012015.yaml`.
 
@@ -72,7 +73,7 @@ What changed in v6 (2026-10-21):
 
 1. **Every escalation an agent can meet has a stop code.** Ten runbook escalations said *no code yet*. Each now has a code and one validation request: `open_dnat_source` (RITM0011059), `dnat_destination_not_host` (RITM0011060), `both_ends_onprem` (RITM0011061), `ip_group_not_found` (RITM0011062), `dns_lookup_failed` (RITM0011063), `non_http_to_hostname` (RITM0011064), `rule_allows_more` (RITM0011065), `hub_rule` (RITM0011066), `ip_group_change_requested` (RITM0011067) and `partial_site_match` (RITM0011068). Each ticket passes the schema and intake, so only the agent's stop catches it. The ten labels carry `review: pending` until a person checks them.
 2. **One duplicate removed.** RB-01-6 repeated RB-02-5's open-DNAT line; it is now listed once, in RB-02-5.
-3. **Four stay uncoded, on purpose.** A DNAT protocol other than TCP or UDP and a partner outside the list never reach the agent: the ticket schema sends them to engineer review. Two offboarding cases wait for an offboarding ticket type.
+3. **Three stay uncoded, on purpose.** A DNAT protocol other than TCP or UDP never reaches the agent: the ticket schema sends it to engineer review. Two offboarding cases wait for an offboarding ticket type.
 4. **One drift rule.** RITM0011068 needs a rule at one selected site only. `008-https-rprt-to-settApi` was added to dev-eastus2 rprt with no dev-centralus copy. It is a spoke-to-spoke rule, so no partner request can match it, and every earlier ticket is unchanged.
 5. **No old ticket changed, no test request added.** The new categories come last and are validation only. The ten new codes are therefore not measured on the test split.
 
@@ -88,7 +89,12 @@ What changed in v8 (2026-11-11):
 1. **On-prem IP groups at a DR site.** RITM0011070 asks for `ipg-onprem-secondary` to prod settlement at the DR site only. RITM0011071 asks for `ipg-onprem-primary` to stage reporting at both sites. At a DR env-site each group's Azure name ends in `-dr`, and the rule names the group key. Validation only.
 2. **No old ticket changed.** The new categories come last, so every earlier number keeps its ticket and the test split is unchanged.
 
-The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). v6, v7 and v8 did not change it. No agent, real or stand-in, was scored on the test split before the one run on 2026-11-10, so no result was tuned against it.
+What changed in v9 (2026-11-13):
+
+1. **Retired.** RITM0011062 (`ip-group-not-found`) named an IP group as an external party's destination. An external party's addresses come only on the approved ticket, as an IP address or prefix, so the case does not occur. `make_requests.py` lists it in `RETIRED`. `ip_group_not_found` stays a stop code for one of our own groups, with no validation case for now.
+2. **No other ticket changed.** Every other number keeps its ticket, and the test split is unchanged.
+
+The test split changed in v2 (RITM0012015 and four new requests), in v3 (the RITM0012022 wording), in v4 (six new requests) and in v5 (four new requests). v6, v7, v8 and v9 did not change it. No agent, real or stand-in, was scored on the test split before the one run on 2026-11-10, so no result was tuned against it.
 
 ## What has been measured
 
@@ -99,14 +105,14 @@ The same definition was scored once on the test split on 2026-11-10, against sna
 - RITM0012009: the agent stopped with `dr_policy_not_built`. The ticket says the lab DR site is not built, and the agent read that against the lab DR hub in routing. The label means only the port spoke has no DR site.
 - RITM0012025: `duplicate_rule_check` reported `ipg-onprem-secondary` missing at lab-centralus. The deployed tool predated the change that looks IP groups up by key, not Azure name. The tool was redeployed from `main` on 2026-11-10.
 
-The same definition was scored again on the validation split on 2026-11-11, against snapshot `90b6af3`, with the two v8 tickets: 65 of 67 passed and complete, 1 of 25 missed stops, 1 too wide, 0 agent errors. Both new tickets passed. RITM0011064 drafted a network rule to a hostname on TCP 5671 instead of stopping with `non_http_to_hostname`. RITM0011062 stopped with the right reason but skipped the required `duplicate_rule_check`. Both passed on 2026-11-03, so the same definition does not always give the same answer.
+The same definition was scored again on the validation split on 2026-11-11, against snapshot `90b6af3`, with the two v8 tickets: 65 of 67 passed and complete, 1 of 25 missed stops, 1 too wide, 0 agent errors. Both new tickets passed. RITM0011064 drafted a network rule to a hostname on TCP 5671 instead of stopping with `non_http_to_hostname`. RITM0011062 stopped with the right reason but skipped the required `duplicate_rule_check`; that ticket was retired in v9, so its result does not count. RITM0011064 passed on 2026-11-03, so the same definition does not always give the same answer.
 
 The test split is not rerun for this definition. A change to the agent makes a new definition, which needs a new held-out set.
 
 The two stand-in agents in `stand_in_agents.py` check the scoring code only:
 
-- `perfect` replays the labels. It passes 68 of 68 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
-- `always_stop` stops on every request. It passes 3 of 68. That is a baseline, not a floor.
+- `perfect` replays the labels. It passes 67 of 67 validation requests, which shows that the runner and scorers add no mistakes of their own. It says nothing about any model.
+- `always_stop` stops on every request. It passes 3 of 67. That is a baseline, not a floor.
 
 ## Running the real agent
 

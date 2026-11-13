@@ -39,7 +39,7 @@ VAR_KEY = {"nat_rule_collection": "nat_rule_collections", "network_rule_collecti
 GROUP_PRIORITY = 200
 SPOKE = re.compile(r"^[a-z]{4}$")
 RULE_KEY = re.compile(r"^(\d{3})-([a-z]+)-([a-z][a-zA-Z]*)-to-([a-z][a-zA-Z]+)$")
-IP_GROUP = re.compile(r"^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|partner-[a-z]+|onprem-(primary|secondary)(-dr)?)$")
+IP_GROUP = re.compile(r"^ipg-([a-z]{4}-(lab|dev|stage|prod)(-dr)?|onprem-(primary|secondary)(-dr)?)$")
 TICKET = re.compile(r"(RITM|REQ|CHG|INC)-?\d+|\d{4}-?\d{2}-?\d{2}", re.IGNORECASE)
 OPEN = {"*", "0.0.0.0/0", "any", "Any"}
 TOOL_TYPE = {"nat_rule_collection": "dnat", "network_rule_collection": "network",
@@ -282,7 +282,7 @@ def check_names(m: dict, **_) -> list[Finding]:
         if name not in (key, f"{key}-dr"):
             out.append(Finding("caution", "STD-NAME-04", name, f"IP group Azure name differs from its key {key} by more than a -dr suffix"))
         if not IP_GROUP.match(name):
-            out.append(Finding("caution", "STD-NAME-04", name, "IP group name does not follow STD-NAME-04 (ipg-<spoke>-<env>[-dr], ipg-partner-<partner>, ipg-onprem-primary|secondary[-dr])"))
+            out.append(Finding("caution", "STD-NAME-04", name, "IP group name does not follow STD-NAME-04 (ipg-<spoke>-<env>[-dr], ipg-onprem-primary|secondary[-dr])"))
     return out
 
 

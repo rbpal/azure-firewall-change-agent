@@ -11,7 +11,7 @@ Call `duplicate_rule_check`, as in RB-01-1. If it lists a DNAT rule that already
 
 From the ticket, take exactly:
 
-- the source: the partner's range or partner IP group
+- the source: the address range the ticket gives
 - the destination: the internal host, one per environment and site
 - the port, from `ports`: the partner connects on it at the firewall's public IP, and it is translated to the same port on the internal host
 - the protocol: TCP. Workflow policy drafts new inbound DNAT rules for TCP only; Azure Firewall itself also accepts UDP. Never change the ticket's protocol.

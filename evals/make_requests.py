@@ -4,8 +4,8 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 102 varied tickets, 68 for validation and 34 for test, spread
-over 45 kinds of request, including changes to the primary site only, the DR
+Why: the eval needs 101 varied tickets, 67 for validation and 34 for test, spread
+over 44 kinds of request, including changes to the primary site only, the DR
 site only, or both, IP groups, on-prem users, addresses wider or narrower than
 the plan, planned spokes, requests that resume after an engineer's review, and
 one validation case for each runbook escalation that has its own stop code.
@@ -776,14 +776,10 @@ def build_onprem_to_onprem(rng, net, used):
 
 
 def build_ip_group_not_found(rng, net, used):
-    """Dev ledger to a partner IP group that does not exist (RB-01-6): ip_group_not_found."""
-    group = "ipg-partner-woodgrove"
-    assert not any(group in p.read_text() for p in ENVS_DIR.glob("*/ip-groups.tfvars")), group
+    """Retired (RITM0011062); still built so every later ticket keeps its number and addresses."""
     assert not net.exists_anywhere("smtp-ledg-to-woodgroveSmtp", ["dev"], "ledg")
     fields = egress(net, ["dev"], "ledg", "woodgrove", "Smtp")
-    fields["destination"] = [{"ip_group": group}]
-    return f"Destination is {group}, an IP group no env-site has; groups are created through their own process.", fields, \
-        "The dev ledger servers send settlement notices to Woodgrove Bank by mail."
+    return "Retired.", fields, "The dev ledger servers send settlement notices to Woodgrove Bank by mail."
 
 
 def build_url_not_valid(rng, net, used):
@@ -970,7 +966,10 @@ def render(number, name, why, body, review=None, dns=None):
 # holds exactly that one CIDR. A ticket asks for either a group or CIDRs, never one
 # standing in for the other, so the case does not occur. plan() still builds them, so
 # every other number keeps its ticket; write() skips them.
-RETIRED = {"RITM0011022", "RITM0011024", "RITM0011047"}
+RETIRED = {"RITM0011022", "RITM0011024", "RITM0011047", "RITM0011062"}
+# Retired 2026-11-13: RITM0011062 named an IP group as an external party's destination.
+# An external party's addresses come only on the approved ticket, as an IP address or
+# prefix; no group or list holds them, so the case does not occur.
 
 # Revised justifications, 2026-10-18. The builder text named the spoke's role ("SFTP and
 # partner file transfer"), which read as a different service from the AMQPS port asked for.

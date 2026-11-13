@@ -135,11 +135,11 @@ def test_open_dnat_blocks_however_it_is_written(plan, sources, members):
     rule["source_addresses"] = sources
     if members is not None:
         resources = plan["planned_values"]["root_module"]["child_modules"][0]["resources"]
-        resources.append({"type": "azurerm_ip_group", "values": {"name": "ipg-partner-anyone", "cidrs": members}})
+        resources.append({"type": "azurerm_ip_group", "values": {"name": "ipg-anyone", "cidrs": members}})
         name = next(k for k, v in plan["variables"]["xfer"]["value"]["nat_rule_collections"].items())
         tf_rules = plan["variables"]["xfer"]["value"]["nat_rule_collections"][name]["rules"]
-        next(v for v in tf_rules.values() if v["name"] == rule["name"])["source_ip_groups"] = ["ipg-partner-anyone"]
-        rule["source_ip_groups"] = ["/ipGroups/ipg-partner-anyone"]
+        next(v for v in tf_rules.values() if v["name"] == rule["name"])["source_ip_groups"] = ["ipg-anyone"]
+        rule["source_ip_groups"] = ["/ipGroups/ipg-anyone"]
     first = tier1.run(plan)[0]
     assert (first.level, first.standard) == ("block", "STD-COLL-04") and "open to everyone" in first.detail
 

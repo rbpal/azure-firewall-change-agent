@@ -286,7 +286,7 @@ def test_onprem_secondary_group_lists_its_five_user_ranges():
 
 
 def test_group_no_range_lists_has_no_origin_and_no_guess():
-    out = call("ipg-partner-northwind")
+    out = call("ipg-pays-dev")
     assert out["matches"] == [] and out["origin"] is None
     assert out["reason"].startswith("no range in the address plan lists this IP group")
     assert "ambiguous" not in out
@@ -381,7 +381,7 @@ def test_a_plan_range_has_no_address_space_even_inside_rfc1918():
     assert "address_space" not in call("10.103.15.0/24")
     assert "address_space" not in call("10.104.40.0/24")  # inside an env-site, owned by no spoke
     assert "address_space" not in call("172.20.20.0/24")  # on-prem
-    assert "address_space" not in call("ipg-partner-northwind")
+    assert "address_space" not in call("ipg-pays-dev")
 
 
 def test_a_cidr_wider_than_its_plan_range_keeps_both_facts():

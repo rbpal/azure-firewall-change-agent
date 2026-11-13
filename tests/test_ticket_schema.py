@@ -37,9 +37,11 @@ def test_valid_remove_ticket(ticket):
     assert ticket_errors(ticket) == []
 
 
-def test_partner_ip_group_is_valid(ticket):
-    ticket["destination"] = [{"ip_group": "ipg-partner-northwind"}]
-    assert ticket_errors(ticket) == []
+@pytest.mark.parametrize("name", ["ipg-northwind", "ipg-partner-northwind"])
+def test_an_ip_group_for_an_external_party_is_refused(ticket, name):
+    """An external party's addresses come on the ticket as an IP address or prefix, never as a group."""
+    ticket["destination"] = [{"ip_group": name}]
+    assert any("ip_group" in e for e in ticket_errors(ticket))
 
 
 def test_wide_but_well_formed_requests_pass_the_schema(ticket):
@@ -81,7 +83,6 @@ BAD = {
     "IP group with unknown environment": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-sett-uat"}
     ),
-    "partner IP group in capitals": lambda t: t["destination"].__setitem__(0, {"ip_group": "ipg-partner-Northwind"}),
     "port above 65535": lambda t: t.update(ports=["70000"]),
     "port range high to low": lambda t: t.update(ports=["9000-8000"]),
     "port zero": lambda t: t.update(ports=["0"]),
@@ -130,8 +131,6 @@ BAD = {
     "IP group in another environment": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-sett-dev"}),
     "internal IP group with no env-site": lambda t: t["destination"].append({"ip_group": "ipg-sett-prod"}),
-    "partner IP group given an env-site": lambda t: t["destination"].__setitem__(
-        0, {"environment": "prod", "site": "primary", "ip_group": "ipg-partner-northwind"}),
     "on-prem IP group tied to an Azure site": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-onprem-primary"}),
     "unknown on-prem site": lambda t: t["sources"].__setitem__(0, {"ip_group": "ipg-onprem-tertiary"}),
@@ -189,11 +188,10 @@ def test_unquoted_yaml_timestamp_is_refused(tmp_path):
 
 
 def test_ip_groups_at_their_own_env_site_are_valid(ticket):
-    """An internal group at the site its name says, and a partner group with no env-site, both pass."""
+    """An internal group at the site its name says passes."""
     first = ticket["sources"][0]
     env, site = first["environment"], first["site"]
     ticket["sources"][0] = {"environment": env, "site": site, "ip_group": f"ipg-sett-{env}{'-dr' if site == 'dr' else ''}"}
-    ticket["destination"] = [{"ip_group": "ipg-partner-northwind"}]
     assert ticket_errors(ticket) == []
 
 

@@ -805,3 +805,58 @@ def test_the_foundry_report_names_the_definition_a_register_entry_needs(monkeypa
     assert main(["--agent", "foundry", "--only", "RITM0011001"]) == 0
     out = capsys.readouterr().out
     assert "Agent version: 11\nAgent definition: 5e1f00d1c0ffee42" in out
+
+
+# The end-of-run code check: tools that change code during a run make the whole run invalid.
+
+class Checked:
+    """A pinned agent whose tool code was checked at the start of the run."""
+    version, snapshot, calls, controlled_dns = "12", "c" * 40, [], False
+    marker = {"agent": {"definition_sha": "d241077b820a1889"}}
+
+    def __init__(self, start):
+        self.tool_code = {"code_sha256": start, "files": 14}
+
+    def __call__(self, ticket, **extra):
+        """Answer like the stop-only stand-in."""
+        return always_stop(ticket, **extra)
+
+    def pointer_now(self):
+        """The pointer has not moved."""
+        return self.snapshot
+
+
+def test_a_stand_in_agent_has_no_tool_code_to_check():
+    from pathlib import Path
+    from evals.run_eval import end_of_run_tool_check
+    assert end_of_run_tool_check(always_stop, Path(".")) is None
+
+
+def test_the_end_check_passes_only_when_the_server_still_runs_the_starting_code():
+    from pathlib import Path
+    from evals.run_eval import end_of_run_tool_check
+    from workflow.agent import AgentError
+    same = end_of_run_tool_check(Checked("h"), Path("."), check=lambda repo, c: {"code_sha256": "h"})
+    assert same == {"start": "h", "end": "h", "valid": True, "why": None}
+    moved = end_of_run_tool_check(Checked("h"), Path("."), check=lambda repo, c: {"code_sha256": "new"})
+    assert moved["valid"] is False and moved["why"] == "the tool server's code changed during the run"
+
+    def unreachable(repo, commit):
+        raise AgentError("could not reach the tool server")
+    lost = end_of_run_tool_check(Checked("h"), Path("."), check=unreachable)
+    assert lost["valid"] is False and "could not be confirmed" in lost["why"]
+
+
+@pytest.mark.parametrize("start, code, invalid", [("test", 0, False), ("older", 4, True)], ids=["same code", "code changed"])
+def test_a_run_whose_tools_changed_code_is_marked_invalid_with_its_own_exit_code(monkeypatch, capsys, tmp_path, start, code, invalid):
+    import json
+    import workflow.agent as agent_mod
+    monkeypatch.setattr(agent_mod.FoundryAgent, "from_env",  # conftest's check says the server runs "test"
+                        classmethod(lambda cls, repo, allowed_differences=(): Checked(start)))
+    out = tmp_path / "run.json"
+    assert main(["--agent", "foundry", "--only", "RITM0011001", "--out", str(out)]) == code
+    sheet = capsys.readouterr().out
+    assert ("Run invalid: the tool server's code changed during the run" in sheet) is invalid
+    saved = json.loads(out.read_text())
+    assert saved["status"] == ("invalid" if invalid else "complete") and saved["tool_code"]["valid"] is (not invalid)
+

@@ -188,3 +188,54 @@ def test_sync_points_at_the_checked_commit_and_never_deletes_it():
 def test_sync_checkout_has_history_for_a_rollback():
     [checkout] = [s for s in load(SYNC)["jobs"]["sync"]["steps"] if s.get("uses", "").startswith("actions/checkout@")]
     assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_sync_gives_the_tool_check_its_audience_without_directory_read():
+    # tool_server.audience() asks Entra only when FWAGENT_MCP_AUDIENCE is unset; the sync identity has no directory read.
+    env = load(SYNC)["env"]
+    assert env["FWAGENT_MCP_AUDIENCE"] == "${{ vars.FWAGENT_MCP_AUDIENCE }}"
+    assert (env["FWAGENT_FUNCTION_APP"], env["FWAGENT_RESOURCE_GROUP"]) == ("func-fwagentic-dev", "rg-fwagentic-dev")
+
+
+def test_sync_allows_time_for_a_remote_build_and_a_cold_restart():
+    from workflow.tool_deploy import DEPLOY_TIMEOUT, VERIFY_TIMEOUT
+    minutes = load(SYNC)["jobs"]["sync"]["timeout-minutes"]
+    assert minutes * 60 > DEPLOY_TIMEOUT + VERIFY_TIMEOUT
+
+
+def tf_block(path: Path, kind: str, name: str) -> str:
+    """The text of one top-level Terraform block, such as module "sync_deploy"."""
+    text = path.read_text()
+    start = text.index(f'{kind} "{name}" {{')
+    depth, i = 0, text.index("{", start)
+    for i in range(i, len(text)):
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        if depth == 0:
+            break
+    return text[start:i + 1]
+
+
+def test_the_sync_identity_may_deploy_only_the_one_function_app():
+    # Website Contributor holds Microsoft.Web/sites/*; anything wider than this app would let sync change other sites.
+    block = tf_block(REPO / "infra/05-func/main.tf", "module", "sync_deploy")
+    assert 'scope                = module.func.id' in block and 'role_definition_name = "Website Contributor"' in block
+    assert "data.azurerm_user_assigned_identity.sync[0].principal_id" in block
+
+
+def test_the_sync_identity_gets_tools_read_and_a_place_among_the_allowed_callers():
+    roles = tf_block(REPO / "infra/05-func/main.tf", "module", "sync_tools_read")
+    assert "module.mcp_api.app_role_id" in roles and "data.azurerm_user_assigned_identity.sync[0].principal_id" in roles
+    assert "local.sync_client_ids" in tf_block(REPO / "infra/05-func/main.tf", "module", "func")
+
+
+def test_the_sync_identity_holds_no_role_beyond_its_four_jobs():
+    # Container write (06), Foundry User (07), and on the function app Website Contributor and Tools.Read (05).
+    grants = []
+    for path in sorted((REPO / "infra").glob("0*/main.tf")):
+        for name in re.findall(r'module "([a-z_]+)" \{', path.read_text()):
+            block = tf_block(path, "module", name)
+            if "sync_identity" in block and "principal_id" in block or "azurerm_user_assigned_identity.sync" in block:
+                grants.append((path.parent.name, name))
+    assert grants == [("05-func", "sync_tools_read"), ("05-func", "sync_deploy"), ("06-sync", "sync_role"),
+                      ("07-foundry", "sync_identity_foundry_user")]
+

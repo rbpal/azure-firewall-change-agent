@@ -243,7 +243,7 @@ def test_the_pinned_agent_is_refused_when_the_tool_server_is_stale(monkeypatch, 
     monkeypatch.setattr(agent_mod, "connect", lambda e: SimpleNamespace(
         get_openai_client=lambda **o: opened.append(o)))
     monkeypatch.setattr(ts, "check", stale)
-    marker = {"commit": commit, "agent": {"version": "11", "definition_sha": "sha"}}
+    marker = {"commit": commit, "agent": {"version": "11", "definition_sha": "sha"}, "tools": {"commit": commit, "code_sha256": "h"}}
     with pytest.raises(AgentError, match="does not run GitHub main's mcp/ code"):
         FoundryAgent.pinned(tmp_path, commit, marker, require_evaluation=False)
     assert seen == [(tmp_path, commit)] and opened == [], "no model client may be opened for a stale server"

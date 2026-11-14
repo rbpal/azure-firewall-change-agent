@@ -416,6 +416,11 @@ class FoundryAgent:
         check_version(project, str(agent["version"]), body)
         from workflow import tool_server  # imported here: tool_server imports this module
         code = tool_server.check(repo, commit)  # the deployed tools must run main's mcp/ code
+        recorded = (marker.get("tools") or {}).get("code_sha256")
+        if code.get("code_sha256") != recorded:
+            raise AgentError("the tool server's code is not the code recorded when this release was marked ready",
+                             detail={"main_commit": commit, "deployed_code_sha256": code.get("code_sha256"),
+                                     "ready_code_sha256": recorded})
         # No hidden retries in the SDK: the runner retries, waits and records every attempt.
         made = cls(project, project.get_openai_client(max_retries=0), str(agent["version"]), commit, container, marker)
         made.tool_code = code

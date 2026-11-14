@@ -13,3 +13,9 @@ mcp_test_clients = ["MicrosoftAzureCli"]
 
 # Demo only: you get Tools.Read for those tests. Set false to remove it.
 mcp_role_for_terraform_user = true
+
+# Built by step 06-sync. sync-network signs in as it to deploy mcp/ from the
+# released main commit and to check the deployed code with code_version. It
+# gets Tools.Read, a place in the allowed callers, and Website Contributor on
+# this function app only. Cost: role assignments are free.
+sync_identity_name = "uami-fwagentic-sync-dev"

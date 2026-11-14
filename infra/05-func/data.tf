@@ -26,6 +26,17 @@ data "azuread_client_config" "current" {}
 # no GUID sits in a committed file.
 data "azuread_application_published_app_ids" "well_known" {}
 
+# The sync-network workflow's identity, built by step 06-sync, found by name. It
+# deploys mcp/ to the function app and checks the deployed code. Null on a fresh
+# build, before step 06 exists: then nothing below refers to it.
+data "azurerm_user_assigned_identity" "sync" {
+  count = var.sync_identity_name == null ? 0 : 1
+
+  name                = var.sync_identity_name
+  resource_group_name = data.azurerm_resource_group.this.name
+}
+
 locals {
   mcp_test_client_ids = [for name in var.mcp_test_clients : data.azuread_application_published_app_ids.well_known.result[name]]
+  sync_client_ids     = [for identity in data.azurerm_user_assigned_identity.sync : identity.client_id]
 }

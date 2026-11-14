@@ -2,7 +2,8 @@
 
 Example: a source of `172.20.20.15/24` gives one finding, `invalid_address`, that
 names both readings: the host 172.20.20.15/32 (1 address) or the subnet
-172.20.20.0/24 (256 addresses). The ticket is saved as awaiting review.
+172.20.20.0/24 (256 addresses). The ticket is saved as awaiting review. A lab
+ticket whose justification says "needed in dev" gives `free_text_conflict`.
 
 Why: the workflow never rejects a ticket. A problem pauses it for the engineer,
 who rejects it, edits it, or accepts it. Code catches what is malformed here, so
@@ -33,14 +34,24 @@ SIDES = ("sources", "destination")
 
 # Findings an engineer may accept as they stand. Every other code needs an edit, because
 # the ticket is malformed or contradicts itself and accepting it would leave a guess.
-# skip_approval_requested is never acceptable: a request to bypass the review, an approval
-# or a required check is a mandatory stop that only an edit clears (workflow/bypass.py).
-ACCEPTABLE = {"wider_than_plan", "planned_address", "address_not_in_plan"}
+# free_text_conflict is acceptable because the structured fields are the approval: the engineer
+# may confirm they are right (a "lab floor" is not the lab environment), and the acceptance
+# quotes the discrepancy it covers. skip_approval_requested is never acceptable: a request to
+# bypass the review, an approval or a required check is a mandatory stop that only an edit
+# clears (workflow/bypass.py).
+FREE_TEXT_CONFLICT = "free_text_conflict"
+ACCEPTABLE = {"wider_than_plan", "planned_address", "address_not_in_plan", FREE_TEXT_CONFLICT}
 NEEDS_PLANNED = {"planned_address", "address_not_in_plan"}  # accepting these needs the engineer's planned-address record
 
 # ASCII digits only, matched against the whole text: \d would accept other scripts' digits
 # and $ would accept a trailing newline.
 _CIDR_SHAPE = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/([0-9]+)")
+
+# Words in the justification that name an environment, each mapped to the name a ticket selects.
+# Whole words only, in any case: "dev" matches "Dev" and "dev." but never "device" or "devops".
+ENVIRONMENT_WORDS = {"lab": "lab", "dev": "dev", "development": "dev", "stage": "stage", "staging": "stage",
+                     "prod": "prod", "production": "prod"}
+_ENVIRONMENT_WORD = re.compile(r"\b(" + "|".join(ENVIRONMENT_WORDS) + r")\b", re.IGNORECASE)
 
 
 def ticket_version(ticket: dict) -> str:
@@ -116,6 +127,29 @@ def missing_address_finding(repo: Path, where: str, address: dict) -> dict:
     return finding("missing_address", where, " ".join(parts), suggestions=suggestions)
 
 
+def free_text_findings(ticket: dict) -> list[dict]:
+    """One free_text_conflict for each environment the justification names but the ticket does not select."""
+    text, selected = ticket.get("justification"), ticket.get("environments")
+    if not isinstance(text, str) or not isinstance(selected, list):
+        return []  # the schema check reports a missing or malformed field
+    named: dict[str, list[str]] = {}
+    for word in _ENVIRONMENT_WORD.findall(text):
+        said = named.setdefault(ENVIRONMENT_WORDS[word.lower()], [])
+        if word not in said:
+            said.append(word)
+    out = []
+    for environment, words in named.items():
+        if environment in selected:
+            continue
+        quoted = ", ".join(f'"{w}"' for w in words)
+        fields = ", ".join(str(e) for e in selected) or "no environment"
+        out.append(finding(FREE_TEXT_CONFLICT, "justification",
+                           f"the justification says {quoted} (the {environment} environment), but the ticket selects "
+                           f"{fields}. Correct the ticket, or confirm the fields are right and accept this discrepancy",
+                           matched=words, environment=environment, selected=list(selected)))
+    return out
+
+
 def intake_findings(repo: Path, ticket: dict) -> list[dict]:
     """Every problem an engineer must review before the agent sees the ticket; empty means it may go on."""
     if not isinstance(ticket, dict):
@@ -144,5 +178,6 @@ def intake_findings(repo: Path, ticket: dict) -> list[dict]:
         if not any(path == w or path.startswith(w + "/") for w in explained):
             out.append(finding("invalid_ticket", path, error))
     out += [finding(c["code"], c["where"], c["message"]) for c in url_conflicts(ticket)]
+    out += free_text_findings(ticket)
     out += [finding(BYPASS, m["where"], bypass_message(m), phrases=m["phrases"]) for m in bypass_requests(ticket)]
     return out

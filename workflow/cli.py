@@ -84,7 +84,7 @@ from workflow import lifecycle
 from workflow.agent import AgentError, FoundryAgent, snapshot_container
 from workflow.mainline import clean_up, draft_from_main
 from workflow.bypass import BypassRequested, bypass_message, bypass_requests, check_no_bypass
-from workflow.intake import NEEDS_PLANNED, finding, intake_findings, ticket_version
+from workflow.intake import FREE_TEXT_CONFLICT, NEEDS_PLANNED, finding, intake_findings, ticket_version
 from workflow.planned import check_planned, missing_spoke_files
 from workflow.scope import BackupsRemainError, PartialWriteError, check_no_backups, plan_writes, write_all
 from workflow.tfvars_writer import DraftError
@@ -391,10 +391,19 @@ def edits(record: dict) -> list[dict]:
     return [{k: h.get(k) for k in EDIT_AUDIT} for h in record["history"] if h["action"] == "edit"]
 
 
-def acceptance(version: str, engineer: str, reason: str, accepted=(), planned=(), edit_log=()) -> dict:
+def acceptance(version: str, engineer: str, reason: str, accepted=(), planned=(), edit_log=(), discrepancies=()) -> dict:
     """The engineer's recorded acceptance of one ticket version, as accept saves it and the agent receives it."""
-    return {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": version,
-            "accepted": list(accepted), "planned": list(planned), "edits": list(edit_log)}
+    review = {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": version,
+              "accepted": list(accepted), "planned": list(planned), "edits": list(edit_log)}
+    if discrepancies:  # only when accepted: every other acceptance stays exactly as before
+        review["discrepancies"] = list(discrepancies)
+    return review
+
+
+def accepted_discrepancies(findings: list[dict]) -> list[dict]:
+    """The free-text discrepancies an acceptance covers, quoted exactly as the review reported them."""
+    keep = ("code", "where", "message", "matched", "environment", "selected")
+    return [{k: f[k] for k in keep if k in f} for f in findings if f["code"] == FREE_TEXT_CONFLICT]
 
 
 def _refuse_bypass(repo: Path, record: dict, engineer: str | None) -> None:
@@ -444,7 +453,7 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     missing = missing_spoke_files(repo, record["ticket"], planned)
     _start_draft(repo, number)  # one unfinished ticket per engineer, checked before any draft starts
     review = acceptance(record["ticket_version"], engineer, reason, [f["code"] for f in record["findings"]], planned,
-                        edits(record))
+                        edits(record), accepted_discrepancies(record["findings"]))
     live = not missing and reply_path is None and os.environ.get("FWAGENT_PROJECT_ENDPOINT")
     if live:  # save the acceptance before anything can wait or fail, then draft from main
         record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"}})

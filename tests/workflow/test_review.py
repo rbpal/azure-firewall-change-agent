@@ -317,7 +317,8 @@ def test_accept_never_adds_a_site_the_ticket_does_not_select(repo, tmp_path, cap
     assert cli.load_record(repo, ADD)["status"] == "awaiting_review"  # the failed accept left no trace
 
 
-@pytest.mark.parametrize("reason", ["env_mismatch", "free_text_conflict", "address_for_unselected_site"])
+# free_text_conflict is acceptable: the engineer may confirm the fields (tests/workflow/test_free_text.py).
+@pytest.mark.parametrize("reason", ["env_mismatch", "address_for_unselected_site"])
 def test_a_contradiction_needs_an_edit_not_an_accept(repo, tmp_path, reason):
     ticket, reply = stop(tmp_path, reason)
     draft(repo, ticket, reply)

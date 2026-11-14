@@ -30,8 +30,9 @@ resource "azurerm_function_app_flex_consumption" "this" {
     # azurerm 4.81.0 always adds AzureWebJobsStorage as a connection string
     # with an empty key, and the host reads it before the identity setting,
     # so it cannot start (storage 403). An empty value here overrides it.
-    # The provider hides this key when reading, so every plan shows it as an
-    # addition. Remove both once the provider fix ships (issue 33211, PR 29099).
+    # The provider hides this key when reading, so every plan would show it as
+    # an addition; lifecycle below ignores it after creation. Remove both once
+    # the provider fix ships (issue 33211, PR 29099).
     "AzureWebJobsStorage" = ""
     # Application Insights refuses the key, so the app signs in with Entra.
     "APPLICATIONINSIGHTS_AUTHENTICATION_STRING" = "Authorization=AAD"
@@ -73,9 +74,13 @@ resource "azurerm_function_app_flex_consumption" "this" {
   # Azure adds this tag to link the app to Application Insights in the portal.
   # It holds only a resource ID. Terraform leaves it alone so the plan stays
   # clean; every other tag is still managed here.
+  # AzureWebJobsStorage is set to "" when the app is created (see app_settings)
+  # but the provider never reads it back, so only that one key is ignored on
+  # updates. Every other app setting is still managed here.
   lifecycle {
     ignore_changes = [
       tags["hidden-link: /app-insights-resource-id"],
+      app_settings["AzureWebJobsStorage"],
     ]
   }
 }

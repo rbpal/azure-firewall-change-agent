@@ -239,3 +239,12 @@ def test_the_sync_identity_holds_no_role_beyond_its_four_jobs():
     assert grants == [("05-func", "sync_tools_read"), ("05-func", "sync_deploy"), ("06-sync", "sync_role"),
                       ("07-foundry", "sync_identity_foundry_user")]
 
+
+
+def test_the_function_app_ignores_only_the_hidden_storage_setting_and_still_sets_it_on_create():
+    # The provider never reads AzureWebJobsStorage back, so plans showed a false change; ignoring all app settings would hide real ones.
+    block = tf_block(REPO / "infra/modules/function-app-flex/main.tf", 'resource "azurerm_function_app_flex_consumption"', "this")
+    ignored = re.search(r"ignore_changes = \[(.*?)\]\n", block, re.S).group(1)
+    assert re.findall(r"^\s*(\S.*?),?$", ignored.strip(), re.M) == [
+        'tags["hidden-link: /app-insights-resource-id"]', 'app_settings["AzureWebJobsStorage"]']
+    assert '"AzureWebJobsStorage" = ""' in block  # a new app still gets the empty override that lets the host start

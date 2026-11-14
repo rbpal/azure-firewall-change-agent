@@ -144,6 +144,76 @@ def test_octets_0_and_255_are_valid_syntax(tmp_path, side, cidr):
     assert intake.intake_findings(REPO, ticket) == [] and ticket_errors(ticket) == []
 
 
+# An octet above 255: the finding names the address as written and the exact entry, and nothing is corrected.
+
+def submit_ticket(repo, tmp_path, name, ticket):
+    """Write `ticket` to YAML and submit it with no reply; return fwagent's exit code."""
+    path = tmp_path / f"{name}.yaml"
+    path.write_text(yaml.safe_dump(ticket))
+    return run(repo, "submit", str(path))
+
+
+@pytest.mark.parametrize("side", ["sources", "destination"])
+def test_an_octet_above_255_in_a_second_entry_is_named_with_its_position(repo, tmp_path, side):
+    """A valid first entry and a second with octet 256: one finding, at index 1, quoting the address."""
+    t = copy.deepcopy(request(ADD)[0])
+    t[side] = [t[side][0], {**t[side][0], "cidr": "10.102.256.0/24"}]
+    before = snapshot(repo)
+    assert submit_ticket(repo, tmp_path, "second", t) == cli.REVIEW
+    record = cli.load_record(repo, ADD)
+    [f] = record["findings"]
+    assert (f["code"], f["where"], f["acceptable"]) == ("invalid_address", f"{side}/1/cidr", False)
+    assert "10.102.256.0/24" in f["message"] and "0 to 255" in f["message"]
+    assert record["status"] == "awaiting_review" and record["reply"] is None
+    assert record["ticket"] == t and record["ticket"][side][1]["cidr"] == "10.102.256.0/24"  # never corrected
+    assert changed(before, repo) == set()
+
+
+def test_an_onprem_cidr_with_an_octet_above_255_waits_for_review(repo, tmp_path):
+    """An on-prem source (location, no environment or site) takes the same check."""
+    t = copy.deepcopy(request(ADD)[0])
+    t["sources"] = [{"location": "onprem-primary", "cidr": "172.20.256.0/24"}]
+    t["destination"] = [{"environment": "stage", "site": "primary", "cidr": "10.102.15.0/24"}]
+    before = snapshot(repo)
+    assert submit_ticket(repo, tmp_path, "onprem", t) == cli.REVIEW
+    record = cli.load_record(repo, ADD)
+    [f] = record["findings"]
+    assert (f["code"], f["where"], f["acceptable"]) == ("invalid_address", "sources/0/cidr", False)
+    assert "172.20.256.0/24" in f["message"] and "0 to 255" in f["message"]
+    assert record["status"] == "awaiting_review" and record["ticket"] == t
+    assert changed(before, repo) == set()
+
+
+def test_an_edit_that_adds_an_octet_above_255_stays_in_review(repo, tmp_path):
+    """An engineer's edit is checked again: a new bad octet keeps the ticket in review and writes nothing."""
+    bad, _ = ticket_with(tmp_path, "bad", cidr="172.20.20.0/33")
+    run(repo, "submit", bad)
+    still, edited = ticket_with(tmp_path, "still", cidr="10.102.300.0/24")
+    before = snapshot(repo)
+    assert run(repo, "edit", ADD, still, "--engineer", ENGINEER, "--note", "fixed the prefix") == cli.REVIEW
+    record = cli.load_record(repo, ADD)
+    [f] = record["findings"]
+    assert (f["code"], f["where"]) == ("invalid_address", "sources/0/cidr")
+    assert "10.102.300.0/24" in f["message"] and "0 to 255" in f["message"]
+    assert record["status"] == "awaiting_review" and record["ticket"] == edited
+    assert changed(before, repo) == set()
+
+
+def test_a_bad_source_and_a_bad_destination_give_one_finding_each(repo, tmp_path):
+    """Both fields are reported, each with its own address, so one edit can fix both."""
+    t = copy.deepcopy(request(ADD)[0])
+    t["sources"] = [{**t["sources"][0], "cidr": "10.102.256.0/24"}]
+    t["destination"] = [{"cidr": "203.0.113.999/32"}]
+    before = snapshot(repo)
+    assert submit_ticket(repo, tmp_path, "both", t) == cli.REVIEW
+    findings = {f["where"]: f for f in cli.load_record(repo, ADD)["findings"]}
+    assert set(findings) == {"sources/0/cidr", "destination/0/cidr"}
+    assert all(f["code"] == "invalid_address" and not f["acceptable"] for f in findings.values())
+    assert "10.102.256.0/24" in findings["sources/0/cidr"]["message"]
+    assert "203.0.113.999/32" in findings["destination/0/cidr"]["message"]
+    assert changed(before, repo) == set()
+
+
 def test_no_address_text_crashes_intake_and_it_agrees_with_the_schema():
     # 3,000 generated addresses mixing good and bad octets, prefixes, separators and characters.
     pattern = next(v["properties"]["cidr"]["pattern"] for v in _schema_nodes(json.loads(SCHEMA.read_text()))

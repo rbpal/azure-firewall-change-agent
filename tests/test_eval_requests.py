@@ -16,8 +16,8 @@ STOP_CATEGORIES = {
     "sites-contradict-addresses", "address-environment-contradicts-ticket",
     "address-not-in-plan", "free-text-names-another-environment",
     "onprem-address-not-in-plan", "onprem-location-mismatch", "wider-than-plan", "planned-spoke",
-    "dnat-open-source", "dnat-destination-not-one-host", "onprem-to-onprem", "ip-group-not-found", "url-not-valid", "dns-lookup-failed",
-    "non-http-to-hostname", "removal-rule-allows-more", "removal-hub-rule", "removal-asks-ip-group-change",
+    "dnat-open-source", "dnat-destination-not-one-host", "onprem-to-onprem", "ip-group-not-found",
+    "removal-rule-allows-more", "removal-hub-rule", "removal-asks-ip-group-change",
     "removal-one-site-matches",
 }
 OUTCOMES = {"draft", "stop_and_ask", "already_allowed"}
@@ -35,6 +35,10 @@ CODED_2026_10_21 = {  # the escalations that had no code, each with a validation
     "rule_allows_more", "hub_rule", "ip_group_change_requested", "partial_site_match",  # RB-03-5
 }
 STOP_REASONS |= CODED_2026_10_21
+# Since 2026-11-14 DNS-related eval tickets name real public sites, so these two codes lost their validation cases:
+# RITM0011063 and RITM0011069 (dns_lookup_failed) were retired, and RITM0011064 now drafts. Software tests cover both.
+NO_EVAL_CASE_SINCE_2026_11_14 = {"dns_lookup_failed", "non_http_to_hostname"}
+STOP_REASONS |= {"needs_engineer_review"}  # RB-01-6, 2026-11-14: a resolved address whose firewalls the routing data does not name
 CODED_2026_10_25 = {  # coded after the v3 validation run; no validation case yet (a label change, reported apart)
     "url_port_conflict", "env_site_not_found",  # RB-01-6
     "dnat_protocol_not_supported",  # RB-02-5
@@ -46,6 +50,8 @@ STOP_REASONS |= CODED_2026_10_25
 STOP_REASONS |= {"ip_group_not_found"}
 RUNBOOKS = make_requests.REPO / "data" / "runbooks"
 RULE_FIELDS = {"env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"}
+# An FQDN label holds no addresses: scoring takes them from the run's own dns_lookup_for_fqdn answer (2026-11-14).
+DNS_RULE_FIELDS = RULE_FIELDS - {"destinations"} | {"destinations_from_dns"}
 DNAT_FIELDS = RULE_FIELDS | {"translated_address", "translated_port"}  # inbound rules also name the internal host
 
 
@@ -68,7 +74,7 @@ def test_script_writes_the_planned_mix(generated):
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation - retired[("validation", name)], name
         assert counts[("test", name)] == n_test - retired[("test", name)], name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 58
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 56
     assert sum(v for (split, _), v in counts.items() if split == "test") == 32
 
 
@@ -93,7 +99,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 90
+    assert written == [] and len(kept) == 88
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -134,8 +140,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_90_committed_requests():
-    assert len(COMMITTED) == 90
+def test_there_are_88_committed_requests():
+    assert len(COMMITTED) == 88
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -172,7 +178,7 @@ def test_label_has_the_agreed_shape(path):
         assert expected["rules"], "a draft or already_allowed label names its rules"
         for rule in expected["rules"]:
             dnat = rule["collection"].endswith("-dnat-rules")
-            assert set(rule) == (DNAT_FIELDS if dnat else RULE_FIELDS)
+            assert set(rule) == (DNAT_FIELDS if dnat else DNS_RULE_FIELDS if "destinations_from_dns" in rule else RULE_FIELDS)
 
 
 REGION = {"primary": "eastus2", "dr": "centralus"}
@@ -184,7 +190,7 @@ DRAFTS = [p for p in COMMITTED if (load(p)["expected"] or {}).get("outcome") == 
 
 
 def test_the_draft_list_holds_every_draft_label():
-    assert len(DRAFTS) == 55
+    assert len(DRAFTS) == 56  # RITM0011064 became a draft on 2026-11-14
 
 
 @pytest.mark.parametrize("path", DRAFTS, ids=lambda p: p.name)
@@ -269,7 +275,7 @@ def test_uncoded_escalations_only_shrink():
 def test_every_code_added_on_2026_10_21_has_a_validation_case_and_no_test_case():
     # The test split is held out and was not touched: these codes are measured on validation only.
     reasons = {(p.parent.name, (load(p)["expected"] or {}).get("reason")) for p in COMMITTED}
-    assert {code for split, code in reasons if split == "validation"} >= CODED_2026_10_21
+    assert {code for split, code in reasons if split == "validation"} >= CODED_2026_10_21 - NO_EVAL_CASE_SINCE_2026_11_14
     assert not {code for split, code in reasons if split == "test"} & CODED_2026_10_21
 
 
@@ -337,3 +343,28 @@ def test_every_accepted_category_is_a_draft_and_every_review_stop_has_no_accepta
             assert "engineer_review" not in request, path.name
         if "engineer_review" in request:
             assert request["expected"]["outcome"] == "draft", path.name
+
+
+FQDN_SITES = {"www.google.com", "www.microsoft.com", "www.cloudflare.com", "www.apple.com", "www.amazon.com",
+              "www.wikipedia.org", "github.com", "www.bing.com", "www.mozilla.org", "www.cnn.com"}
+
+
+@pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
+def test_every_fqdn_or_url_ticket_names_a_listed_public_site_on_https_443(path):
+    # 2026-11-14: a DNS-related eval ticket names a real public site, by bare FQDN or as https://<site>/, on HTTPS 443.
+    request = load(path)
+    ticket = request["ticket"]
+    named = [d for d in ticket["destination"] if "fqdn" in d or "url" in d]
+    for d in named:
+        assert d.get("fqdn") in FQDN_SITES or d.get("url") in {f"https://{s}/" for s in FQDN_SITES}, d
+    if named:
+        assert (ticket["protocol"], ticket["ports"]) == ("HTTPS", ["443"])
+        assert request.get("dns") is None  # the tool resolves the real site; no fixed DNS condition
+        if request["expected"]["outcome"] == "draft":
+            assert all(r["protocol"] == "TCP" and r["ports"] == ["443"] and "destinations_from_dns" in r
+                       for r in request["expected"]["rules"])
+
+
+def test_three_tickets_name_a_public_site():
+    names = {load(p)["id"] for p in COMMITTED if any("fqdn" in d or "url" in d for d in load(p)["ticket"]["destination"])}
+    assert names == {"RITM0011015", "RITM0011064", "RITM0012010"}

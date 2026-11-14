@@ -2,7 +2,7 @@
 # The ticket block is written by evals/make_requests.py; expected is written by hand.
 id: RITM0012010
 category: fqdn-destination
-why: HTTPS from sett to api.proseware.example in stage.
+why: HTTPS from sett to www.amazon.com in stage; DNS gives the rules' addresses.
 ticket:
   number: RITM0012010
   item: Firewall Change Request
@@ -17,42 +17,41 @@ ticket:
   - {environment: stage, site: primary, cidr: 10.102.14.0/24}
   - {environment: stage, site: dr, cidr: 10.103.14.0/24}
   destination:
-  - {fqdn: api.proseware.example}
+  - {fqdn: www.amazon.com}
   protocol: HTTPS
   ports: ['443']
-  external_party: Proseware
-  justification: The settlement app servers call Proseware's API.
+  external_party: null
+  justification: The settlement app servers reach www.amazon.com over HTTPS.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: 6110060
+  labelled_against: 2d86bc8
   note: >-
-    Stage, DR built: two application rules. The hostname ends in .example and will not resolve: that is
-    a caution for the engineer (RB-01-7), not a reason to stop.
+    Stage, DR built. The ticket gives the bare FQDN www.amazon.com. Redesigned 2026-11-14, so this test-split label is no longer a blind held-out case. The project drafts an exact FQDN as network rules to the IPv4 addresses dns_lookup_for_fqdn returns (RB-01-4, STD-COLL-03): HTTPS becomes TCP, on the ticket's port 443, one rule per selected site with that site's source. The addresses are public, outside the plan, so each site's own hub firewall carries the flow as the source spoke's internet next hop. The label holds no addresses: destinations_from_dns is replaced, when scoring, by the A records of the first successful lookup of that FQDN in the same run. If the lookup fails, the agent stops with dns_lookup_failed, which fails this label as wrong_outcome.
   outcome: draft
   rules:
   - env_site: stage-eastus2
     spoke: sett
-    collection: allow-sett-app-rules
-    name: https-sett-to-prosewareApi
+    collection: allow-sett-network-rules
+    name: https-sett-to-amazonWeb
     sources: [10.102.14.0/24]
-    destinations: [api.proseware.example]
+    destinations_from_dns: www.amazon.com
     ports: ['443']
-    protocol: HTTPS
+    protocol: TCP
   - env_site: stage-centralus
     spoke: sett
-    collection: allow-sett-app-rules
-    name: https-sett-to-prosewareApi
+    collection: allow-sett-network-rules
+    name: https-sett-to-amazonWeb
     sources: [10.103.14.0/24]
-    destinations: [api.proseware.example]
+    destinations_from_dns: www.amazon.com
     ports: ['443']
-    protocol: HTTPS
+    protocol: TCP
   tools:
   - {tool: locate_address_for_env_site, address: 10.102.14.0/24}
   - {tool: locate_address_for_env_site, address: 10.103.14.0/24}
-  - {tool: dns_lookup_for_fqdn, fqdn: api.proseware.example}
+  - {tool: dns_lookup_for_fqdn, target: www.amazon.com}
   - {tool: duplicate_rule_check, env_site: stage-eastus2}
   - {tool: duplicate_rule_check, env_site: stage-centralus}

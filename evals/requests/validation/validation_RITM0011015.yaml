@@ -2,7 +2,7 @@
 # The ticket block is written by evals/make_requests.py; expected is written by hand.
 id: RITM0011015
 category: fqdn-destination
-why: HTTPS from xfer to api.litware.example in lab.
+why: HTTPS from xfer to www.google.com in lab; DNS gives the rules' addresses.
 ticket:
   number: RITM0011015
   item: Firewall Change Request
@@ -17,44 +17,41 @@ ticket:
   - {environment: lab, site: primary, cidr: 10.106.20.0/24}
   - {environment: lab, site: dr, cidr: 10.107.20.0/24}
   destination:
-  - {url: 'https://api.litware.example/v1/upload'}
+  - {url: 'https://www.google.com/'}
   protocol: HTTPS
   ports: ['443']
-  external_party: Litware
-  justification: The sftp and external file transfer call Litware's API.
+  external_party: null
+  justification: The sftp and external file transfer reach www.google.com over HTTPS.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: 6110060
+  labelled_against: 2d86bc8
   note: >-
-    Lab, DR built: two application rules. The ticket gave a URL; the rule uses its hostname and port,
-    and the path stays on the ticket. xfer has no application collection in lab yet: the agent drafts
-    the rule anyway, and the workflow code creates allow-xfer-app-rules by STD-NAME-02 (decided
-    2026-10-13). The hostname ends in .example and will not resolve: a caution (RB-01-7), not a stop.
+    Lab, DR built. The ticket gives the URL https://www.google.com/; its FQDN is www.google.com, and the URL stays on the ticket. The project drafts an exact FQDN as network rules to the IPv4 addresses dns_lookup_for_fqdn returns (RB-01-4, STD-COLL-03): HTTPS becomes TCP, on the ticket's port 443, one rule per selected site with that site's source. The addresses are public, outside the plan, so each site's own hub firewall carries the flow as the source spoke's internet next hop. The label holds no addresses: destinations_from_dns is replaced, when scoring, by the A records of the first successful lookup of that FQDN in the same run. If the lookup fails, the agent stops with dns_lookup_failed, which fails this label as wrong_outcome.
   outcome: draft
   rules:
   - env_site: lab-eastus2
     spoke: xfer
-    collection: allow-xfer-app-rules
-    name: https-xfer-to-litwareApi
+    collection: allow-xfer-network-rules
+    name: https-xfer-to-googleWeb
     sources: [10.106.20.0/24]
-    destinations: [api.litware.example]
+    destinations_from_dns: www.google.com
     ports: ['443']
-    protocol: HTTPS
+    protocol: TCP
   - env_site: lab-centralus
     spoke: xfer
-    collection: allow-xfer-app-rules
-    name: https-xfer-to-litwareApi
+    collection: allow-xfer-network-rules
+    name: https-xfer-to-googleWeb
     sources: [10.107.20.0/24]
-    destinations: [api.litware.example]
+    destinations_from_dns: www.google.com
     ports: ['443']
-    protocol: HTTPS
+    protocol: TCP
   tools:
   - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
   - {tool: locate_address_for_env_site, address: 10.107.20.0/24}
-  - {tool: dns_lookup_for_fqdn, fqdn: api.litware.example}
+  - {tool: dns_lookup_for_fqdn, target: www.google.com}
   - {tool: duplicate_rule_check, env_site: lab-eastus2}
   - {tool: duplicate_rule_check, env_site: lab-centralus}

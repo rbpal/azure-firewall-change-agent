@@ -23,16 +23,18 @@ A pass is **complete** when the draft is not narrower than approved and no label
 
 ## 3. Dataset
 
-There are 90 requests: 58 in validation and 32 in the test split, across 44 categories. `make_requests.py` writes the tickets, the same every run.
+There are 88 requests: 56 in validation and 32 in the test split, across 42 categories. `make_requests.py` writes the tickets, the same every run.
 
 | Split | Requests | Draft | Already allowed | Stop and ask | Purpose |
 |---|---|---|---|---|---|
-| `requests/validation/` | 58 | 32 | 2 | 24 | Tune and gate the agent. A definition must pass here before it may draft. |
+| `requests/validation/` | 56 | 33 | 2 | 21 | Tune and gate the agent. A definition must pass here before it may draft. |
 | `requests/test/` | 32 | 23 | 2 | 7 | Held back for one final score per definition. Nothing is tuned against it. The runner refuses it without `--allow-test-split`. |
 
 Retired numbers are listed in `make_requests.py` under `RETIRED`, with a reason, so every other number keeps its ticket.
 
-**Who wrote and reviewed the answer keys.** The `expected:` blocks are written for this project and checked against the network data and tools. `make_requests.py` never writes them. 48 of the 90 date from the first set, of 2026-10-13, and no review record of them survives. The other 42 were added from 2026-10-18 on. The project owner approved 27 of them by number, between 2026-10-18 and 2026-10-22. The remaining 15 have no recorded by-number approval. No label carries the `review: pending` marker.
+**FQDN and URL tickets (2026-11-14).** An exact FQDN is drafted as TCP network rules to the IPv4 addresses `dns_lookup_for_fqdn` returns, so a made-up name can only fail its lookup. Every FQDN or URL ticket now names a real public site on HTTPS 443: RITM0011015 (`https://www.google.com/`), RITM0011064 (`www.cnn.com`, until then AMQPS to a made-up name) and RITM0012010 (`www.amazon.com`). Their labels hold no addresses. `destinations_from_dns` is replaced, when scoring, by the A records of the first successful lookup of that FQDN in the same run. RITM0011063 (a hostname too long for DNS) and RITM0011069 (a lookup that times out) were retired, because a real site cannot keep their purpose. RITM0012010 was redesigned after being read, so it is no longer a blind test case.
+
+**Who wrote and reviewed the answer keys.** The `expected:` blocks are written for this project and checked against the network data and tools. `make_requests.py` never writes them. On the 90-request set, 48 dated from the first set, of 2026-10-13, and no review record of them survives. The other 42 were added from 2026-10-18 on. The project owner approved 27 of them by number, between 2026-10-18 and 2026-10-22. The remaining 15 have no recorded by-number approval. Two of the 42, RITM0011063 and RITM0011069, were retired on 2026-11-14. The three FQDN labels rewritten that day (RITM0011015, RITM0011064, RITM0012010) were rewritten at the owner's direction and have no by-number review record yet. No label carries the `review: pending` marker.
 
 **Software tests are not LLM evaluations.** `pytest` runs the software tests in `tests/`. They check the code, including the runner and scorers, and call no model. `tests/evals/` runs the runner with two stand-in agents from `stand_in_agents.py`. `perfect` replays the labels and passes 58 of 58, which shows the scorers add no mistakes of their own. `always_stop` passes 3 of 58. Neither says anything about a model. Only a run with `--agent foundry` evaluates the LLM.
 
@@ -109,7 +111,7 @@ Expected answer: `already_allowed`, with no new rule. The reply names the existi
 
 ### Intake check, not part of the LLM evaluation: an octet above 255
 
-This is a software check, not an eval request, and it is not counted in the 90. Intake code (`workflow/intake.py`) holds the ticket for the engineer before any agent call. The source below is RITM0011041 with one octet set to 256:
+This is a software check, not an eval request, and it is not counted in the 88. Intake code (`workflow/intake.py`) holds the ticket for the engineer before any agent call. The source below is RITM0011041 with one octet set to 256:
 
 ```yaml
 sources:
@@ -126,7 +128,7 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 
 ## 5. Latest results
 
-**Validation did not pass. The test split was not run for this definition.**
+**Validation did not pass. The test split was not run for this definition.** These results are for the earlier 90-request set at `f22275d`, before the 2026-11-14 FQDN changes in section 3, so the counts below are 58 validation tickets, not 56.
 
 | Item | Value |
 |---|---|
@@ -155,15 +157,15 @@ Version 12 is not in `agents/evaluated-definitions.json`, so the workflow refuse
 
 The agent's answer is what the eval scores. The workflow's draft check is a separate code guard that runs before any policy file is written. A guard that blocks a wrong draft protects the policy files, but the agent's answer still counts as a failure.
 
-**RITM0011064: missed stop, blocked by the draft check.** The ticket asks for AMQPS (TCP 5671) to the hostname `api.tailspin.example`. This project's Basic firewall policy cannot filter a hostname in a network rule, so the agent should stop with `non_http_to_hostname`. It drafted two network rules to the hostname instead, and called the failed DNS lookup a caution. Its recorded reply, replayed through the workflow's draft check on a clean copy of the repo at `f22275d`, was refused at both sites ("api.tailspin.example is a hostname, but the rule's protocol is TCP"). No policy file changed, and the ticket returns to the engineer. The likely cause is the order of the egress runbook. RB-01-4 says that anything other than HTTPS to a host becomes a network rule, and that a hostname which does not resolve is drafted anyway. The stop appears only later, in RB-01-6. This ticket passed on 2026-11-03 and failed on 2026-11-11 and 2026-11-13.
+**RITM0011064: missed stop, blocked by the draft check.** The ticket asks for AMQPS (TCP 5671) to the hostname `api.tailspin.example`. This project's Basic firewall policy cannot filter a hostname in a network rule, so the agent should stop with `non_http_to_hostname`. It drafted two network rules to the hostname instead, and called the failed DNS lookup a caution. Its recorded reply, replayed through the workflow's draft check on a clean copy of the repo at `f22275d`, was refused at both sites ("api.tailspin.example is a hostname, but the rule's protocol is TCP"). No policy file changed, and the ticket returns to the engineer. The likely cause is the order of the egress runbook. RB-01-4 says that anything other than HTTPS to a host becomes a network rule, and that a hostname which does not resolve is drafted anyway. The stop appears only later, in RB-01-6. This ticket passed on 2026-11-03 and failed on 2026-11-11 and 2026-11-13. On 2026-11-14 the policy changed: an exact FQDN now resolves to network rules. RITM0011064 is now HTTPS 443 to `www.cnn.com` and expects TCP 443 network rules to the resolved addresses.
 
 **RITM0011035: missed stop, not blocked by any code guard.** The ticket's fields say lab, and its justification says "Needed in dev before the dev release next week." The agent should stop with `free_text_conflict`. It drafted a lab rule and did not mention the dev wording. Replayed the same way, the draft check accepted the reply and wrote the rule into the copy's `lab-eastus2` `rprt.tfvars`. In the workflow, only the engineer's review of the draft would catch it. Its twin, RITM0011036, which names prod, stopped correctly in the same run. Version 11 passed RITM0011035 on 2026-11-03 and 2026-11-11.
 
 **Limitations**
 
 - A pass does not guarantee every future answer is right. The same definition gives different answers on different runs, as RITM0011064 shows.
-- RITM0011069 cannot run against the hosted tools, so a DNS timeout is untested in the LLM evaluation.
-- 63 of the 90 answer keys have no surviving by-number review record (section 3).
+- No eval ticket now tests a failed DNS lookup, an invalid name, a prohibited resolved address, a non-HTTP wildcard domain pattern or an internal FQDN. RITM0011063 and RITM0011069 were retired, and public sites do not exercise internal DNS. Software tests cover each case (`tests/workflow/test_dns_rules.py`, `tests/mcp/test_mcp_dns_lookup_for_fqdn.py`).
+- On the 90-request set, 63 answer keys had no surviving by-number review record. The three FQDN labels rewritten on 2026-11-14 have none either (section 3).
 - The network data is synthetic test data, not a real estate.
 - New rule names are not scored (section 8).
 

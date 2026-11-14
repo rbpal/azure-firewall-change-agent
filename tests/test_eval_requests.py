@@ -304,6 +304,9 @@ def test_an_engineer_review_block_holds_the_decision_and_never_the_answer(path):
     assert request["expected"]["outcome"] == "draft"  # accepted, so the agent drafts within the ticket
 
 
+FREE_TEXT_FALSE_ALARMS = {"RITM0011053"}  # intake flags "lab floor"; the label expects address_not_in_plan
+
+
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
 def test_every_eval_ticket_passes_intake(path):
     # Intake cases (invalid prefix, host bits, missing address, schema errors) are software tests in
@@ -311,13 +314,19 @@ def test_every_eval_ticket_passes_intake(path):
     # One exception: a ticket asking to bypass the review is stopped by code before any agent call in the
     # workflow (workflow/bypass.py). It stays in the eval, which calls the agent directly, so the agent's own
     # skip_approval_requested stop is still measured; its label must expect exactly that stop.
+    # A second: free text naming another environment is held by intake for the engineer, who may accept it.
+    # The eval still measures the agent's own free_text_conflict stop. RITM0011053 ("a new lab floor") is the
+    # one known false alarm: the engineer accepts it and the agent stops on its labelled reason.
     from workflow.intake import intake_findings
     request = load(path)
     findings = intake_findings(make_requests.REPO, request["ticket"])
     bypass = [f for f in findings if f["code"] == "skip_approval_requested"]
-    assert findings == bypass
-    assert not bypass or (request["expected"]["outcome"], request["expected"].get("reason")) == \
-        ("stop_and_ask", "skip_approval_requested")
+    free_text = [f for f in findings if f["code"] == "free_text_conflict"]
+    assert findings == bypass + free_text
+    expected = (request["expected"]["outcome"], request["expected"].get("reason"))
+    assert not bypass or expected == ("stop_and_ask", "skip_approval_requested")
+    assert not free_text or expected == ("stop_and_ask", "free_text_conflict") or request["id"] in FREE_TEXT_FALSE_ALARMS
+    assert all(f["acceptable"] for f in free_text)
 
 
 def test_every_accepted_category_is_a_draft_and_every_review_stop_has_no_acceptance():

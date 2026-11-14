@@ -64,12 +64,12 @@ def generated(tmp_path_factory):
 
 def test_script_writes_the_planned_mix(generated):
     counts = collections.Counter((p.parent.name, load(p)["category"]) for p in generated.glob("*/*.yaml"))
-    retired = collections.Counter(c for split, n, c, *_ in make_requests.plan() if n in make_requests.RETIRED)
+    retired = collections.Counter((split, c) for split, n, c, *_ in make_requests.plan() if n in make_requests.RETIRED)
     for name, n_validation, n_test in make_requests.CATEGORIES:
-        assert counts[("validation", name)] == n_validation - retired[name], name
-        assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 67
-    assert sum(v for (split, _), v in counts.items() if split == "test") == 34
+        assert counts[("validation", name)] == n_validation - retired[("validation", name)], name
+        assert counts[("test", name)] == n_test - retired[("test", name)], name
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 58
+    assert sum(v for (split, _), v in counts.items() if split == "test") == 32
 
 
 def test_every_generated_ticket_passes_the_schema(generated):
@@ -93,7 +93,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 101
+    assert written == [] and len(kept) == 90
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -134,8 +134,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_101_committed_requests():
-    assert len(COMMITTED) == 101
+def test_there_are_90_committed_requests():
+    assert len(COMMITTED) == 90
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -184,7 +184,7 @@ DRAFTS = [p for p in COMMITTED if (load(p)["expected"] or {}).get("outcome") == 
 
 
 def test_the_draft_list_holds_every_draft_label():
-    assert len(DRAFTS) == 65
+    assert len(DRAFTS) == 55
 
 
 @pytest.mark.parametrize("path", DRAFTS, ids=lambda p: p.name)

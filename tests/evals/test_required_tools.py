@@ -55,7 +55,7 @@ def test_a_removal_needs_its_duplicate_check_at_the_labelled_site_and_no_lookup(
 
 
 def test_a_dnat_draft_needs_its_port_check_at_every_site():
-    request = REQUESTS["RITM0011020"]
+    request = REQUESTS["RITM0011019"]
     sites = [r["env_site"] for r in request.expected["rules"]]
     made = [call(LOCATE, address=e["cidr"]) for e in request.ticket["sources"] + request.ticket["destination"]]
     made += [call(DUPLICATE, env_site=site) for site in sites]

@@ -4,7 +4,7 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 101 varied tickets, 67 for validation and 34 for test, spread
+Why: the eval needs 90 varied tickets, 58 for validation and 32 for test, spread
 over 44 kinds of request, including changes to the primary site only, the DR
 site only, or both, IP groups, on-prem users, addresses wider or narrower than
 the plan, planned spokes, requests that resume after an engineer's review, and
@@ -966,10 +966,22 @@ def render(number, name, why, body, review=None, dns=None):
 # holds exactly that one CIDR. A ticket asks for either a group or CIDRs, never one
 # standing in for the other, so the case does not occur. plan() still builds them, so
 # every other number keeps its ticket; write() skips them.
-RETIRED = {"RITM0011022", "RITM0011024", "RITM0011047", "RITM0011062"}
+RETIRED = {"RITM0011007", "RITM0011008", "RITM0011016", "RITM0011017", "RITM0011011", "RITM0011018",
+           "RITM0011020", "RITM0011022", "RITM0011024", "RITM0011029", "RITM0011042", "RITM0011047",
+           "RITM0011062", "RITM0012006", "RITM0012011"}
 # Retired 2026-11-13: RITM0011062 named an IP group as an external party's destination.
 # An external party's addresses come only on the approved ticket, as an IP address or
 # prefix; no group or list holds them, so the case does not occur.
+# Retired 2026-11-13: RITM0011007 and RITM0011008 repeated RITM0011006, a new flow in
+# two environments with one rule per site, and tested nothing it does not.
+# Retired 2026-11-13: RITM0011016 and RITM0011017 repeated RITM0011015, and RITM0012011
+# repeated RITM0012010: an HTTPS hostname drafted as one application rule per site.
+# Retired 2026-11-13: RITM0011018 and RITM0011020 repeated RITM0011019, inbound SFTP to the
+# xfer host with one DNAT rule per site.
+# Retired 2026-11-13: RITM0011029 repeated RITM0011028, a DR source on a primary-only ticket,
+# and RITM0011042 repeated RITM0011041, a primary-only add where DR is built.
+# Retired 2026-11-13: RITM0011011 repeated RITM0011010, and RITM0012006 repeated RITM0012007:
+# a new flow in all four environments with DR, eight rules.
 
 # Revised justifications, 2026-10-18. The builder text named the spoke's role, which read
 # as a different service from the AMQPS port asked for.

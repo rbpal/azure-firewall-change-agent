@@ -19,11 +19,17 @@ Put the ticket's addresses into the rule as given, in the ticket's type (STD-COL
 
 The ticket names each destination port. "All ports", or a range wider than ten ports, goes back to the requester for detail.
 
-## RB-01-4 — Choose network or application rule
+## RB-01-4 — Choose the rule for each destination
 
-HTTPS to a named host: an application rule, by FQDN. A URL names its host: the rule uses the URL's hostname and the ticket's port (STD-COLL-03), and the URL, path included, stays on the ticket. Anything else, or HTTPS to a bare IP: a network rule.
+An IP address or CIDR destination: a network rule on the ticket's protocol and ports. HTTP and HTTPS become TCP; every other protocol stays as the ticket gives it.
 
-For every hostname on the ticket, call the `dns_lookup_for_fqdn` tool first. Never judge a hostname yourself. If the tool refuses the URL, escalate under RB-01-6. If it answers `resolves: false`, draft the rule anyway and mark a caution under RB-01-7. Never correct or replace the URL or its hostname, even for an obvious typing mistake: the approved ticket is the scope. Taking the URL's own hostname for the rule is not a change.
+An exact FQDN, or the FQDN extracted from a URL, public or internal: call `dns_lookup_for_fqdn` for it once. Draft network rules whose destinations are the IPv4 addresses (A records) that answer returned, with the ticket's approved sources, transport protocol and ports: HTTP and HTTPS become TCP, and every other protocol stays as the ticket gives it. Copy the addresses as the tool gives them; never add, drop or guess one. Never name the exact FQDN in a rule, never draft an application rule for it, and never replace it with a wildcard domain pattern. The FQDN or URL, path included, stays on the ticket as written. The rule does not follow later DNS changes.
+
+Call `locate_address_for_env_site` on each returned address, then check it as you would the same address on the ticket: an address in the plan must be at the rule's own env-site; one in another environment stops with `env_mismatch`; one in a spoke range nobody owns stops with `planned_address`; a private or shared address outside the plan stops with `address_not_in_plan`. Public addresses and on-prem addresses are allowed. An address at the other site of the same environment stops with `needs_engineer_review`: `routing.yaml` gives each spoke's next hop, its own hub firewall, but records no path between hubs, so it does not establish which firewalls carry that traffic. Name the address and that missing routing fact in the explanation.
+
+A wildcard domain pattern, such as `*.northwind.example`, on an HTTP or HTTPS ticket: an application rule by that pattern, with the caution in RB-01-7 (STD-COLL-02). Do not look it up. On any other protocol it stops with `non_http_to_hostname` (RB-01-6).
+
+If the tool refuses the URL or FQDN, the lookup could not run, the name does not exist, it has no IPv4 address, or a returned address is never allowed (RB-01-6), stop with `dns_lookup_failed`, draft no rules, and explain what the tool answered. The engineer amends, accepts or rejects the ticket. Acceptance alone gives no address: a rule is drafted only from a lookup that succeeds or from an address the engineer puts on the ticket. Never correct or replace the URL or its FQDN yourself, even for an obvious typing mistake.
 
 Check first that no broader network rule already matches. A matching network rule stops evaluation before any application rule runs (STD-COLL-07).
 
@@ -47,17 +53,17 @@ Each item gives the reason code the reply carries when it stops. Every stop carr
 - an internal address, Azure or on-prem, is not in the internal address plan: `address_not_in_plan`. An external party destination is outside the internal plan by design. Use the address the accepted ticket gives (RB-01-2); being outside the internal plan is not, by itself, a reason to stop
 - an address belongs to an environment, an Azure site (primary or DR) or an on-prem location other than the one the ticket gives it: `env_mismatch`. This one code covers all three conflicts. Stop and ask which is intended; never correct the address or the place yourself
 - the ticket's "DR site built" answer disagrees with Azure: DR "Yes" with no DR policy or spoke, or DR "No" with a DR spoke in place: `dr_policy_not_built`. This answer only says whether DR exists; DR is changed only when "Sites to change" selects it
-- the URL is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, or the hostname resolves to a private address: `dns_lookup_failed`
-- non-HTTP traffic to a hostname, which on the Basic SKU means pinning addresses that can change, including a URL on a TCP, UDP, ICMP or Any ticket: `non_http_to_hostname`
+- the URL or FQDN is not valid (`dns_lookup_for_fqdn` refuses it), the lookup could not run, the name does not exist or has no IPv4 address, or a returned address is a "this network" (0.0.0.0/8), loopback, link-local, multicast or reserved address: `dns_lookup_failed`
+- a wildcard domain pattern on a TCP, UDP, ICMP or Any ticket, because a pattern cannot be resolved and a network rule cannot hold one: `non_http_to_hostname`
+- a returned address sits at the other site of the ticket's environment, so the project's routing data does not name every firewall on the path (RB-01-4): `needs_engineer_review`
 - on an HTTP or HTTPS ticket, a URL's scheme is not the ticket's protocol, or it states a port that is not the ticket's one port (STD-COLL-03): `url_port_conflict`
 - `resolve_env_site` cannot give exactly one env-site for a selected environment and site: `env_site_not_found`
 
 ## RB-01-7 — Draft, but mark a caution, when
 
 - the ticket's destination is `*`, `0.0.0.0/0` or a web category
-- the ticket's FQDN has a wildcard, such as `*.northwind.example` (STD-COLL-02)
+- the ticket gives a wildcard domain pattern, such as `*.northwind.example` (STD-COLL-02)
 - any Tier 1 check does not pass
-- the hostname does not resolve (`dns_lookup_for_fqdn` answers `resolves: false`). The engineer has three choices: correct the URL on the ticket and run it again, reject the ticket because the URL may be wrong, or approve anyway with a reason, for example a DNS record the external party creates at go-live. An approval past this caution is written into the PR description
 
 The engineer sees the caution and approves or rejects. The agent does not decide.
 

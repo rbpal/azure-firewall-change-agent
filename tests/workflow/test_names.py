@@ -104,9 +104,11 @@ def test_every_validation_ticket_still_passes_the_name_checks():
 
 
 def test_a_hostname_over_253_characters_is_left_to_the_dns_tool():
-    # RITM0011063: the DNS tool refuses it and the agent stops with dns_lookup_failed (evals/README.md).
-    import yaml
-    t = yaml.safe_load((REPO / "evals" / "requests" / "validation" / "validation_RITM0011063.yaml").read_text())["ticket"]
+    # The ticket RITM0011063 was, rebuilt by the generator: retired from the eval on 2026-11-14, kept as a software test.
+    # Intake passes it; the DNS tool refuses it, and the agent stops with dns_lookup_failed.
+    from evals import make_requests
+    t = next(body for _, number, *_, body, _, _ in make_requests.plan() if number == "RITM0011063")
+    assert "RITM0011063" in make_requests.RETIRED
     assert len(t["destination"][0]["url"]) > 253 and intake_findings(REPO, t) == []
 
 

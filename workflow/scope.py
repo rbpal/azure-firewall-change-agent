@@ -19,12 +19,20 @@ even when they hold the same addresses (STD-COLL-03).
 Every rule must use the ticket's protocol, and its ports must sit inside the
 ticket's ports. A removal must name exactly the ticket's ports, because deleting
 a rule for other traffic was never approved (RB-03-2). An added DNAT rule
-translates to the same port it publishes (RB-02-2). The one documented substitute is HTTPS to
-addresses written as a TCP network rule (RB-01-4). Ports are read the way the
+translates to the same port it publishes (RB-02-2). The one documented substitute: HTTP
+or HTTPS to addresses is written as a TCP network rule (RB-01-4). Ports are read the way the
 ticket schema writes them, so a malformed port is refused, never corrected.
-An added rule names a hostname only as an HTTP or HTTPS application rule: a network
-or other rule to a hostname is refused (RB-01-6 non_http_to_hostname), because this
-project's Basic policy cannot filter a hostname there.
+An exact FQDN on the ticket, a URL's FQDN included, is drafted as a network rule to the
+IPv4 addresses dns_lookup_for_fqdn returned for it; an added rule never names an exact
+FQDN. The addresses are checked against the tool's own answer in the same Foundry response
+(the first successful lookup of that FQDN): each must be in it, and the rule must hold all
+of it. With no such answer, no address is accepted. Each address then passes the scope checks: never a loopback, link-local,
+multicast, reserved or "this network" address; in the plan, at the rule's own env-site,
+or on-prem; a private or shared address outside the plan is refused; an address at the
+other site of the environment is refused, because routing.yaml records no path between
+hubs, so it does not establish which firewalls carry that traffic. Each source must reach
+the rule's firewall as routing.yaml's next hop. A wildcard domain pattern is named only
+in an HTTP or HTTPS application rule (RB-01-6 non_http_to_hostname).
 An added rule is refused when duplicate_rule_check, the agent's own tool, finds an
 existing rule with exactly the same traffic, written the same way (same IP groups,
 or addresses for addresses): the answer is already_allowed (STD-COLL-07, RB-01-1).
@@ -79,6 +87,7 @@ from data_readers.read_addressplan_routing import ROUTING, LocalSource  # noqa: 
 from data_readers.read_env_site_ipgroup import read_ip_groups  # noqa: E402
 from errors import BadArguments  # noqa: E402
 from tools.duplicate_rule_check import _ports, _ports_within, duplicate_rule_check  # noqa: E402  (the agent's own tool, so the two agree)
+from tools.locate_address_for_env_site import locate_address_for_env_site  # noqa: E402  (the agent's own tool, so the two agree)
 from policy.tier1 import open_to_everyone  # noqa: E402  (Tier 1's own STD-COLL-04 test, so the two agree)
 
 REMOVAL_ITEM = "Firewall Rule Removal"
@@ -93,6 +102,11 @@ class ApprovalError(ScopeError):
 
 
 KINDS = {"cidr": "a CIDR", "ip_group": "an IP group", "fqdn": "a hostname"}
+# Never a firewall destination, whatever the plan says: "this network", loopback, link-local, multicast, and
+# reserved space with the broadcast address. Private addresses are not on this list; the plan decides them.
+NEVER_DESTINATIONS = [ipaddress.ip_network(n) for n in
+                      ("0.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "224.0.0.0/4", "240.0.0.0/4")]
+SHARED_SPACE = ipaddress.ip_network("100.64.0.0/10")  # carrier-grade NAT space: internal, so it must be in the plan
 PORT = re.compile(json.loads(SCHEMA_PATH.read_text())["$defs"]["port"]["pattern"])  # a ticket port: 22, 1000-2000 or *
 
 
@@ -171,10 +185,12 @@ def flow_errors(ticket: dict, rule: dict, removal: bool) -> list[str]:
     """Every way one reply rule's protocol or ports differ from the ticket's."""
     errors = []
     want, protocol = ticket["protocol"], str(rule.get("protocol") or "")
-    https_as_network = (want.upper() == "HTTPS" and protocol.upper() == "TCP" and "translated_address" not in rule
-                        and all(_kind(str(d)) != "fqdn" for d in rule.get("destinations") or []))
-    if protocol.upper() != want.upper() and not https_as_network:  # RB-01-4: HTTPS to an address is a TCP network rule
+    to_addresses = "translated_address" not in rule and all(_kind(str(d)) != "fqdn" for d in rule.get("destinations") or [])
+    web_as_network = want.upper() in WEB and protocol.upper() == "TCP" and to_addresses
+    if protocol.upper() != want.upper() and not web_as_network:  # RB-01-4: HTTP or HTTPS to addresses is TCP
         errors.append(f"protocol {protocol or '(none)'} is not the ticket's {want}")
+    elif not removal and want.upper() in WEB and protocol.upper() in WEB and to_addresses and rule.get("destinations"):
+        errors.append(f"protocol {protocol} to addresses: HTTP and HTTPS to addresses become a TCP network rule (RB-01-4)")
     approved, ports = _ports(ticket["ports"]), _port_spans(rule.get("ports"))
     if ports is None:
         errors.append(f"ports {rule.get('ports')!r} are not written as a ticket writes ports (22, 1000-2000 or *)")
@@ -206,15 +222,95 @@ def open_dnat_error(repo: Path, rule: dict) -> str:
             "even when the ticket asks (STD-COLL-04, RB-02-5 open_dnat_source)") if why else ""
 
 
-def hostname_network_error(rule: dict) -> str:
-    """Say why an added rule sends non-HTTP traffic to a hostname (RB-01-6 non_http_to_hostname), or return ''."""
-    if "translated_address" in rule or str(rule.get("protocol") or "").upper() in WEB:
+def fqdn_destination_error(rule: dict) -> str:
+    """Say why an added rule names an exact FQDN, or a wildcard domain pattern outside HTTP or HTTPS, or return ''."""
+    if "translated_address" in rule:
         return ""
     names = [str(d) for d in rule.get("destinations") or [] if _kind(str(d)) == "fqdn"]
-    return (f"{', '.join(names)} is a hostname, but the rule's protocol is {rule.get('protocol') or '(none)'}. "
-            "Only an HTTP or HTTPS application rule may name a hostname; this project's Basic policy cannot "
-            "filter one in a network rule, and resolved addresses can change (RB-01-6 non_http_to_hostname)"
-            ) if names else ""
+    exact = [n for n in names if not n.startswith("*")]
+    if exact:
+        return (f"{', '.join(exact)} is an exact FQDN. It is drafted as a network rule to the IPv4 addresses "
+                "dns_lookup_for_fqdn returned for it, never named in a rule (RB-01-4, STD-COLL-03)")
+    if names and str(rule.get("protocol") or "").upper() not in WEB:
+        return (f"{', '.join(names)} is a wildcard domain pattern, but the rule's protocol is "
+                f"{rule.get('protocol') or '(none)'}. A pattern cannot be resolved, so only an HTTP or HTTPS "
+                "application rule may name it (RB-01-6 non_http_to_hostname)")
+    return ""
+
+
+def _exact_names(entries: list[dict]) -> list[str]:
+    """The ticket's exact FQDN destinations, a URL's FQDN included; wildcard domain patterns are left out."""
+    names = []
+    for a in entries:
+        name = urlsplit(a["url"]).hostname if "url" in a else a.get("fqdn")
+        if isinstance(name, str) and not name.startswith("*"):
+            names.append(name.lower())
+    return names
+
+
+def _host(value: str) -> ipaddress.IPv4Address | None:
+    """The IPv4 address a rule destination names when it is one host (192.0.2.20 or 192.0.2.20/32), else None."""
+    try:
+        net = ipaddress.ip_network(value, strict=True)
+    except ValueError:
+        return None
+    return net.network_address if net.version == 4 and net.prefixlen == 32 else None
+
+
+def _where(repo: Path, value: str) -> dict:
+    """The agent's own location answer for one address or IP group, read from the repo's plan."""
+    return locate_address_for_env_site(None, {"address": value}, LocalSource(Path(repo)))
+
+
+def resolved_address_error(repo: Path, sites: dict, env_site: str, address: str) -> tuple[str, str]:
+    """Where an address resolved from a ticket FQDN sits ("public", "onprem" or "internal"), or why it is out of scope here."""
+    here, ip = sites[env_site], ipaddress.ip_address(address)
+    if any(ip in n for n in NEVER_DESTINATIONS):
+        return "", (f"{address} is a 'this network', loopback, link-local, multicast or reserved address, never a "
+                    "firewall destination (RB-01-6 dns_lookup_failed)")
+    found = _where(repo, address)
+    match = found.get("match")
+    if found.get("no_owner"):
+        return "", f"{address} is {found['no_owner']} (RB-01-6 planned_address)"
+    if match and match.get("location"):
+        return "onprem", ""  # routing.yaml records only the Azure end's hub firewall for on-prem (assumed, not verified)
+    if match:
+        if match["env_site"] == env_site:
+            return "internal", ""
+        if match.get("environment") != here["environment"]:
+            return "", (f"{address} sits in {match['env_site']}, environment {match.get('environment')}, not the "
+                        f"ticket's {here['environment']} (RB-01-6 env_mismatch)")
+        return "", (f"{address} sits at {match['env_site']}, the other site of {here['environment']}. routing.yaml "
+                    f"gives each spoke's next hop, its own hub firewall ({here['firewall']} here), but records no path "
+                    f"between hubs, so it does not establish whether {match['firewall']} also carries this traffic. "
+                    "The engineer must confirm the firewalls on the path before a rule is drafted "
+                    "(RB-01-6 needs_engineer_review)")
+    if ip in SHARED_SPACE or found.get("address_space") != "non_rfc1918":
+        return "", f"{address} is a private or shared address that is not in the internal address plan (RB-01-6 address_not_in_plan)"
+    return "public", ""
+
+
+def source_path_error(repo: Path, sites: dict, env_site: str, source: str, toward: str) -> str:
+    """Say why routing.yaml does not send this source's traffic through the env-site's firewall, or return ''."""
+    here = sites[env_site]
+    found = _where(repo, source)
+    places = (found.get("matches") if "matches" in found else [found["match"]] if found.get("match")
+              else found.get("covers") or [])  # an accepted wider source: the plan ranges it covers
+    if not places:
+        return f"source {source} is not in the address plan, so routing.yaml cannot place its path"
+    for place in places:
+        if place.get("location"):  # on-prem: only toward Azure, where the Azure end's hub firewall inspects it
+            if toward != "internal":
+                return (f"source {source} is on-prem; routing.yaml records no path from on-prem to an address "
+                        "outside Azure, so it does not establish which firewall carries it")
+            continue
+        spoke = (here.get("spokes") or {}).get(place.get("spoke") or "")
+        kind = "internet" if toward == "public" else "private"
+        if place.get("env_site") != env_site or not spoke or spoke.get("next_hop") != here["firewall"] \
+                or kind not in (spoke.get("for") or []):
+            return (f"source {source} does not reach {here['firewall']} as routing.yaml's {kind} next hop for "
+                    f"{env_site}, so this rule is not on its path")
+    return ""
 
 
 class _Before(LocalSource):
@@ -245,7 +341,27 @@ def already_allowed_error(source: LocalSource, rule: dict) -> str:
             "rule is needed: the answer is already_allowed (STD-COLL-07, RB-01-1)") if same else ""
 
 
-def approval_errors(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None) -> list[str]:
+def dns_answer_errors(ticket: dict, rule: dict, resolved: list[str], dns_answers: list[dict] | None) -> list[str]:
+    """Say why a rule's resolved addresses are not exactly the DNS tool's answer for the ticket's FQDNs, or return []."""
+    from workflow.agent import designated_addresses  # imported here: the agent module reads this one
+    names = _exact_names(ticket["destination"])
+    answers = designated_addresses(dns_answers or [])
+    where = f"{rule['env_site']} {rule['name']}"
+    missing = [n for n in names if n not in answers]
+    if missing:
+        return [f"{where}: no successful dns_lookup_for_fqdn answer for {', '.join(missing)} in this draft's response, "
+                "so no address is approved for it; the lookup failed or was not made (RB-01-4 dns_lookup_failed)"]
+    given = {str(_host(v)) for v in resolved}
+    allowed = {a for n in names for a in answers[n]}
+    errors = [f"{where}: destination {a} is not an address dns_lookup_for_fqdn returned for "
+              f"{', '.join(names)} in this draft's response (RB-01-4)" for a in sorted(given - allowed)]
+    errors += [f"{where}: destination {a}, returned by dns_lookup_for_fqdn for {n}, is missing; the rule uses every "
+               "address of that answer (RB-01-4)" for n in names for a in answers[n] if a not in given]
+    return errors
+
+
+def approval_errors(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None,
+                    dns_answers: list[dict] | None = None) -> list[str]:
     """Every reply address, protocol or port the ticket does not approve at that rule's env-site, every open DNAT add, and every add already allowed."""
     sites = yaml.safe_load((Path(repo) / ROUTING).read_text())["env_sites"]
     removal = reply.get("action") == "remove"
@@ -275,12 +391,29 @@ def approval_errors(repo: Path, ticket: dict, reply: dict, base: dict[Path, str]
             checks.append(("translated address", [rule["translated_address"]], ticket["destination"]))
         else:
             checks.append(("destination", rule.get("destinations") or [], ticket["destination"]))
+        names = [] if removal or "translated_address" in rule else _exact_names(ticket["destination"])
+        resolved: list[str] = []
         for side, values, entries in checks:
             approved = _approved(entries, env, site)
-            errors += [f"{rule['env_site']} {rule['name']}: {side} {why}"
-                       for v in values if (why := _not_approved(str(v), approved))]
+            for v in values:
+                why = _not_approved(str(v), approved)
+                if why and side == "destination" and names and _host(str(v)) is not None:
+                    resolved.append(str(v))  # stands for the ticket's FQDN: checked for scope below
+                elif why:
+                    errors.append(f"{rule['env_site']} {rule['name']}: {side} {why}")
+        if names:  # the ticket gives an exact FQDN: the rule holds exactly its DNS answer (empty for a removal or DNAT)
+            errors += dns_answer_errors(ticket, rule, resolved, dns_answers)
+        towards = set()
+        for v in resolved:
+            toward, why = resolved_address_error(repo, sites, rule["env_site"], str(_host(v)))
+            if why:
+                errors.append(f"{rule['env_site']} {rule['name']}: destination {why}")
+            towards.add(toward)
+        for toward in sorted(towards - {""}):
+            errors += [f"{rule['env_site']} {rule['name']}: {why}" for s in rule.get("sources") or []
+                       if (why := source_path_error(repo, sites, rule["env_site"], str(s), toward))]
         errors += [f"{rule['env_site']} {rule['name']}: {why}" for why in flow_errors(ticket, rule, removal)]
-        if not removal and (why := hostname_network_error(rule)):
+        if not removal and (why := fqdn_destination_error(rule)):
             errors.append(f"{rule['env_site']} {rule['name']}: {why}")
         if "translated_address" in rule and not removal and (why := open_dnat_error(repo, rule)):
             errors.append(f"{rule['env_site']} {rule['name']}: {why}")
@@ -296,8 +429,12 @@ def selected_env_sites(repo: Path, ticket: dict) -> set[str]:
     return {by_name[(env, site)] for env, chosen in ticket["change_sites"].items() for site in chosen}
 
 
-def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None) -> list[tuple[Path, str, str]]:
-    """Work out every changed file in memory, starting from `base` texts where given; return (path, new text, key) per rule."""
+def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None,
+                dns_answers: list[dict] | None = None) -> list[tuple[Path, str, str]]:
+    """Work out every changed file in memory, starting from `base` texts where given; return (path, new text, key) per rule.
+
+    dns_answers are the dns_lookup_for_fqdn answers in the agent response that drafted this reply (Call.dns_answers).
+    """
     check_no_bypass(ticket)  # every write path passes here, whatever called it
     if reply.get("outcome") != "draft":
         return []
@@ -310,7 +447,7 @@ def plan_writes(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | N
         raise ScopeError(f"reply changes {sorted(named - scope)}, which the ticket does not select")
     if scope - named:
         raise ScopeError(f"ticket selects {sorted(scope - named)}, but the reply has no rule there")
-    errors = approval_errors(repo, ticket, reply, base)
+    errors = approval_errors(repo, ticket, reply, base, dns_answers)
     if errors:
         raise ApprovalError("reply uses addresses, a protocol or ports the ticket does not approve, or breaks a "
                             "documented scope rule; nothing was written, and the ticket waits for the engineer to edit "
@@ -409,9 +546,9 @@ def write_all(texts: dict[Path, str]) -> None:
                 tmp.unlink()
 
 
-def apply_reply(repo: Path, ticket: dict, reply: dict) -> list[tuple[Path, str]]:
+def apply_reply(repo: Path, ticket: dict, reply: dict, dns_answers: list[dict] | None = None) -> list[tuple[Path, str]]:
     """Write the reply into the selected sites' files only; return (path, key) per rule."""
     check_no_backups(repo)
-    writes = plan_writes(repo, ticket, reply)
+    writes = plan_writes(repo, ticket, reply, dns_answers=dns_answers)
     write_all({path: text for path, text, _ in writes})  # a later rule in the same file holds the latest text
     return [(path, key) for path, _, key in writes]

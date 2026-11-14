@@ -1,6 +1,8 @@
-"""URL destinations: the rule takes the URL's hostname and port; the URL, path and all, stays on the ticket.
+"""URL destinations: the rule takes the addresses the URL's FQDN resolves to, on the ticket's port; the URL stays on the ticket.
 
-RITM0011015 is the case: on 2026-10-25 the drafter (version 3) put the whole URL in the rule. A URL that states a port the ticket's protocol or ports do not give goes back to the engineer.
+RITM0011015 is the case: on 2026-10-25 the drafter (version 3) put the whole URL in the rule. Since 2026-11-14 the
+ticket names https://www.google.com/ and the label takes its addresses from the run's own DNS answer. A URL that
+states a port the ticket's protocol or ports do not give goes back to the engineer.
 Each check here must be able to fail.
 """
 
@@ -11,6 +13,8 @@ import pytest
 
 import workflow.cli as cli
 from evals.least_privilege import score_least_privilege as score
+from evals.run_eval import with_dns
+from evals.stand_in_agents import STUB_ADDRESSES
 from workflow.agent import instructions
 from workflow.scope import ApprovalError, plan_writes
 from workflow.urls import CODE, NON_HTTP, url_conflicts, url_host, url_port
@@ -30,6 +34,13 @@ def v3_reply(number):
     return reply
 
 
+def resolved_label(number):
+    """The label with its destinations_from_dns replaced by the stand-in's documentation addresses, as scoring does."""
+    _, label = request(number)
+    hosts = {r["destinations_from_dns"] for r in label["rules"] if "destinations_from_dns" in r}
+    return with_dns(label, {h: list(STUB_ADDRESSES) for h in hosts})
+
+
 def with_url(url, protocol="HTTPS", ports=("443",)):
     """RITM0011015's ticket with another URL, protocol and ports."""
     t = copy.deepcopy(request(NUMBER)[0])
@@ -42,14 +53,16 @@ def with_url(url, protocol="HTTPS", ports=("443",)):
 def test_the_instructions_say_a_url_gives_its_hostname_and_port_and_the_path_stays_on_the_ticket():
     text = instructions(REPO)
     schema = json.loads((REPO / "data" / "tickets" / "schema.json").read_text())
-    assert "The rule uses its hostname and port; the path stays on the ticket" in json.dumps(schema)
-    assert "- A URL approves its hostname and port, on a destination only." in text  # STD-COLL-03
+    assert "The rule uses the IPv4 addresses DNS returns for its FQDN, on the ticket's port" in json.dumps(schema)
+    assert "- A URL approves the FQDN extracted from it, handled as an exact FQDN, and the ticket's port" in text  # STD-COLL-03
     assert "the rule does not restrict the path" in text
-    assert "Never correct, replace or guess a hostname" in text  # drafter.md
+    assert "Never correct or guess an FQDN or URL" in text  # drafter.md
     assert "`url_port_conflict`" in text  # RB-01-6
-    assert "including a URL on a TCP, UDP, ICMP or Any ticket: `non_http_to_hostname`" in text  # RB-01-6
-    assert "A URL on a TCP, UDP, ICMP or Any ticket is non-HTTP traffic to a hostname (`non_http_to_hostname`" in text
-    assert "as the ticket gives them, except a URL" in text  # drafter.md, the rule's fields
+    assert "a wildcard domain pattern on a TCP, UDP, ICMP or Any ticket" in text  # RB-01-6 non_http_to_hostname
+    assert "Never name the exact FQDN in a rule, never draft an application rule for it" in text  # RB-01-4
+    assert "as the ticket gives them, except an exact FQDN or URL" in text  # drafter.md, the rule's fields
+    assert "HTTP and HTTPS become TCP" in text  # RB-01-4 and STD-COLL-03
+    assert "the hostname does not resolve" not in text  # the old RB-01-7 caution, now a stop
 
 
 # Python: the hostname exactly as the URL writes it; a stated port must agree with the ticket.
@@ -164,7 +177,8 @@ def test_a_draft_write_refuses_a_ticket_with_a_url_port_conflict(repo):
 def test_the_version_3_replies_with_the_whole_url_are_refused_and_the_labelled_hostname_writes(repo, number):
     with pytest.raises(ApprovalError, match="is not on the ticket"):
         plan_writes(repo, request(number)[0], v3_reply(number))
-    assert len(plan_writes(repo, *request(number))) == 2
+    answers = [{"host": "www.google.com", "resolves": True, "a": list(STUB_ADDRESSES)}]  # as the response carries it
+    assert len(plan_writes(repo, request(number)[0], resolved_label(number), dns_answers=answers)) == 2
 
 
 def test_a_corrected_or_substituted_hostname_is_refused(repo):
@@ -179,10 +193,10 @@ def test_a_corrected_or_substituted_hostname_is_refused(repo):
 
 @pytest.mark.parametrize("number", ["RITM0011015"])
 def test_the_scorer_still_fails_the_whole_url_and_now_names_the_labelled_hostname(number):
-    label = request(number)[1]
+    label = resolved_label(number)
     result = score(label, v3_reply(number))
     assert result.result == "fail"
-    host = label["rules"][0]["destinations"][0]
-    assert all(f"the labelled rule approves {host}" in line for line in result.excess)
+    approved = label["rules"][0]["destinations"][0]  # the first address the run's DNS answer gave
+    assert all(f"the labelled rule approves {approved}" in line for line in result.excess)
     assert all("a rule takes a URL's hostname, not the URL" in line for line in result.excess)
     assert score(label, {"outcome": "draft", "rules": copy.deepcopy(label["rules"])}).result == "pass"

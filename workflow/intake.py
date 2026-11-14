@@ -38,9 +38,11 @@ SIDES = ("sources", "destination")
 # may confirm they are right (a "lab floor" is not the lab environment), and the acceptance
 # quotes the discrepancy it covers. skip_approval_requested is never acceptable: a request to
 # bypass the review, an approval or a required check is a mandatory stop that only an edit
-# clears (workflow/bypass.py).
+# clears (workflow/bypass.py). dns_lookup_failed is acceptable so the engineer can have the lookup run again
+# (a name created at go-live, a passing DNS fault); acceptance gives no address, so a rule is drafted only from
+# a lookup that then succeeds (RB-01-4).
 FREE_TEXT_CONFLICT = "free_text_conflict"
-ACCEPTABLE = {"wider_than_plan", "planned_address", "address_not_in_plan", FREE_TEXT_CONFLICT}
+ACCEPTABLE = {"wider_than_plan", "planned_address", "address_not_in_plan", FREE_TEXT_CONFLICT, "dns_lookup_failed"}
 NEEDS_PLANNED = {"planned_address", "address_not_in_plan"}  # accepting these needs the engineer's planned-address record
 
 # ASCII digits only, matched against the whole text: \d would accept other scripts' digits

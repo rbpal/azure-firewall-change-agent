@@ -211,6 +211,7 @@ def _draft_live(repo: Path, record: dict) -> str:
         save_record(repo, record)
         raise Refused(f"{number}: {error}. Nothing was written. Your acceptance is kept; to try again run: "
                       f"fwagent draft {number}") from error
+    record["dns_answers"] = draft.dns_answers  # from the response that drafted this reply; the draft check uses them
     try:
         _apply_reply(draft.worktree, record, draft.reply)
     except BaseException:  # a refused or failed write: the branch goes too, unless it holds someone's edits
@@ -261,9 +262,10 @@ def _unchanged_since_draft(repo: Path, record: dict) -> None:
                       + ", ".join(moved) + ". Undo that edit, or reject and submit again.")
 
 
-def _write_draft(repo: Path, ticket: dict, reply: dict, base: dict[Path, str]) -> tuple[list, dict]:
+def _write_draft(repo: Path, ticket: dict, reply: dict, base: dict[Path, str],
+                 dns_answers: list[dict] | None = None) -> tuple[list, dict]:
     """Write a reply on top of `base` texts; return (written keys, per-file before/after record)."""
-    writes = plan_writes(repo, ticket, reply, base)
+    writes = plan_writes(repo, ticket, reply, base, dns_answers)
     final = {path: text for path, text, _ in writes}
     for path, text in base.items():
         final.setdefault(path, text)  # an old draft's file the new one no longer touches goes back to before
@@ -323,7 +325,7 @@ def _apply_reply(repo: Path, record: dict, reply: dict) -> None:
     """Act on the agent's reply: write a draft, park a stop for the engineer, or note that a rule already allows it."""
     record["reply"] = reply
     if reply["outcome"] == "draft":
-        record["keys"], record["files"] = _write_draft(repo, record["ticket"], reply, {})
+        record["keys"], record["files"] = _write_draft(repo, record["ticket"], reply, {}, record.get("dns_answers"))
         record["status"], record["findings"] = "drafted", []
     elif reply["outcome"] == "stop_and_ask":  # awaiting engineer review, never a rejection
         record["status"] = "awaiting_review"
@@ -468,6 +470,7 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"},
                               **({"agent": source} if source else {})})
     record["review"] = review  # the engineer_review a real agent receives with the ticket
+    record["dns_answers"] = []  # a replayed reply came from no agent response, so no DNS answer approves an address
     record["missing"] = missing
     if missing:
         record["status"] = "awaiting_platform_change"

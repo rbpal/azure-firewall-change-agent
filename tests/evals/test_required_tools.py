@@ -25,10 +25,12 @@ def test_an_open_source_must_be_looked_up_even_when_the_label_lists_no_tools():
     assert missing_tools(ticket, {"tools": []}, [destination, call(LOCATE, address="0.0.0.0/0")]) == []
 
 
-def test_a_non_http_hostname_stop_needs_its_dns_lookup():
-    sources = [call(LOCATE, address="10.102.15.0/24"), call(LOCATE, address="10.103.15.0/24")]
-    assert missing("RITM0011064", *sources) == [DNS]
-    assert missing("RITM0011064", *sources, call(DNS, target="api.tailspin.example")) == []
+def test_a_bare_fqdn_draft_needs_its_dns_lookup():
+    """RITM0011064, HTTPS 443 to www.cnn.com: the rules' addresses come from the lookup, so skipping it fails."""
+    made = [call(LOCATE, address="10.102.15.0/24"), call(LOCATE, address="10.103.15.0/24"),
+            call(DUPLICATE, env_site="stage-eastus2"), call(DUPLICATE, env_site="stage-centralus")]
+    assert missing("RITM0011064", *made) == [DNS]
+    assert missing("RITM0011064", *made, call(DNS, target="www.cnn.com")) == []
 
 
 def test_star_is_exempt_because_the_tool_refuses_it():
@@ -64,10 +66,12 @@ def test_a_dnat_draft_needs_its_port_check_at_every_site():
 
 
 def test_a_labelled_dns_lookup_is_required():
-    request = REQUESTS["RITM0011063"]
+    """RITM0011015 gives a URL: its FQDN must be looked up before the rules can hold its addresses."""
+    request = REQUESTS["RITM0011015"]
     made = [call(LOCATE, address=e["cidr"]) for e in request.ticket["sources"] + request.ticket["destination"] if "cidr" in e]
+    made += [call(DUPLICATE, env_site=t["env_site"]) for t in request.expected["tools"] if t["tool"] == DUPLICATE]
     assert missing_tools(request.ticket, request.expected, made) == [DNS]
-    assert missing_tools(request.ticket, request.expected, made + [call(DNS, target="x")]) == []
+    assert missing_tools(request.ticket, request.expected, made + [call(DNS, target="https://www.google.com/")]) == []
 
 
 class Recording:

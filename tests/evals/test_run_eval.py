@@ -1,4 +1,4 @@
-"""The Tier 2 runner, checked with stand-in agents on the 58 validation tickets. Every check here must be able to fail."""
+"""The Tier 2 runner, checked with stand-in agents on the 56 validation tickets. Every check here must be able to fail."""
 
 import copy
 
@@ -21,6 +21,7 @@ def perfect_except(number, change):
         reply = base(ticket)
         return change(reply) if ticket["number"] == number else reply
 
+    agent.calls = base.calls  # the DNS answers the perfect agent records, so DNS labels score as they do for it
     return agent
 
 
@@ -30,19 +31,19 @@ def result_for(results, number):
 
 
 def test_the_perfect_agent_passes_every_ticket_complete():
-    """58 of 58 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
+    """56 of 56 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
     s = summarise(run(perfect(KEYS)))
-    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (58, 58, 58, 0)
+    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (56, 56, 56, 0)
     assert all(count == 0 for count in s["mistakes"].values())
 
 
 def test_the_always_stop_agent_gives_the_known_baseline():
-    """Always-stop passes 3 stops, gives the wrong reason on 21, and over-abstains on all 34 non-stops."""
+    """Always-stop passes 3 stops, gives the wrong reason on 18, and over-abstains on all 35 non-stops."""
     s = summarise(run(always_stop))
-    assert (s["passed"], s["stops"]) == (3, 24)
-    assert s["mistakes"]["wrong_reason"] == 21
-    assert s["mistakes"]["over_abstain"] == 34
-    assert s["mistakes"]["wrong_outcome"] == 34
+    assert (s["passed"], s["stops"]) == (3, 21)
+    assert s["mistakes"]["wrong_reason"] == 18
+    assert s["mistakes"]["over_abstain"] == 35
+    assert s["mistakes"]["wrong_outcome"] == 35
     assert s["mistakes"]["missed_stop"] == 0
 
 
@@ -64,7 +65,7 @@ def test_the_agent_sees_a_copy_of_the_ticket_and_never_the_answer_key():
 
     # Check outside the agent: the runner turns anything raised inside it into agent_error.
     results = run(spy)
-    assert len(seen) == 58
+    assert len(seen) == 56
     assert seen == [set(r.ticket) for r in REQUESTS]
     # The engineer's decision when the request has one, else the acceptance of a ticket with no findings.
     assert reviews == [review_for(r) for r in REQUESTS]
@@ -72,8 +73,9 @@ def test_the_agent_sees_a_copy_of_the_ticket_and_never_the_answer_key():
     assert {r.number: r.engineer_review for r in load_requests("validation")} == \
         {r.number: r.engineer_review for r in REQUESTS}  # vandalising the copy did not reach the file
     assert not any("agent_error" in r.verdict.mistakes for r in results)
-    assert set(lookups) == {r.number for r in REQUESTS if r.dns} == {"RITM0011069"}
-    assert all(callable(f) and not isinstance(f, dict) for f in lookups.values())  # a resolver, never the dns: block
+    # Since 2026-11-14 no eval ticket fixes a DNS answer: every FQDN is a real public site the tool really resolves.
+    # A dns: block still reaches the agent only as a resolver (test_a_dns_condition_reaches_the_agent_as_a_resolver).
+    assert set(lookups) == {r.number for r in REQUESTS if r.dns} == set()
     assert {r.number: r.expected for r in load_requests("validation")} == before
     assert {r.number: r.expected for r in REQUESTS} == before
 
@@ -90,7 +92,7 @@ def test_a_missing_site_rule_passes_but_is_reported_incomplete():
     assert r.verdict.passed and not r.verdict.complete
     assert r.verdict.incomplete == ["prod-centralus/ledg/allow-ledg-network-rules: rule missing"]
     s = summarise(results)
-    assert (s["passed"], s["complete"], s["incomplete"]) == (58, 57, 1)
+    assert (s["passed"], s["complete"], s["incomplete"]) == (56, 55, 1)
 
 
 def test_a_wider_port_fails_as_too_wide():
@@ -133,17 +135,17 @@ def test_drafting_an_already_allowed_ticket_fails_as_wrong_outcome():
 
 
 def test_a_crash_fails_one_ticket_and_the_run_goes_on():
-    """An exception on one ticket is agent_error there; the other 57 are still scored."""
+    """An exception on one ticket is agent_error there; the other 55 are still scored."""
     def crash(reply):
         """Fail the way a broken agent would."""
         raise RuntimeError("model timed out")
 
     results = run(perfect_except("RITM0011010", crash))
-    assert len(results) == 58
+    assert len(results) == 56
     r = result_for(results, "RITM0011010")
     assert r.verdict.mistakes == ["agent_error"] and r.reply_outcome == "?"
     assert "RuntimeError: model timed out" in r.verdict.detail
-    assert summarise(results)["complete"] == 57
+    assert summarise(results)["complete"] == 55
 
 
 def test_the_test_split_is_sealed(capsys):
@@ -161,7 +163,7 @@ def test_category_rows_add_up_to_the_totals(agent):
     """The by-category table counts every ticket once and matches the headline."""
     s = summarise(run(agent))
     rows = s["by_category"].values()
-    assert sum(total for _, total in rows) == s["tickets"] == 58
+    assert sum(total for _, total in rows) == s["tickets"] == 56
     assert sum(done for done, _ in rows) == s["complete"]
 
 
@@ -187,7 +189,7 @@ def test_first_pass_and_after_review_tickets_are_counted_apart():
     s = summarise(results)
     assert s["after_review"] == (2, 2)
     report = format_report(results, "validation", "perfect")
-    assert "First pass, passed and complete    56 / 56" in report
+    assert "First pass, passed and complete    54 / 54" in report
     assert "After engineer review, passed       2 / 2" in report
 
 
@@ -202,9 +204,9 @@ def test_every_ticket_reaches_the_agent_with_an_acceptance_of_its_exact_version(
 
     run(spy)
     from workflow.intake import ticket_version
-    assert len(reviews) == 58 and None not in reviews.values()
+    assert len(reviews) == 56 and None not in reviews.values()
     first_pass = [r for r in REQUESTS if r.engineer_review is None]
-    assert len(first_pass) == 56
+    assert len(first_pass) == 54
     for r in first_pass:
         review = reviews[r.number]
         assert review["decision"] == "accept" and review["ticket_version"] == ticket_version(r.ticket), r.number
@@ -281,21 +283,42 @@ def test_an_acceptance_for_another_ticket_version_is_refused(tmp_path, monkeypat
         load_requests("validation")
 
 
-@pytest.mark.parametrize("old, new, why", [("exchange.northwind.example: timeout", "other.northwind.example: timeout",
-                                             "it must be a ticket hostname"),
-                                            ("exchange.northwind.example: timeout", "exchange.northwind.example: slow",
-                                             "one of")], ids=["host not on the ticket", "unknown fault"])
-def test_a_dns_condition_must_name_a_ticket_host_and_a_known_fault(tmp_path, monkeypatch, old, new, why):
-    """A dns: block can only shape the lookup of a name the ticket gives, so it cannot smuggle in other answers."""
+def with_dns_block(tmp_path, monkeypatch, block):
+    """A copy of the validation split where RITM0011015 (https://www.google.com/) carries this dns: block."""
     import shutil
     import evals.run_eval as runner
     shutil.copytree(runner.REQUESTS / "validation", tmp_path / "validation")
-    path = tmp_path / "validation" / "validation_RITM0011069.yaml"
-    assert old in path.read_text()
-    path.write_text(path.read_text().replace(old, new))
+    path = tmp_path / "validation" / "validation_RITM0011015.yaml"
+    path.write_text(path.read_text().replace("\nexpected:\n", f"\ndns: {{{block}}}\nexpected:\n", 1))
     monkeypatch.setattr(runner, "REQUESTS", tmp_path)
+
+
+@pytest.mark.parametrize("block, why", [("www.cnn.com: timeout", "it must be a ticket hostname"),
+                                        ("www.google.com: slow", "one of")],
+                         ids=["host not on the ticket", "unknown fault"])
+def test_a_dns_condition_must_name_a_ticket_host_and_a_known_fault(tmp_path, monkeypatch, block, why):
+    """A dns: block can only shape the lookup of a name the ticket gives, so it cannot smuggle in other answers."""
+    with_dns_block(tmp_path, monkeypatch, "www.google.com: timeout")
+    assert [r.number for r in load_requests("validation") if r.dns] == ["RITM0011015"]  # the good block loads
+    with_dns_block(tmp_path / "bad", monkeypatch, block)
     with pytest.raises(ValueError, match=why):
         load_requests("validation")
+
+
+def test_a_dns_condition_reaches_the_agent_as_a_resolver(tmp_path, monkeypatch):
+    """The dns: block itself never reaches the agent; only a resolver built from it does."""
+    with_dns_block(tmp_path, monkeypatch, "www.google.com: timeout")
+    lookups = {}
+
+    def spy(ticket, engineer_review=None, dns_lookup=None):
+        """Record the resolver each ticket gets, then stop."""
+        if dns_lookup is not None:
+            lookups[ticket["number"]] = dns_lookup
+        return {"outcome": "stop_and_ask", "reason": "free_text_conflict", "rules": []}
+
+    run(spy)
+    assert set(lookups) == {"RITM0011015"}
+    assert all(callable(f) and not isinstance(f, dict) for f in lookups.values())
 
 
 def test_reviewed_only_leaves_out_every_pending_label_and_says_so(tmp_path, monkeypatch):
@@ -317,8 +340,10 @@ def test_reviewed_only_leaves_out_every_pending_label_and_says_so(tmp_path, monk
     assert len(results) == len(requests) - len(pending) and not any(r.label_pending for r in results)
 
 
-def test_an_agent_whose_dns_tool_runs_in_azure_does_not_get_a_controlled_dns_request():
-    base = perfect(KEYS)
+def test_an_agent_whose_dns_tool_runs_in_azure_does_not_get_a_controlled_dns_request(tmp_path, monkeypatch):
+    with_dns_block(tmp_path, monkeypatch, "www.google.com: timeout")
+    requests = load_requests("validation")
+    base = perfect({r.number: r.expected for r in requests})
 
     def hosted(ticket, engineer_review=None, dns_lookup=None):
         """Like the hosted drafter: a controlled DNS answer would never reach its tool."""
@@ -326,10 +351,11 @@ def test_an_agent_whose_dns_tool_runs_in_azure_does_not_get_a_controlled_dns_req
         return base(ticket)
 
     hosted.controlled_dns = False
+    hosted.calls = base.calls  # the DNS answers the perfect agent records
     not_run = []
     results = run(hosted, not_run=not_run)
-    assert not_run == [("RITM0011069", "needs a controlled DNS answer the deployed tool cannot get")]
-    assert len(results) == len(REQUESTS) - 1 and not any("agent_error" in r.verdict.mistakes for r in results)
+    assert not_run == [("RITM0011015", "needs a controlled DNS answer the deployed tool cannot get")]
+    assert len(results) == len(requests) - 1 and not any("agent_error" in r.verdict.mistakes for r in results)
 
 
 def test_the_token_budget_stops_the_run_before_the_next_ticket_and_lists_the_rest():
@@ -666,7 +692,7 @@ if sys.argv[1] == "run":
     from evals.stand_in_agents import always_stop, perfect
     keys = {r.number: r.expected for r in runner.load_requests("validation")}
     for agent in (perfect(keys), always_stop):
-        assert len(runner.run(agent)) == 58
+        assert len(runner.run(agent)) == 56
 print("ALL", writes)
 print("SAME", tree() == before and len(before) > 0)
 """
@@ -674,7 +700,7 @@ print("SAME", tree() == before and len(before) > 0)
 
 @pytest.mark.parametrize("mode", ["import", "run"])
 def test_importing_the_runner_and_running_it_writes_no_file(mode, tmp_path):
-    """Watch every file write while the runner is imported, then run over all 58 tickets: none, and no tfvars change."""
+    """Watch every file write while the runner is imported, then run over all 56 tickets: none, and no tfvars change."""
     import os
     import subprocess
     import sys

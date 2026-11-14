@@ -1,7 +1,7 @@
 """Tier 2 runner: give each labelled ticket to an agent, score the reply, print a score sheet.
 
 Example: `uv run --python 3.11 python -m evals.run_eval --agent perfect` reads the
-58 validation files, hands each `ticket:` block to the perfect stand-in agent,
+56 validation files, hands each `ticket:` block to the perfect stand-in agent,
 scores every reply against its `expected:` block and prints the sheet. A ticket
 passes when the outcome word matches, Least-Privilege is pass or not_scored, and
 Abstention is pass. A pass is "complete" only if the draft is not narrower than
@@ -50,7 +50,7 @@ import dns.resolver
 import yaml
 
 from evals.abstention import score_abstention
-from workflow.agent import InfraError, RateLimited
+from workflow.agent import InfraError, RateLimited, designated_addresses
 from workflow.cli import acceptance
 from workflow.intake import ticket_version
 from evals.least_privilege import score_least_privilege
@@ -174,6 +174,19 @@ def controlled_dns(conditions: dict) -> Lookup:
         return Reply(rcode="NXDOMAIN")
 
     return lookup
+
+
+def with_dns(expected: dict, resolved: dict[str, list[str]]) -> dict:
+    """The label with each `destinations_from_dns: FQDN` replaced by the addresses the DNS tool returned in this run."""
+    if not any("destinations_from_dns" in r for r in expected.get("rules") or []):
+        return expected
+    rules = []
+    for rule in expected["rules"]:
+        rule = dict(rule)
+        if "destinations_from_dns" in rule:  # no recorded answer leaves nothing approved, so any address is too wide
+            rule["destinations"] = list(resolved.get(str(rule.pop("destinations_from_dns")).lower(), []))
+        rules.append(rule)
+    return {**expected, "rules": rules}
 
 
 def score_reply(expected: dict, reply: object) -> Verdict:
@@ -300,7 +313,8 @@ def run(agent: Agent, split: str = "validation", allow_test: bool = False, revie
         if kind == "model":
             verdict, outcome = Verdict(mistakes=["agent_error"], detail=[f"{type(error).__name__}: {error}"]), "?"
         else:
-            verdict = score_reply(request.expected, reply)
+            answers = [a for c in _calls(agent)[made:] for a in (getattr(c, "dns_answers", None) or [])]
+            verdict = score_reply(with_dns(request.expected, designated_addresses(answers)), reply)
             recorded = [c.tool_calls for c in _calls(agent)[made:] if c.tool_calls is not None]
             skipped = missing_tools(request.ticket, request.expected, [t for calls in recorded for t in calls]) if recorded else []
             if skipped:

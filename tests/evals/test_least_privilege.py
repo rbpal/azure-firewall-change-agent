@@ -7,6 +7,8 @@ import pytest
 import yaml
 
 from evals.least_privilege import score_least_privilege
+from evals.run_eval import with_dns
+from evals.stand_in_agents import STUB_ADDRESSES
 
 REQUESTS = Path(__file__).resolve().parents[2] / "evals" / "requests"
 DRAFTS = [p for p in sorted(REQUESTS.glob("*/*.yaml")) if yaml.safe_load(p.read_text())["expected"]["outcome"] == "draft"]
@@ -25,8 +27,23 @@ def reply(expected, **changes):
     return out
 
 
+def resolved(expected, addresses=STUB_ADDRESSES):
+    """A DNS label with each destinations_from_dns replaced by these addresses, as the runner does with the run's answer."""
+    hosts = {r["destinations_from_dns"] for r in expected.get("rules") or [] if "destinations_from_dns" in r}
+    return with_dns(expected, {h: list(addresses) for h in hosts})
+
+
+def _app_rule(env_site, source):
+    """One made-up application rule to api.litware.example from lab xfer on HTTPS 443."""
+    return {"env_site": env_site, "spoke": "xfer", "collection": "allow-xfer-app-rules", "name": "https-xfer-to-litwareApi",
+            "sources": [source], "destinations": ["api.litware.example"], "ports": ["443"], "protocol": "HTTPS"}
+
+
 NETWORK = label("1001")  # prod ledg to Proseware, TCP 22, two sites
-HOSTNAME = label("1015")  # lab xfer to api.litware.example, HTTPS 443
+# A made-up label with a hostname in an application rule. Since 2026-11-14 no eval label names an exact FQDN, but
+# the scorer still compares names this way for wildcard domain patterns and removals of existing hostname rules.
+HOSTNAME = {"outcome": "draft", "rules": [_app_rule("lab-eastus2", "10.106.20.0/24"), _app_rule("lab-centralus", "10.107.20.0/24")]}
+RESOLVED = resolved(label("1015"))  # lab xfer to https://www.google.com/: TCP 443 to the run's DNS addresses
 DNAT = label("1019")  # inbound Proseware to the lab and prod xfer SFTP host
 REMOVE_IPG = label("1050")  # removal whose ticket names the IP group the rule uses
 REMOVE_TWO = label("1021")  # removal at both lab sites, CIDR sources
@@ -38,7 +55,7 @@ STOP = label("1030")  # stop_and_ask, env_mismatch
 @pytest.mark.parametrize("path", DRAFTS, ids=lambda p: p.stem)
 def test_every_draft_label_passes_as_its_own_reply(path):
     """A reply equal to the label is not wider, not narrower and removes the right rules."""
-    expected = yaml.safe_load(path.read_text())["expected"]
+    expected = resolved(yaml.safe_load(path.read_text())["expected"])
     score = score_least_privilege(expected, copy.deepcopy(expected))
     assert (score.result, score.excess, score.incomplete, score.removal_mismatch) == ("pass", [], [], [])
 
@@ -150,6 +167,33 @@ def test_an_extra_hostname_fails():
     """A second hostname the ticket never gave is excess access."""
     score = score_least_privilege(HOSTNAME, reply(HOSTNAME, destinations=["api.litware.example", "www.cnn.com"]))
     assert score.result == "fail"
+
+
+# An exact FQDN is scored by the addresses the run's own DNS answer gave: exactly those, by containment.
+
+def test_the_resolved_addresses_pass():
+    score = score_least_privilege(RESOLVED, reply(RESOLVED))
+    assert (score.result, score.excess, score.incomplete) == ("pass", [], [])
+
+
+def test_an_address_the_dns_answer_did_not_give_fails():
+    score = score_least_privilege(RESOLVED, reply(RESOLVED, destinations=[*STUB_ADDRESSES, "192.0.2.99"]))
+    assert score.result == "fail" and any("192.0.2.99" in line for line in score.excess)
+
+
+def test_a_dropped_resolved_address_passes_but_is_incomplete():
+    score = score_least_privilege(RESOLVED, reply(RESOLVED, destinations=STUB_ADDRESSES[:1]))
+    assert score.result == "pass" and any(STUB_ADDRESSES[1] in line for line in score.incomplete)
+
+
+def test_the_fqdn_itself_in_place_of_its_addresses_fails():
+    assert score_least_privilege(RESOLVED, reply(RESOLVED, destinations=["www.google.com"])).result == "fail"
+
+
+def test_with_no_recorded_dns_answer_any_address_is_too_wide():
+    """No successful lookup in the run approves nothing, so a drafted address cannot pass."""
+    empty = with_dns(label("1015"), {})
+    assert score_least_privilege(empty, reply(RESOLVED)).result == "fail"
 
 
 # IP groups are compared by name and never expanded (STD-COLL-03).

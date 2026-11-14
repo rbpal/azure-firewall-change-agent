@@ -1,7 +1,6 @@
 """URL destinations: the rule takes the URL's hostname and port; the URL, path and all, stays on the ticket.
 
-RITM0011015 and RITM0011016 are the cases: on 2026-10-25 the drafter (version 3) put the whole URL in the
-rule. A URL that states a port the ticket's protocol or ports do not give goes back to the engineer.
+RITM0011015 is the case: on 2026-10-25 the drafter (version 3) put the whole URL in the rule. A URL that states a port the ticket's protocol or ports do not give goes back to the engineer.
 Each check here must be able to fail.
 """
 
@@ -161,7 +160,7 @@ def test_a_draft_write_refuses_a_ticket_with_a_url_port_conflict(repo):
         plan_writes(repo, with_url("https://api.litware.example:8443/v1/upload"), reply)
 
 
-@pytest.mark.parametrize("number", ["RITM0011015", "RITM0011016"])
+@pytest.mark.parametrize("number", ["RITM0011015"])
 def test_the_version_3_replies_with_the_whole_url_are_refused_and_the_labelled_hostname_writes(repo, number):
     with pytest.raises(ApprovalError, match="is not on the ticket"):
         plan_writes(repo, request(number)[0], v3_reply(number))
@@ -178,7 +177,7 @@ def test_a_corrected_or_substituted_hostname_is_refused(repo):
 
 # The scorer: the same comparison with the label, and a message that says what it compared.
 
-@pytest.mark.parametrize("number", ["RITM0011015", "RITM0011016"])
+@pytest.mark.parametrize("number", ["RITM0011015"])
 def test_the_scorer_still_fails_the_whole_url_and_now_names_the_labelled_hostname(number):
     label = request(number)[1]
     result = score(label, v3_reply(number))

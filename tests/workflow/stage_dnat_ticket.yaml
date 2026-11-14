@@ -1,5 +1,6 @@
-# Eval request. Synthetic; all names and addresses are fictional.
-# The ticket block is written by evals/make_requests.py; expected is written by hand.
+# Software-test fixture, not an eval request. Synthetic; all names and addresses are fictional.
+# A stage inbound SFTP ticket and its draft, both sites. It was eval request RITM0011020 until
+# 2026-11-13, when that repeat of RITM0011019 left the eval; tests/workflow/test_scope.py edits it.
 id: RITM0011020
 category: inbound-dnat
 why: Inbound SFTP from wingtip to the xfer SFTP host in stage.

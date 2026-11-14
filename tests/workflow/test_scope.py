@@ -252,6 +252,12 @@ def _label(number):
     return data["ticket"], data["expected"]
 
 
+def _stage_dnat_label():
+    """The stage inbound SFTP fixture's ticket and draft: both stage sites, one DNAT rule each."""
+    data = yaml.safe_load((Path(__file__).parent / "stage_dnat_ticket.yaml").read_text())
+    return data["ticket"], data["expected"]
+
+
 @pytest.mark.parametrize("number, wrong", [("RITM0011049", "ipg-ledg-prod-dr"), ("RITM0011050", "10.101.16.0/24")],
                          ids=["CIDR ticket answered with the group", "group ticket answered with the CIDR"])
 def test_a_removal_in_the_other_source_type_is_refused(repo, number, wrong):
@@ -329,7 +335,7 @@ def test_a_source_from_the_other_site_is_refused(repo):
 
 def test_a_dnat_rule_must_translate_to_the_tickets_host(repo):
     """For DNAT the rule's destination is the firewall; the approved internal host is the translated address."""
-    t, e = _label("RITM0011020")
+    t, e = _stage_dnat_label()
     e["rules"][0]["translated_address"] = "10.102.20.99"
     before = snapshot(repo)
     with pytest.raises(ApprovalError, match="translated address 10.102.20.99 is not on the ticket"):
@@ -558,7 +564,7 @@ DNAT_REFUSED = {  # one field of the labelled DNAT rule changed, and the refusal
 
 @pytest.mark.parametrize("change, why", DNAT_REFUSED.values(), ids=DNAT_REFUSED.keys())
 def test_a_dnat_rule_publishes_and_translates_only_the_tickets_port(repo, change, why):
-    t, e = _label("RITM0011020")
+    t, e = _stage_dnat_label()
     e["rules"][0].update(change)
     before = snapshot(repo)
     with pytest.raises(ApprovalError, match=why):
@@ -571,8 +577,8 @@ STAGE_XFER = ["infra/envs/stage-eastus2/firewall_policy_rule_collection_groups/x
 
 
 def dnat_from(ticket_sources, rule_sources, removal=False):
-    """The labelled stage DNAT request (RITM0011020, both sites) with the ticket's and both rules' sources replaced."""
-    t, e = _label("RITM0011020")
+    """The stage DNAT fixture (both sites) with the ticket's and both rules' sources replaced."""
+    t, e = _stage_dnat_label()
     t["sources"] = ticket_sources
     for rule in e["rules"]:
         rule["sources"] = rule_sources
@@ -663,8 +669,8 @@ def test_an_open_source_in_a_network_rule_is_left_to_the_tier1_caution(repo):
 # ------------------------------------------------------------ documented scope rules (register 50.23, items 1-3)
 
 def _stage_dnat(primary_destination, translated):
-    """RITM0011020 (stage DNAT, both sites) with the ticket's primary destination and the primary rule's translated address replaced."""
-    t, e = _label("RITM0011020")
+    """The stage DNAT fixture (both sites) with the ticket's primary destination and the primary rule's translated address replaced."""
+    t, e = _stage_dnat_label()
     t["destination"] = [d for d in t["destination"] if d["site"] != "primary"] + [
         {"environment": "stage", "site": "primary", **d} for d in primary_destination]
     e["rules"][0]["translated_address"] = translated
@@ -831,14 +837,14 @@ def test_a_legacy_dnat_removal_still_matches_the_stored_rule_exactly(repo, ports
 # ---------------------------------------------------------------- inbound DNAT is TCP only (workflow policy, 2026-10-28)
 
 def test_a_tcp_inbound_ticket_has_no_protocol_finding():
-    t, _ = _label("RITM0011020")
+    t, _ = _stage_dnat_label()
     assert intake.intake_findings(REPO, t) == []
 
 
 @pytest.mark.parametrize("protocol, says", [("UDP", "Azure Firewall DNAT can take UDP"),
                                             ("ICMP", "takes TCP or UDP, not 'ICMP'")])
 def test_a_non_tcp_inbound_ticket_goes_back_to_the_engineer_unchanged(protocol, says):
-    t, _ = _label("RITM0011020")
+    t, _ = _stage_dnat_label()
     t["protocol"] = protocol
     before = copy.deepcopy(t)
     [f] = intake.intake_findings(REPO, t)
@@ -852,14 +858,14 @@ def test_a_non_tcp_inbound_ticket_goes_back_to_the_engineer_unchanged(protocol, 
                                     {"sources": [{"environment": "stage", "site": "primary", "cidr": "10.102.20.0/24"}]}],
                          ids=["removal of an inbound rule", "egress ticket"])
 def test_the_tcp_policy_covers_only_new_inbound_requests(change):
-    t, _ = _label("RITM0011020")
+    t, _ = _stage_dnat_label()
     t.update(change, protocol="UDP")
     assert all(f["code"] != "dnat_protocol_not_supported" for f in intake.intake_findings(REPO, t))
 
 
 @pytest.mark.parametrize("rule_protocol", ["UDP", "TCP"], ids=["draft follows the ticket", "draft substitutes TCP"])
 def test_a_udp_inbound_ticket_writes_nothing_even_when_the_draft_says_tcp(repo, rule_protocol):
-    t, e = _label("RITM0011020")
+    t, e = _stage_dnat_label()
     t["protocol"] = "UDP"
     for rule in e["rules"]:
         rule["protocol"] = rule_protocol

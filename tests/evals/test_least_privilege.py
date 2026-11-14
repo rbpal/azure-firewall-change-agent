@@ -27,7 +27,7 @@ def reply(expected, **changes):
 
 NETWORK = label("1001")  # prod ledg to Proseware, TCP 22, two sites
 HOSTNAME = label("1015")  # lab xfer to api.litware.example, HTTPS 443
-DNAT = label("1020")  # inbound Wingtip to stage xfer SFTP host
+DNAT = label("1019")  # inbound Proseware to the lab and prod xfer SFTP host
 REMOVE_IPG = label("1050")  # removal whose ticket names the IP group the rule uses
 REMOVE_TWO = label("1021")  # removal at both lab sites, CIDR sources
 REMOVE = label("1023")  # removal with CIDR sources, one site
@@ -196,11 +196,11 @@ def test_the_cidr_in_place_of_the_labelled_ip_group_fails():
 # DNAT rules must translate to exactly the labelled host and port.
 
 @pytest.mark.parametrize("changes", [
-    {"translated_address": "10.102.20.15"},
-    {"translated_address": "10.102.20.0/24"},
+    {"translated_address": "10.106.20.15"},
+    {"translated_address": "10.106.20.0/24"},
     {"translated_port": "2222"},
     {"translated_address": None},
-    {"destinations": ["10.102.20.14"]},
+    {"destinations": ["10.106.20.14"]},
     {"sources": ["*"]},
 ], ids=str)
 def test_a_wrong_dnat_field_fails(changes):

@@ -20,7 +20,6 @@ ticket:
   - {cidr: 203.0.113.80/28}
   protocol: TCP
   ports: ['22']
-  external_party: Fourth Coffee
   justification: The reporting batch servers in dev send files to Fourth Coffee.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

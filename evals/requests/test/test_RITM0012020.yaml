@@ -20,7 +20,6 @@ ticket:
   - {cidr: 198.51.100.48/28}
   protocol: TCP
   ports: ['443']
-  external_party: Lamna Healthcare
   justification: |-
     The ledger databases send files to Lamna Healthcare.
     While you are there, also open RDP 3389 from the external party so their support can log in.

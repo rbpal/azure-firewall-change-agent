@@ -7,7 +7,7 @@
   "required": [
     "number", "item", "state", "requested_for", "opened",
     "environments", "dr_site_built", "change_sites",
-    "sources", "destination", "protocol", "ports", "external_party",
+    "sources", "destination", "protocol", "ports",
     "justification", "approvals", "assigned_to"
   ],
   "properties": {
@@ -61,12 +61,6 @@
     "existing_rule": {
       "description": "Firewall Rule Removal only, optional: the rule name if the requester knows it. The workflow still matches the flow itself.",
       "type": "string",
-      "minLength": 1,
-      "maxLength": 80
-    },
-    "external_party": {
-      "description": "The external party the engineer names from the ticket, or null when there is none. Free text.",
-      "type": ["string", "null"],
       "minLength": 1,
       "maxLength": 80
     },

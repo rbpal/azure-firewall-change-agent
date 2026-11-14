@@ -29,7 +29,6 @@ ticket:
   - {cidr: 198.51.100.48/28}
   protocol: TCP
   ports: ['587']
-  external_party: Lamna Healthcare
   justification: The sftp and external file transfer in every environment need Lamna Healthcare.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

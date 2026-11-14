@@ -775,7 +775,7 @@ def onprem_to_ledg():
     """A ticket from on-prem users to the dev ledger subnets at both sites, and a draft that names ipg-onprem-primary at each."""
     t = copy.deepcopy(load_ticket(REPO / "data" / "tickets" / "RITM0010042.yaml"))
     t.update(environments=["dev"], dr_site_built={"dev": True}, change_sites={"dev": ["primary", "dr"]},
-             sources=[{"ip_group": "ipg-onprem-primary"}], protocol="TCP", ports=["443"], external_party=None,
+             sources=[{"ip_group": "ipg-onprem-primary"}], protocol="TCP", ports=["443"],
              destination=[{"environment": "dev", "site": site, "cidr": cidr} for site, cidr in LEDG.values()])
     assert ticket_errors(t) == []
     rules = [{"env_site": es, "spoke": "ledg", "collection": "allow-ledg-network-rules", "name": "https-onpremPrimary-to-ledgFs",

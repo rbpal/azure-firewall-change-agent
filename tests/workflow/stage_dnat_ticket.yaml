@@ -21,7 +21,6 @@ ticket:
   - {environment: stage, site: dr, cidr: 10.103.20.14/32}
   protocol: TCP
   ports: ['22']
-  external_party: Wingtip Toys
   justification: Wingtip Toys pushes files to our SFTP server.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

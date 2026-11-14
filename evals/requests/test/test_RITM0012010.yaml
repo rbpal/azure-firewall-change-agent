@@ -20,7 +20,6 @@ ticket:
   - {fqdn: www.amazon.com}
   protocol: HTTPS
   ports: ['443']
-  external_party: null
   justification: The settlement app servers reach www.amazon.com over HTTPS.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

@@ -103,7 +103,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     assert "expected: {outcome: draft}" in path.read_text()
 
 
-def test_draft_requests_never_share_a_spoke_and_external_party_across_splits(generated):
+def test_draft_requests_never_share_a_spoke_and_far_end_across_splits(generated):
     # A near copy in the other split would leak tuning into the test score.
     # Within one split a pair may repeat (the one-sided cases of 2026-10-18).
     seen = {}
@@ -112,12 +112,11 @@ def test_draft_requests_never_share_a_spoke_and_external_party_across_splits(gen
         if request["category"] in STOP_CATEGORIES or request["category"] == "address-not-in-plan":
             continue
         t = request["ticket"]
-        internal = t["destination"] if request["category"] == "inbound-dnat" else t["sources"]
-        first = internal[0]
-        key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"], t["external_party"])
-        if t["external_party"] is None:  # on-prem and spoke-to-spoke flows: the destination tells them apart
-            dest = t["destination"][0]
-            key += (dest.get("cidr") or dest.get("ip_group"),)
+        inbound = request["category"] == "inbound-dnat"
+        first = (t["destination"] if inbound else t["sources"])[0]  # the internal end: its spoke
+        far = (t["sources"] if inbound else t["destination"])[0]  # the other end: its address, group, FQDN or URL
+        key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"],
+               far.get("cidr") or far.get("ip_group") or far.get("fqdn") or far.get("url"))
         split = path.parent.name
         assert seen.get(key, (split,))[0] == split, f"{path.name} repeats {seen[key][1]} from the other split"
         seen.setdefault(key, (split, path.name))

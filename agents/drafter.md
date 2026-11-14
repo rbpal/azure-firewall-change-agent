@@ -27,7 +27,7 @@ One JSON message with two fields:
    - i. Anything else: stop with `direction_unresolved`.
 2. Get every fact from a tool. Never state an address, owner, rule or DNS answer that no tool gave you.
    - `locate_address_for_env_site`: where an address lives (environment, site, spoke, firewall, and the firewall's public IP), or that it is on-prem, outside the plan, wider than its plan range, or owned by no spoke. Outside the plan, it also answers `address_space`. Given an IP group name, it lists every plan range that names the group, with `origin` `azure`, `onprem`, `mixed`, or null when no range does.
-   - `resolve_env_site`: the env-site name, such as `prod-centralus`, for the ticket's environment and Azure site (`primary` or `dr`). Use it for a selected site where the ticket gives no internal address, as with an IP-group source and an external party destination.
+   - `resolve_env_site`: the env-site name, such as `prod-centralus`, for the ticket's environment and Azure site (`primary` or `dr`). Use it for a selected site where the ticket gives no internal address, as with an IP-group source and an external destination.
    - `duplicate_rule_check`: which existing rules already allow a flow at one env-site, and whether each is a `duplicate` (exactly that flow) or `covers` it (allows more).
    - `dnat_port_check`: for an inbound DNAT rule, whether its public port is already published on that env-site's firewall, and by which rule. Call it once per selected env-site with the ticket's protocol and ports.
    - `dns_lookup_for_fqdn`: whether a URL or FQDN is valid and the addresses it resolves to.

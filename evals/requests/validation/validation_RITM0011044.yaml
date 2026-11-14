@@ -19,7 +19,6 @@ ticket:
   - {cidr: 198.51.100.64/28}
   protocol: TCP
   ports: ['22']
-  external_party: Adventure Works
   justification: The reporting batch servers at the stage DR site need Adventure Works for the failover test.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

@@ -19,7 +19,6 @@ ticket:
   - {environment: dev, site: primary, cidr: 10.104.40.0/24}
   protocol: TCP
   ports: ['443']
-  external_party: null
   justification: The dev reporting batch servers will call the new payments servers in 10.104.40.0/24 once they are built.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
@@ -30,7 +29,7 @@ engineer_review:
   decision: accept
   engineer: Jordan Patel
   reason: Payments spoke is planned; policy is prepared ahead of the build.
-  ticket_version: f0d1e16ed16b1bc079c3358333d1d86f42b1b96a6d021de6221b5de2fcc1bf30
+  ticket_version: 112a7cd1dcf87adea8e2c252242e9f5e21fc9849b899b026e5f57d9638289ffd
   accepted: [planned_address]
   planned:
   - {cidr: 10.104.40.0/24, environment: dev, site: primary, firewall_policy: afwp-hub-dev-eastus2, spoke: pymt, placement: rprt}

@@ -23,7 +23,6 @@ ticket:
   - {environment: prod, site: dr, cidr: 10.101.20.14/32}
   protocol: TCP
   ports: ['22']
-  external_party: Proseware
   justification: Proseware pushes files to our SFTP server.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

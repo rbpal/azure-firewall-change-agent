@@ -262,7 +262,6 @@ def egress(net, envs, spoke, code, svc):
         "destination": [{"cidr": net.parties[code]["cidr"]}],
         "protocol": protocol,
         "ports": ports,
-        "external_party": net.parties[code]["name"],
     }
 
 
@@ -336,7 +335,6 @@ def build_fqdn_destination(rng, net, used):
         "destination": [destination],
         "protocol": "HTTPS",
         "ports": ["443"],
-        "external_party": None,  # a public site, not an external party
     }
     return f"HTTPS from {spoke} to {fqdn} in {', '.join(envs)}; DNS gives the rules' addresses.", fields, \
         f"The {net.holds[spoke].lower()} reach {fqdn} over HTTPS."
@@ -359,7 +357,6 @@ def build_inbound_dnat(rng, net, used):
         "destination": destination,
         "protocol": "TCP",
         "ports": ["22"],
-        "external_party": net.parties[code]["name"],
     }
     return f"Inbound SFTP from {code} to the xfer SFTP host in {', '.join(envs)}.", fields, \
         f"{net.parties[code]['name']} pushes files to our SFTP server."
@@ -548,7 +545,6 @@ def onprem_to_spoke(net, env, sites, spoke, sources, svc):
         "destination": [{"environment": env, "site": s, "cidr": net.spoke_cidr[(env, s, spoke)]} for s in sites],
         "protocol": protocol,
         "ports": ports,
-        "external_party": None,
     }
 
 
@@ -590,7 +586,7 @@ def build_onprem_destination(rng, net, used):
         "environments": ["dev"], "dr_site_built": {"dev": net.has_dr("dev", "rprt")}, "change_sites": {"dev": ["primary"]},
         "sources": [{"environment": "dev", "site": "primary", "cidr": net.spoke_cidr[("dev", "primary", "rprt")]}],
         "destination": [{"ip_group": "ipg-onprem-secondary"}],
-        "protocol": protocol, "ports": ports, "external_party": None,
+        "protocol": protocol, "ports": ports,
     }
     return "Dev reporting (primary) to the on-prem secondary users; on-prem is the destination.", fields, \
         "The dev reporting servers push report previews to staff desktops at the on-prem secondary site."
@@ -652,7 +648,7 @@ def build_removal_ip_group_destination(rng, net, used):
         "change_sites": {env: net.sites(env, "rprt")},
         "sources": [{"environment": env, "site": s, "ip_group": f"ipg-rprt-{env}{dr[s]}"} for s in net.sites(env, "rprt")],
         "destination": [{"environment": env, "site": s, "ip_group": f"ipg-xfer-{env}{dr[s]}"} for s in net.sites(env, "xfer")],
-        "protocol": "TCP", "ports": ["22"], "external_party": None, "existing_rule": name,
+        "protocol": "TCP", "ports": ["22"], "existing_rule": name,
     }
     return f"Remove {name} in {env}, both sites; source and destination are IP groups.", fields, \
         "The dev reporting servers no longer upload to the dev file transfer servers."
@@ -702,7 +698,7 @@ def build_planned_spoke(rng, net, used):
         "environments": ["stage"], "dr_site_built": {"stage": net.has_dr("stage", "rprt")}, "change_sites": {"stage": ["primary"]},
         "sources": [{"environment": "stage", "site": "primary", "cidr": net.spoke_cidr[("stage", "primary", "rprt")]}],
         "destination": [{"environment": "stage", "site": "primary", "cidr": "10.102.40.0/24"}],
-        "protocol": protocol, "ports": ports, "external_party": None,
+        "protocol": protocol, "ports": ports,
     }
     return "Stage destination in no spoke: a planned payments spoke.", fields, \
         "The stage reporting servers will read payment summaries from the new payments servers in 10.102.40.0/24."
@@ -736,7 +732,7 @@ def build_accepted_after_review(rng, net, used):
         "environments": [env], "dr_site_built": {env: net.has_dr(env, placement)}, "change_sites": {env: ["primary"]},
         "sources": [{"environment": env, "site": "primary", "cidr": net.spoke_cidr[(env, "primary", placement)]}],
         "destination": [{"environment": env, "site": "primary", "cidr": dest}],
-        "protocol": protocol, "ports": ports, "external_party": None,
+        "protocol": protocol, "ports": ports,
         "_engineer_review": _accept("Payments spoke is planned; policy is prepared ahead of the build.", ["planned_address"],
                                     [_planned(dest, env, policy, "pymt", placement)]),
     }
@@ -755,7 +751,7 @@ def build_dnat_open_source(rng, net, used):
     fields = {
         "environments": ["stage"], "dr_site_built": dr_answers(net, ["stage"], "xfer"), "change_sites": {"stage": ["primary"]},
         "sources": [{"cidr": "0.0.0.0/0"}], "destination": [_xfer_host(net, "stage", "primary")],
-        "protocol": "TCP", "ports": ["22"], "external_party": "Tailspin",
+        "protocol": "TCP", "ports": ["22"],
     }
     return "Inbound SFTP from 0.0.0.0/0 to the stage xfer host: open DNAT is never drafted.", fields, \
         "Tailspin connects from changing cloud addresses, so please allow SFTP from any address."
@@ -767,7 +763,7 @@ def build_dnat_destination_not_one_host(rng, net, used):
         "environments": ["lab"], "dr_site_built": dr_answers(net, ["lab"], "xfer"), "change_sites": {"lab": ["primary"]},
         "sources": [{"cidr": net.parties["proseware"]["cidr"]}],
         "destination": [{"environment": "lab", "site": "primary", "cidr": net.spoke_cidr[("lab", "primary", "xfer")]}],
-        "protocol": "TCP", "ports": ["22"], "external_party": net.parties["proseware"]["name"],
+        "protocol": "TCP", "ports": ["22"],
     }
     return "Inbound SFTP from Proseware to the whole lab xfer /24: a DNAT rule translates to one host.", fields, \
         "Proseware pushes test files to the lab file transfer servers."
@@ -779,7 +775,7 @@ def build_onprem_to_onprem(rng, net, used):
         "environments": ["prod"], "dr_site_built": {"prod": net.has_dr("prod", "sett")}, "change_sites": {"prod": ["primary"]},
         "sources": [{"location": "onprem-primary", "cidr": "172.20.20.0/24"}],
         "destination": [{"location": "onprem-secondary", "cidr": "172.24.12.0/24"}],
-        "protocol": "TCP", "ports": ["443"], "external_party": None,
+        "protocol": "TCP", "ports": ["443"],
     }
     return "Both ends are on-prem subnets: the traffic never crosses an Azure firewall.", fields, \
         "Head office wired users need the contact centre's web console at the secondary data centre."
@@ -830,7 +826,7 @@ def build_fqdn_destination_stage(rng, net, used):
     FQDNs now resolve to network rules, so the ticket became the validation split's bare-FQDN case.
     """
     fields = egress(net, ["stage"], "rprt", "tailspin", "Mq")
-    fields.update(destination=[{"fqdn": PUBLIC_SITES["tailspin"]}], protocol="HTTPS", ports=["443"], external_party=None)
+    fields.update(destination=[{"fqdn": PUBLIC_SITES["tailspin"]}], protocol="HTTPS", ports=["443"])
     return f"HTTPS from rprt to {PUBLIC_SITES['tailspin']} in stage, by bare FQDN; DNS gives the rules' addresses.", \
         fields, f"The stage reporting servers reach {PUBLIC_SITES['tailspin']} over HTTPS."
 
@@ -856,7 +852,7 @@ def build_removal_hub_rule(rng, net, used):
         "environments": [env], "dr_site_built": {env: True}, "change_sites": {env: ["primary"]},
         "sources": [{"environment": env, "site": "primary", "cidr": c} for c in rule["source_addresses"]],
         "destination": [{"environment": env, "site": "primary", "cidr": a} for a in rule["destination_addresses"]],
-        "protocol": "UDP", "ports": ["123"], "external_party": None, "existing_rule": name,
+        "protocol": "UDP", "ports": ["123"], "existing_rule": name,
     }
     return f"Removes {name}, which is in the stage primary hub group, matched exactly.", fields, \
         "The stage spokes now take time from the platform time service, so the hub NTP rule is no longer needed."
@@ -885,7 +881,7 @@ def build_removal_one_site_matches(rng, net, used):
         "environments": [env], "dr_site_built": {env: True}, "change_sites": {env: ["primary", "dr"]},
         "sources": [{"environment": env, "site": s, "cidr": net.spoke_cidr[(env, s, "rprt")]} for s in ("primary", "dr")],
         "destination": [{"environment": env, "site": s, "cidr": net.spoke_cidr[(env, s, "sett")]} for s in ("primary", "dr")],
-        "protocol": "TCP", "ports": ["443"], "external_party": None, "existing_rule": name,
+        "protocol": "TCP", "ports": ["443"], "existing_rule": name,
     }
     return f"Removes {name} at both dev sites; only dev primary has the rule.", fields, \
         "The dev reporting servers no longer call the settlement API, at either site."

@@ -19,7 +19,6 @@ ticket:
   - {ip_group: ipg-onprem-secondary}
   protocol: TCP
   ports: ['443']
-  external_party: null
   justification: The dev reporting servers push report previews to staff desktops at the on-prem secondary site.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

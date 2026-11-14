@@ -20,7 +20,6 @@ ticket:
   - {url: 'https://www.google.com/'}
   protocol: HTTPS
   ports: ['443']
-  external_party: null
   justification: The sftp and external file transfer reach www.google.com over HTTPS.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

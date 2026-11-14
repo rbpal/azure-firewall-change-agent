@@ -90,8 +90,7 @@ BAD = {
     "two approvals": lambda t: t["approvals"].pop(),
     "duplicate approval group": lambda t: t["approvals"][2].update(group="security"),
     "approved ticket with pending approval": lambda t: t["approvals"][0].update(state="pending"),
-    "empty external party": lambda t: t.update(external_party=""),
-    "external party not text": lambda t: t.update(external_party=7),
+    "an external_party field, removed 2026-11-14": lambda t: t.update(external_party="Globex"),
     "unknown field": lambda t: t.update(priority="high"),
     # Temporary rules never come through a ticket, so the fields are refused.
     "temporary field": lambda t: t.update(temporary=True),
@@ -207,7 +206,7 @@ def onprem_to_azure(ticket, source):
     ticket["sources"] = [source]
     ticket["destination"] = [{"environment": "prod", "site": "primary", "cidr": "10.100.17.0/24"}]
     ticket["environments"], ticket["dr_site_built"], ticket["change_sites"] = ["prod"], {"prod": True}, {"prod": ["primary"]}
-    ticket["protocol"], ticket["ports"], ticket["external_party"] = "HTTPS", ["443"], None
+    ticket["protocol"], ticket["ports"] = "HTTPS", ["443"]
     return ticket
 
 
@@ -246,8 +245,9 @@ def test_a_hostname_over_253_characters_passes_intake_but_the_dns_tool_refuses_i
     assert parse_target(f"https://{host[len(label) + 1:]}/v1/upload")[0]  # 209 characters: the tool accepts it
 
 
-@pytest.mark.parametrize("party", ["Globex", "Contoso Logistics", None])
-def test_external_party_is_free_text_or_none(ticket, party):
-    """The engineer names the external party from the ticket; any name, or none, passes the schema."""
-    ticket["external_party"] = party
+@pytest.mark.parametrize("field", ["external_party"])
+def test_a_ticket_with_an_external_party_field_is_refused(ticket, field):
+    """Neither field exists: rules come from the ticket's addresses or the DNS flow, never from a party name."""
     assert ticket_errors(ticket) == []
+    ticket[field] = None
+    assert any(f"'{field}' was unexpected" in e for e in ticket_errors(ticket))

@@ -66,6 +66,7 @@ class Draft:
     branch: str
     worktree: Path
     audit: dict = field(default_factory=dict)
+    dns_answers: list = field(default_factory=list)  # the dns_lookup_for_fqdn answers in the response that drafted reply
 
 
 def remote() -> str:
@@ -181,6 +182,7 @@ def draft_from_main(repo: Path, worktrees: Path, number: str, ticket: dict, revi
                       "marker": {k: marker.get(k) for k in ("ready_at", "deploy_run", "checks", "agent")},
                       "response_id": getattr(call, "response_id", None),
                       "tool_commits": list(getattr(call, "commits", []) or []),
+                      "dns_answers": list(getattr(call, "dns_answers", []) or []),
                       "main_after": after, "relevant_changes": changed[:20],
                       "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
             attempts.append(record)
@@ -194,7 +196,8 @@ def draft_from_main(repo: Path, worktrees: Path, number: str, ticket: dict, revi
                 continue
             return Draft(reply, commit, branch, path, {"attempts": attempts, "branch": branch,
                                                        "worktree": str(path), "main_commit": commit,
-                                                       "snapshot": commit, "agent_version": agent.version})
+                                                       "snapshot": commit, "agent_version": agent.version},
+                         record["dns_answers"])
         except BaseException as error:
             if path.exists():
                 kept: list = []

@@ -4,8 +4,8 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 90 varied tickets, 58 for validation and 32 for test, spread
-over 44 kinds of request, including changes to the primary site only, the DR
+Why: the eval needs 88 varied tickets, 56 for validation and 32 for test, spread
+over 42 kinds of request, including changes to the primary site only, the DR
 site only, or both, IP groups, on-prem users, addresses wider or narrower than
 the plan, planned spokes, requests that resume after an engineer's review, and
 one validation case for each runbook escalation that has its own stop code.
@@ -129,7 +129,7 @@ CATEGORIES = [
     ("onprem-to-onprem", 1, 0),
     ("ip-group-not-found", 1, 0),
     ("url-not-valid", 1, 0),
-    ("non-http-to-hostname", 1, 0),
+    ("fqdn-destination-stage", 1, 0),  # was non-http-to-hostname until 2026-11-14
     ("removal-rule-allows-more", 1, 0),
     ("removal-hub-rule", 1, 0),
     ("removal-asks-ip-group-change", 1, 0),
@@ -307,8 +307,18 @@ def build_dr_not_built_in_some(rng, net, used):
         egress(net, envs, spoke, code, svc), f"The {net.holds[spoke].lower()} need {net.parties[code]['name']}."
 
 
+# Public sites for FQDN and URL tickets (user decision 2026-11-14): a DNS-related ticket names a real site,
+# so the Function App's dns_lookup_for_fqdn returns real addresses. Each external party code keeps the random
+# choices it had, so every other ticket is unchanged; only the destination is this site.
+PUBLIC_SITES = {
+    "northwind": "www.wikipedia.org", "fabrikam": "www.microsoft.com", "woodgrove": "www.cloudflare.com",
+    "litware": "www.google.com", "fourthcoffee": "www.apple.com", "tailspin": "www.cnn.com",
+    "proseware": "www.amazon.com", "lamna": "github.com", "adventureworks": "www.bing.com", "wingtip": "www.mozilla.org",
+}
+
+
 def build_fqdn_destination(rng, net, used):
-    """HTTPS to an external party hostname; one in three gives a pasted URL instead."""
+    """HTTPS 443 to a public site, by FQDN or, one time in three, by its URL: network rules to the resolved addresses."""
     envs = pick_envs(rng, rng.choice([1, 2]))
     options = [
         (spoke, code) for spoke in EGRESS_SPOKES for code in sorted(net.parties)
@@ -316,8 +326,8 @@ def build_fqdn_destination(rng, net, used):
     ]
     spoke, code = rng.choice(options)
     used.add((spoke, code))
-    fqdn = net.parties[code]["fqdn"]
-    destination = {"url": f"https://{fqdn}/v1/upload"} if rng.random() < 1 / 3 else {"fqdn": fqdn}
+    fqdn = PUBLIC_SITES[code]
+    destination = {"url": f"https://{fqdn}/"} if rng.random() < 1 / 3 else {"fqdn": fqdn}
     fields = {
         "environments": envs,
         "dr_site_built": dr_answers(net, envs, spoke),
@@ -326,10 +336,10 @@ def build_fqdn_destination(rng, net, used):
         "destination": [destination],
         "protocol": "HTTPS",
         "ports": ["443"],
-        "external_party": net.parties[code]["name"],
+        "external_party": None,  # a public site, not an external party
     }
-    return f"HTTPS from {spoke} to {fqdn} in {', '.join(envs)}.", fields, \
-        f"The {net.holds[spoke].lower()} call {net.parties[code]['name']}'s API."
+    return f"HTTPS from {spoke} to {fqdn} in {', '.join(envs)}; DNS gives the rules' addresses.", fields, \
+        f"The {net.holds[spoke].lower()} reach {fqdn} over HTTPS."
 
 
 def build_inbound_dnat(rng, net, used):
@@ -813,13 +823,16 @@ def build_dns_lookup_failed(rng, net, used):
         fields, "The lab settlement servers upload files to Northwind's exchange. URL copied from their portal."
 
 
-def build_non_http_to_hostname(rng, net, used):
-    """AMQPS to an external party hostname: non-HTTP traffic to a name (RB-01-6): non_http_to_hostname."""
-    assert not net.exists_anywhere("amqps-rprt-to-tailspinMq", ["stage"], "rprt")
+def build_fqdn_destination_stage(rng, net, used):
+    """HTTPS 443 to a public site's bare FQDN from stage reporting: network rules to the resolved addresses.
+
+    Until 2026-11-14 this was AMQPS (TCP 5671) to a made-up hostname, stopped as non_http_to_hostname. Exact
+    FQDNs now resolve to network rules, so the ticket became the validation split's bare-FQDN case.
+    """
     fields = egress(net, ["stage"], "rprt", "tailspin", "Mq")
-    fields["destination"] = [{"fqdn": net.parties["tailspin"]["fqdn"]}]
-    return "AMQPS (TCP 5671) to a hostname: a network rule would pin addresses that can change.", fields, \
-        "The stage reporting servers publish report events to Tailspin's message broker."
+    fields.update(destination=[{"fqdn": PUBLIC_SITES["tailspin"]}], protocol="HTTPS", ports=["443"], external_party=None)
+    return f"HTTPS from rprt to {PUBLIC_SITES['tailspin']} in stage, by bare FQDN; DNS gives the rules' addresses.", \
+        fields, f"The stage reporting servers reach {PUBLIC_SITES['tailspin']} over HTTPS."
 
 
 def build_removal_rule_allows_more(rng, net, used):
@@ -968,7 +981,10 @@ def render(number, name, why, body, review=None, dns=None):
 # every other number keeps its ticket; write() skips them.
 RETIRED = {"RITM0011007", "RITM0011008", "RITM0011016", "RITM0011017", "RITM0011011", "RITM0011018",
            "RITM0011020", "RITM0011022", "RITM0011024", "RITM0011029", "RITM0011042", "RITM0011047",
-           "RITM0011062", "RITM0012006", "RITM0012011"}
+           "RITM0011062", "RITM0012006", "RITM0012011", "RITM0011063", "RITM0011069"}
+# Retired 2026-11-14: DNS-related tickets name only real public sites, so a fictional name no longer tests
+# anything. RITM0011063 (a 273-character hostname the tool refuses) and RITM0011069 (a lookup that times out)
+# could not keep their purpose with a real site. dns_lookup_failed has no eval ticket now; software tests cover it.
 # Retired 2026-11-13: RITM0011062 named an IP group as an external party's destination.
 # An external party's addresses come only on the approved ticket, as an IP address or
 # prefix; no group or list holds them, so the case does not occur.

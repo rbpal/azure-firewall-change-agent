@@ -84,7 +84,7 @@ from workflow import lifecycle
 from workflow.agent import AgentError, FoundryAgent, snapshot_container
 from workflow.mainline import clean_up, draft_from_main
 from workflow.bypass import BypassRequested, bypass_message, bypass_requests, check_no_bypass
-from workflow.intake import NEEDS_PLANNED, finding, intake_findings, ticket_version
+from workflow.intake import FREE_TEXT_CONFLICT, NEEDS_PLANNED, finding, intake_findings, ticket_version
 from workflow.planned import check_planned, missing_spoke_files
 from workflow.scope import BackupsRemainError, PartialWriteError, check_no_backups, plan_writes, write_all
 from workflow.tfvars_writer import DraftError
@@ -211,6 +211,7 @@ def _draft_live(repo: Path, record: dict) -> str:
         save_record(repo, record)
         raise Refused(f"{number}: {error}. Nothing was written. Your acceptance is kept; to try again run: "
                       f"fwagent draft {number}") from error
+    record["dns_answers"] = draft.dns_answers  # from the response that drafted this reply; the draft check uses them
     try:
         _apply_reply(draft.worktree, record, draft.reply)
     except BaseException:  # a refused or failed write: the branch goes too, unless it holds someone's edits
@@ -261,9 +262,10 @@ def _unchanged_since_draft(repo: Path, record: dict) -> None:
                       + ", ".join(moved) + ". Undo that edit, or reject and submit again.")
 
 
-def _write_draft(repo: Path, ticket: dict, reply: dict, base: dict[Path, str]) -> tuple[list, dict]:
+def _write_draft(repo: Path, ticket: dict, reply: dict, base: dict[Path, str],
+                 dns_answers: list[dict] | None = None) -> tuple[list, dict]:
     """Write a reply on top of `base` texts; return (written keys, per-file before/after record)."""
-    writes = plan_writes(repo, ticket, reply, base)
+    writes = plan_writes(repo, ticket, reply, base, dns_answers)
     final = {path: text for path, text, _ in writes}
     for path, text in base.items():
         final.setdefault(path, text)  # an old draft's file the new one no longer touches goes back to before
@@ -323,7 +325,7 @@ def _apply_reply(repo: Path, record: dict, reply: dict) -> None:
     """Act on the agent's reply: write a draft, park a stop for the engineer, or note that a rule already allows it."""
     record["reply"] = reply
     if reply["outcome"] == "draft":
-        record["keys"], record["files"] = _write_draft(repo, record["ticket"], reply, {})
+        record["keys"], record["files"] = _write_draft(repo, record["ticket"], reply, {}, record.get("dns_answers"))
         record["status"], record["findings"] = "drafted", []
     elif reply["outcome"] == "stop_and_ask":  # awaiting engineer review, never a rejection
         record["status"] = "awaiting_review"
@@ -391,10 +393,19 @@ def edits(record: dict) -> list[dict]:
     return [{k: h.get(k) for k in EDIT_AUDIT} for h in record["history"] if h["action"] == "edit"]
 
 
-def acceptance(version: str, engineer: str, reason: str, accepted=(), planned=(), edit_log=()) -> dict:
+def acceptance(version: str, engineer: str, reason: str, accepted=(), planned=(), edit_log=(), discrepancies=()) -> dict:
     """The engineer's recorded acceptance of one ticket version, as accept saves it and the agent receives it."""
-    return {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": version,
-            "accepted": list(accepted), "planned": list(planned), "edits": list(edit_log)}
+    review = {"decision": "accept", "engineer": engineer, "reason": reason, "ticket_version": version,
+              "accepted": list(accepted), "planned": list(planned), "edits": list(edit_log)}
+    if discrepancies:  # only when accepted: every other acceptance stays exactly as before
+        review["discrepancies"] = list(discrepancies)
+    return review
+
+
+def accepted_discrepancies(findings: list[dict]) -> list[dict]:
+    """The free-text discrepancies an acceptance covers, quoted exactly as the review reported them."""
+    keep = ("code", "where", "message", "matched", "environment", "selected")
+    return [{k: f[k] for k in keep if k in f} for f in findings if f["code"] == FREE_TEXT_CONFLICT]
 
 
 def _refuse_bypass(repo: Path, record: dict, engineer: str | None) -> None:
@@ -444,7 +455,7 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     missing = missing_spoke_files(repo, record["ticket"], planned)
     _start_draft(repo, number)  # one unfinished ticket per engineer, checked before any draft starts
     review = acceptance(record["ticket_version"], engineer, reason, [f["code"] for f in record["findings"]], planned,
-                        edits(record))
+                        edits(record), accepted_discrepancies(record["findings"]))
     live = not missing and reply_path is None and os.environ.get("FWAGENT_PROJECT_ENDPOINT")
     if live:  # save the acceptance before anything can wait or fail, then draft from main
         record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"}})
@@ -459,6 +470,7 @@ def accept(repo: Path, number: str, version: str, engineer: str, reason: str, pl
     record["history"].append({"at": _now(), "action": "accept", **{k: v for k, v in review.items() if k != "edits"},
                               **({"agent": source} if source else {})})
     record["review"] = review  # the engineer_review a real agent receives with the ticket
+    record["dns_answers"] = []  # a replayed reply came from no agent response, so no DNS answer approves an address
     record["missing"] = missing
     if missing:
         record["status"] = "awaiting_platform_change"

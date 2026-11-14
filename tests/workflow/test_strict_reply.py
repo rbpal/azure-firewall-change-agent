@@ -95,7 +95,8 @@ def test_it_stays_under_100_properties_and_5_levels():
 
 @pytest.mark.parametrize("path", VALIDATION, ids=lambda p: p.name)
 def test_every_labelled_validation_answer_fits_the_wrapper_and_comes_back_unchanged(path):
-    expected = yaml.safe_load(path.read_text())["expected"]
+    from evals.stand_in_agents import with_stub_addresses  # an FQDN label holds no addresses; a reply holds the DNS ones
+    expected = with_stub_addresses(yaml.safe_load(path.read_text())["expected"])
     reply = {k: copy.deepcopy(expected[k]) for k in ("outcome", "reason", "action", "rules") if k in expected}
     reply.setdefault("rules", [])
     reply["explanation"] = "Plain words for the engineer."

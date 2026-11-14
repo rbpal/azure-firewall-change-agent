@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from evals.stand_in_agents import STUB_ADDRESSES
 from workflow import intake
 from workflow.scope import BACKUP, ApprovalError, PartialWriteError, ScopeError, apply_reply, selected_env_sites
 from workflow.tfvars_writer import DraftError, parse_rules
@@ -236,10 +237,15 @@ def _draft_labels():
 
 @pytest.mark.parametrize("request_", _draft_labels())
 def test_every_labelled_answer_changes_only_its_selected_files(repo, request_):
-    t, expected = request_["ticket"], request_["expected"]
+    t, expected = request_["ticket"], copy.deepcopy(request_["expected"])
+    answers = []  # an FQDN label holds no addresses: use what the response's lookup would return (documentation range)
+    for rule in expected["rules"]:
+        if "destinations_from_dns" in rule:
+            answers.append({"host": rule.pop("destinations_from_dns"), "resolves": True, "a": list(STUB_ADDRESSES)})
+            rule["destinations"] = list(STUB_ADDRESSES)
     selected = selected_env_sites(repo, t)
     before = snapshot(repo)
-    apply_reply(repo, t, expected)
+    apply_reply(repo, t, expected, dns_answers=answers)
     want = {f"infra/envs/{r['env_site']}/firewall_policy_rule_collection_groups/{r['spoke']}.tfvars"
             for r in expected["rules"]}
     assert changed(before, repo) == want
@@ -431,7 +437,9 @@ ADD_REFUSED = {  # (ticket protocol, ticket ports, reply protocol, reply ports, 
     "TCP for Any": ("Any", ["443"], "TCP", ["443"], "protocol TCP is not the ticket's Any"),
     "HTTPS for TCP": ("TCP", ["443"], "HTTPS", ["443"], "protocol HTTPS is not the ticket's TCP"),
     "HTTP for HTTPS": ("HTTPS", ["443"], "HTTP", ["443"], "protocol HTTP is not the ticket's HTTPS"),
-    "TCP for HTTP": ("HTTP", ["80"], "TCP", ["80"], "protocol TCP is not the ticket's HTTP"),
+    "HTTPS kept for an address": ("HTTPS", ["443"], "HTTPS", ["443"], "HTTP and HTTPS to addresses become a TCP network rule"),
+    "HTTP kept for an address": ("HTTP", ["80"], "HTTP", ["80"], "HTTP and HTTPS to addresses become a TCP network rule"),
+    "UDP for HTTPS": ("HTTPS", ["443"], "UDP", ["443"], "protocol UDP is not the ticket's HTTPS"),
     "no protocol": ("TCP", ["443"], "", ["443"], r"protocol \(none\) is not"),
 }
 
@@ -476,7 +484,8 @@ ADD_ALLOWED = {  # (ticket protocol, ticket ports, reply protocol, reply ports, 
     "Any kept, any case": ("Any", ["443"], "ANY", ["443"], None),
     "ICMP kept": ("ICMP", ["*"], "ICMP", ["*"], None),
     "HTTPS to an address as a TCP network rule (RB-01-4)": ("HTTPS", ["443"], "TCP", ["443"], None),
-    "HTTPS to a hostname kept as HTTPS": ("HTTPS", ["443"], "HTTPS", ["443"], "files.northwind.example"),
+    "HTTP to an address as a TCP network rule (RB-01-4)": ("HTTP", ["80"], "TCP", ["80"], None),
+    "HTTPS to a wildcard domain pattern kept as HTTPS": ("HTTPS", ["443"], "HTTPS", ["443"], "*.northwind.example"),
 }
 
 
@@ -487,10 +496,10 @@ def test_an_add_inside_the_tickets_flow_is_written(repo, t_proto, t_ports, r_pro
     assert changed(before, repo) == {SPOKE_FILE.format(PRIMARY)}
 
 
-def test_https_to_a_hostname_as_a_tcp_rule_is_refused(repo):
-    """RB-01-4 allows TCP only for HTTPS to an address; to a hostname it would be non-HTTP traffic to a name."""
+def test_an_exact_fqdn_named_in_a_tcp_rule_is_refused(repo):
+    """RB-01-4: an exact FQDN becomes the addresses it resolves to; a rule that names the FQDN itself is refused."""
     before = snapshot(repo)
-    with pytest.raises(ApprovalError, match="protocol TCP is not the ticket's HTTPS"):
+    with pytest.raises(ApprovalError, match="files.northwind.example is an exact FQDN"):
         apply_reply(repo, flow_ticket("HTTPS", destination={"fqdn": "files.northwind.example"}),
                     flow_reply("TCP", destination="files.northwind.example"))
     assert changed(before, repo) == set()
@@ -506,26 +515,39 @@ NON_HTTP_TO_HOSTNAME = {  # (ticket and reply protocol, ports): a ticket that na
 
 
 @pytest.mark.parametrize("proto, ports", NON_HTTP_TO_HOSTNAME.values(), ids=NON_HTTP_TO_HOSTNAME.keys())
-def test_non_http_traffic_to_a_hostname_is_refused_even_when_the_ticket_asks(repo, proto, ports):
-    """RITM0011064 on 2026-11-11: the agent drafted TCP 5671 to a hostname; the write must refuse it, not the model."""
+def test_a_rule_naming_an_exact_fqdn_is_refused_on_every_protocol(repo, proto, ports):
+    """RITM0011064 on 2026-11-11 drafted TCP 5671 naming a hostname. The FQDN is drafted as its resolved addresses,
+    so a rule that names it is refused by the write, not left to the model."""
     before = snapshot(repo)
     host = "api.tailspin.example"
-    with pytest.raises(ApprovalError, match=f"{host} is a hostname, but the rule's protocol is {proto}.*"
-                                            "non_http_to_hostname"):
+    with pytest.raises(ApprovalError, match=f"{host} is an exact FQDN"):
         apply_reply(repo, flow_ticket(proto, ports, {"fqdn": host}), flow_reply(proto, ports, host))
     assert changed(before, repo) == set()
 
 
-def test_the_hostname_check_passes_web_rules_addresses_and_dnat():
-    """Only a non-web rule that names a hostname is refused; an HTTP(S) rule, an address and a DNAT rule pass."""
-    from workflow.scope import hostname_network_error
-    host = "api.tailspin.example"
-    assert hostname_network_error({"protocol": "HTTPS", "destinations": [host]}) == ""
-    assert hostname_network_error({"protocol": "http", "destinations": [host]}) == ""
-    assert hostname_network_error({"protocol": "TCP", "destinations": ["203.0.113.80/28", "ipg-onprem-primary"]}) == ""
-    assert hostname_network_error({"protocol": "TCP", "destinations": ["192.0.2.10"], "translated_address": "10.0.0.4"}) == ""
-    assert "non_http_to_hostname" in hostname_network_error({"protocol": "TCP", "destinations": ["10.0.0.0/24", host]})
-    assert "(none)" in hostname_network_error({"destinations": [host]})
+@pytest.mark.parametrize("proto, ports", NON_HTTP_TO_HOSTNAME.values(), ids=NON_HTTP_TO_HOSTNAME.keys())
+def test_a_wildcard_domain_pattern_outside_http_or_https_is_refused(repo, proto, ports):
+    """A pattern cannot be resolved, so outside an HTTP or HTTPS application rule it stops (non_http_to_hostname)."""
+    before = snapshot(repo)
+    pattern = "*.tailspin.example"
+    with pytest.raises(ApprovalError, match=rf"\{pattern} is a wildcard domain pattern, but the rule's protocol is "
+                                            f"{proto}.*non_http_to_hostname"):
+        apply_reply(repo, flow_ticket(proto, ports, {"fqdn": pattern}), flow_reply(proto, ports, pattern))
+    assert changed(before, repo) == set()
+
+
+def test_the_fqdn_check_passes_addresses_patterns_in_web_rules_and_dnat():
+    """An exact FQDN is refused in every rule; a wildcard domain pattern only outside HTTP or HTTPS; addresses and DNAT pass."""
+    from workflow.scope import fqdn_destination_error
+    host, pattern = "api.tailspin.example", "*.tailspin.example"
+    assert fqdn_destination_error({"protocol": "HTTPS", "destinations": [pattern]}) == ""
+    assert fqdn_destination_error({"protocol": "http", "destinations": [pattern]}) == ""
+    assert fqdn_destination_error({"protocol": "TCP", "destinations": ["203.0.113.80/28", "ipg-onprem-primary"]}) == ""
+    assert fqdn_destination_error({"protocol": "TCP", "destinations": ["192.0.2.10"], "translated_address": "10.0.0.4"}) == ""
+    assert "is an exact FQDN" in fqdn_destination_error({"protocol": "HTTPS", "destinations": [host]})
+    assert "is an exact FQDN" in fqdn_destination_error({"protocol": "TCP", "destinations": ["10.0.0.0/24", host]})
+    assert "non_http_to_hostname" in fqdn_destination_error({"protocol": "TCP", "destinations": ["10.0.0.0/24", pattern]})
+    assert "(none)" in fqdn_destination_error({"destinations": [pattern]})
 
 
 REMOVAL_REFUSED = {  # (ticket protocol, ticket ports) for a reply that deletes the TCP 587 rule, and the refusal

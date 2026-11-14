@@ -317,11 +317,21 @@ def test_accept_never_adds_a_site_the_ticket_does_not_select(repo, tmp_path, cap
     assert cli.load_record(repo, ADD)["status"] == "awaiting_review"  # the failed accept left no trace
 
 
-@pytest.mark.parametrize("reason", ["env_mismatch", "free_text_conflict", "address_for_unselected_site"])
+# free_text_conflict is acceptable: the engineer may confirm the fields (tests/workflow/test_free_text.py).
+@pytest.mark.parametrize("reason", ["env_mismatch", "address_for_unselected_site"])
 def test_a_contradiction_needs_an_edit_not_an_accept(repo, tmp_path, reason):
     ticket, reply = stop(tmp_path, reason)
     draft(repo, ticket, reply)
     assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason", "ok", "--reply", label_reply(tmp_path)) == cli.REFUSED
+
+
+def test_a_dns_lookup_failed_stop_can_be_accepted_so_the_lookup_runs_again(repo, tmp_path):
+    """RB-01-4: the engineer may accept a failed lookup (a name created at go-live); acceptance itself gives no address."""
+    ticket, reply = stop(tmp_path, "dns_lookup_failed")
+    assert draft(repo, ticket, reply) == cli.REVIEW
+    assert cli.load_record(repo, ADD)["findings"][0]["acceptable"] is True
+    assert run(repo, "accept", ADD, "--ticket-version", version(repo), "--engineer", ENGINEER, "--reason",
+               "the record exists now; run the lookup again", "--reply", label_reply(tmp_path)) == cli.DONE
 
 
 # direction_unresolved: edit or reject only; the code holds this, not the instructions.

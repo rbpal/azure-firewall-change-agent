@@ -222,7 +222,8 @@ def _label_rules():
     """Every add rule in the validation labels, including those whose collection must be created."""
     out = []
     for p in sorted((REPO / "evals" / "requests" / "validation").glob("*.yaml")):
-        e = yaml.safe_load(p.read_text())["expected"]
+        from evals.stand_in_agents import with_stub_addresses  # an FQDN label's rules take the DNS answer's addresses
+        e = with_stub_addresses(yaml.safe_load(p.read_text())["expected"])
         if e["outcome"] != "draft" or e.get("action") == "remove":
             continue
         for r in e["rules"]:

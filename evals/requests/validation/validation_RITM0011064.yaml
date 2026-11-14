@@ -1,8 +1,8 @@
 # Eval request. Synthetic; all names and addresses are fictional.
 # The ticket block is written by evals/make_requests.py; expected is written by hand.
 id: RITM0011064
-category: non-http-to-hostname
-why: 'AMQPS (TCP 5671) to a hostname: a network rule would pin addresses that can change.'
+category: fqdn-destination-stage
+why: HTTPS from rprt to www.cnn.com in stage, by bare FQDN; DNS gives the rules' addresses.
 ticket:
   number: RITM0011064
   item: Firewall Change Request
@@ -17,34 +17,41 @@ ticket:
   - {environment: stage, site: primary, cidr: 10.102.15.0/24}
   - {environment: stage, site: dr, cidr: 10.103.15.0/24}
   destination:
-  - {fqdn: api.tailspin.example}
-  protocol: TCP
-  ports: ['5671']
-  external_party: Tailspin
-  justification: The stage reporting servers publish report events to Tailspin's message broker.
+  - {fqdn: www.cnn.com}
+  protocol: HTTPS
+  ports: ['443']
+  external_party: null
+  justification: The stage reporting servers reach www.cnn.com over HTTPS.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}
   - {group: project, approver: Dana Brooks, state: approved}
   assigned_to: Jordan Patel
 expected:
-  labelled_against: ce5daf0
+  labelled_against: 2d86bc8
   note: >-
-    AMQPS (TCP 5671) to the hostname api.tailspin.example. RB-01-4 gives an application rule only to HTTPS to a named
-    host; anything else is a network rule. This project's firewall policies are Basic (firewall_policy_sku = "Basic"
-    in dev-eastus2 and dev-centralus; the README records Basic for the project; the stage policies are not yet in
-    code). Microsoft documents that Basic has no DNS proxy and no hostname filtering in network rules. So a network
-    rule here could only hold the name's currently resolved addresses, which can change without notice. RB-01-6 stops:
-    non_http_to_hostname. This is a limit of the Basic SKU this project uses, not of Azure Firewall in general:
-    Standard and Premium filter hostnames in network rules through DNS proxy. Never replace the hostname with resolved
-    IPs. Return the ticket to the engineer for edit or rejection, explaining that this project's Basic firewall policy
-    cannot filter this hostname in a network rule for TCP 5671. Draft nothing. Step 1 requires both sources to be looked up and RB-01-4 requires a DNS lookup of the hostname; the DNS answer does not change this stop. If the agent drafts anyway, the draft check refuses resolved IPs in place of the
-    hostname (STD-COLL-03) and, since 2026-11-11, a network rule that names the hostname (RB-01-6
-    non_http_to_hostname), writes nothing, and the ticket waits for the engineer.
-  outcome: stop_and_ask
-  reason: non_http_to_hostname
-  rules: []
+    Stage, DR built. The ticket gives the bare FQDN www.cnn.com. Until 2026-11-14 this ticket was AMQPS to a made-up hostname and stopped as non_http_to_hostname. The project drafts an exact FQDN as network rules to the IPv4 addresses dns_lookup_for_fqdn returns (RB-01-4, STD-COLL-03): HTTPS becomes TCP, on the ticket's port 443, one rule per selected site with that site's source. The addresses are public, outside the plan, so each site's own hub firewall carries the flow as the source spoke's internet next hop. The label holds no addresses: destinations_from_dns is replaced, when scoring, by the A records of the first successful lookup of that FQDN in the same run. If the lookup fails, the agent stops with dns_lookup_failed, which fails this label as wrong_outcome.
+  outcome: draft
+  rules:
+  - env_site: stage-eastus2
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-rprt-to-cnnWeb
+    sources: [10.102.15.0/24]
+    destinations_from_dns: www.cnn.com
+    ports: ['443']
+    protocol: TCP
+  - env_site: stage-centralus
+    spoke: rprt
+    collection: allow-rprt-network-rules
+    name: https-rprt-to-cnnWeb
+    sources: [10.103.15.0/24]
+    destinations_from_dns: www.cnn.com
+    ports: ['443']
+    protocol: TCP
   tools:
   - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
   - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
-  - {tool: dns_lookup_for_fqdn, target: api.tailspin.example}
+  - {tool: dns_lookup_for_fqdn, target: www.cnn.com}
+  - {tool: duplicate_rule_check, env_site: stage-eastus2}
+  - {tool: duplicate_rule_check, env_site: stage-centralus}

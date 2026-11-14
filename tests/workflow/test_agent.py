@@ -137,7 +137,8 @@ def test_the_first_version_is_created_when_no_agent_exists():
 @pytest.mark.parametrize("path", LABELS, ids=lambda p: p.name)
 def test_every_labelled_answer_fits_the_reply_schema(path):
     """The schema must never refuse a correct answer."""
-    expected = yaml.safe_load(path.read_text())["expected"]
+    from evals.stand_in_agents import with_stub_addresses  # an FQDN label holds no addresses; a reply holds the DNS ones
+    expected = with_stub_addresses(yaml.safe_load(path.read_text())["expected"])
     assert parse_reply(json.dumps(_reply_keys(expected))) == _reply_keys(expected)
 
 

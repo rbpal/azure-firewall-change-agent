@@ -220,6 +220,31 @@ def tool_commits(response) -> list[tuple[str, str | None]]:
     return out
 
 
+def dns_answers(response) -> list[dict]:
+    """Each dns_lookup_for_fqdn answer in the response, in call order, as the Function App returned it; refusals left out."""
+    out = []
+    for item in getattr(response, "output", []) or []:
+        if getattr(item, "type", "") != "mcp_call" or getattr(item, "name", "") != "dns_lookup_for_fqdn":
+            continue
+        try:
+            answer = json.loads(getattr(item, "output", None) or "null")
+        except ValueError:
+            continue
+        if isinstance(answer, dict) and isinstance(answer.get("host"), str) and "error" not in answer:
+            out.append(answer)
+    return out
+
+
+def designated_addresses(answers: list[dict]) -> dict[str, list[str]]:
+    """The IPv4 addresses of the first successful answer per FQDN (lower case); later lookups are kept but never used."""
+    out: dict[str, list[str]] = {}
+    for answer in answers or []:
+        host = str(answer.get("host", "")).lower()
+        if host and host not in out and answer.get("resolves") is True and answer.get("a"):
+            out[host] = [str(a) for a in answer["a"]]
+    return out
+
+
 def tool_calls(response) -> list[dict]:
     """Each MCP tool call the response made: its name and arguments; arguments that are not JSON count as none."""
     out = []
@@ -354,6 +379,7 @@ class Call:
     error: str | None = None
     response_id: str | None = None  # finds the call's trace in Application Insights (gen_ai.response.id)
     raw_reply: str | None = None  # the agent's text when it was not a valid reply, cut to RAW_LIMIT
+    dns_answers: list[dict] = field(default_factory=list)  # dns_lookup_for_fqdn answers, as the tool returned them
 
 
 def connect(endpoint: str):
@@ -466,6 +492,7 @@ class FoundryAgent:
         call.tools = [getattr(item, "name", "?") for item in getattr(response, "output", []) or []
                       if getattr(item, "type", "") == "mcp_call"]
         call.tool_calls = tool_calls(response)
+        call.dns_answers = dns_answers(response)
         read = tool_commits(response)
         call.commits = [c for _, c in read]
         mixed = [f"{name} read {commit or 'no named commit'}" for name, commit in read if commit != self.snapshot]

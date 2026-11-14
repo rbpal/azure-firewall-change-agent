@@ -21,7 +21,7 @@ ticket:
   - {environment: dev, site: dr, cidr: 10.105.14.0/24}
   protocol: TCP
   ports: ['443']
-  partner: null
+  external_party: null
   justification: The dev reporting servers no longer call the settlement API, at either site.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

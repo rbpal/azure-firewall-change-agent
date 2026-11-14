@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.16/28}
   protocol: TCP
   ports: ['5671']
-  partner: Tailspin
+  external_party: Tailspin
   justification: |-
     The reporting batch servers send files to Tailspin.
     The approvers also said to add the same rule in prod. Please include it.

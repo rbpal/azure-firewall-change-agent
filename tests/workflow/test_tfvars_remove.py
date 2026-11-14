@@ -50,7 +50,7 @@ def block(wrapper, name, priority, rules):
 
 def fixture(n=50):
     """A xfer.tfvars with network rules 001..n and application rules 001-009."""
-    network = [entry(f"{i:03d}-sftp-xfer-to-partner{i}", 1000 + i) for i in range(1, n + 1)]
+    network = [entry(f"{i:03d}-sftp-xfer-to-remote{i}", 1000 + i) for i in range(1, n + 1)]
     app = [entry(f"{i:03d}-https-xfer-to-api{i}", i, "app") for i in range(1, 10)]
     return ('xfer = {\n  name                = "xfer"\n  firewall_policy_key = "firewall_policy"\n  priority            = 200\n\n'
             + block("network_rule_collections", "allow-xfer-network-rules", 2000, network) + "\n"
@@ -59,7 +59,7 @@ def fixture(n=50):
 
 def draft_for(i):
     """The removal request for fixture network rule i."""
-    return {"collection": "allow-xfer-network-rules", "name": f"sftp-xfer-to-partner{i}", "sources": ["10.105.20.0/24"],
+    return {"collection": "allow-xfer-network-rules", "name": f"sftp-xfer-to-remote{i}", "sources": ["10.105.20.0/24"],
             "destinations": ["198.51.100.32/28"], "ports": [str(1000 + i)], "protocol": "TCP"}
 
 
@@ -75,7 +75,7 @@ def test_removing_003_of_50_leaves_001_to_049_in_the_same_order():
     before = network(fixture())
     after_text, key = remove_rule(fixture(), "xfer", draft_for(3), "fixture")
     after = network(after_text)
-    assert key == "003-sftp-xfer-to-partner3"
+    assert key == "003-sftp-xfer-to-remote3"
     assert [k[:3] for k, _, _ in after] == [f"{i:03d}" for i in range(1, 50)]
     kept = [r for r in before if r[0] != key]
     assert [(n, p) for _, n, p in after] == [(n, p) for _, n, p in kept]
@@ -85,27 +85,27 @@ def test_removing_the_last_rule_changes_no_other_key():
     """Removing 050 deletes only its own lines."""
     text = fixture()
     after_text, _ = remove_rule(text, "xfer", draft_for(50), "fixture")
-    assert after_text == text.replace(entry("050-sftp-xfer-to-partner50", 1050), "")
+    assert after_text == text.replace(entry("050-sftp-xfer-to-remote50", 1050), "")
 
 
 def test_removing_two_rules_closes_both_gaps():
     """Remove 003, then the rule that was 010 (now 009): the collection runs 001-048."""
     once, _ = remove_rule(fixture(), "xfer", draft_for(3), "fixture")
     twice, key = remove_rule(once, "xfer", draft_for(10), "fixture")
-    assert key == "009-sftp-xfer-to-partner10"
+    assert key == "009-sftp-xfer-to-remote10"
     assert collection_indexes(twice, "xfer", "network") == list(range(1, 49))
-    assert [n for _, n, _ in network(twice)] == [f"sftp-xfer-to-partner{i}" for i in range(1, 51) if i not in (3, 10)]
+    assert [n for _, n, _ in network(twice)] == [f"sftp-xfer-to-remote{i}" for i in range(1, 51) if i not in (3, 10)]
 
 
 def test_renumbering_goes_by_number_not_by_position():
     """In a file listed 001, 003, 002, 004, removing 003 leaves 002 alone and moves 004 to 003."""
-    keys = ["001-sftp-xfer-to-partner1", "003-sftp-xfer-to-partner3", "002-sftp-xfer-to-partner2", "004-sftp-xfer-to-partner4"]
+    keys = ["001-sftp-xfer-to-remote1", "003-sftp-xfer-to-remote3", "002-sftp-xfer-to-remote2", "004-sftp-xfer-to-remote4"]
     rules = [entry(k, 1000 + int(k[:3])) for k in keys]
     text = ('xfer = {\n  name                = "xfer"\n  firewall_policy_key = "firewall_policy"\n  priority            = 200\n\n'
             + block("network_rule_collections", "allow-xfer-network-rules", 2000, rules) + "}\n")
     after_text, _ = remove_rule(text, "xfer", draft_for(3), "fixture")
-    assert [k for k, _, _ in network(after_text)] == ["001-sftp-xfer-to-partner1", "002-sftp-xfer-to-partner2",
-                                                     "003-sftp-xfer-to-partner4"]
+    assert [k for k, _, _ in network(after_text)] == ["001-sftp-xfer-to-remote1", "002-sftp-xfer-to-remote2",
+                                                     "003-sftp-xfer-to-remote4"]
 
 
 def test_other_collections_keep_their_keys():

@@ -20,8 +20,8 @@ ticket:
   - {cidr: 198.51.100.64/28}
   protocol: TCP
   ports: ['22']
-  partner: Adventure Works
-  justification: The sftp and partner file transfer in dev need Adventure Works.
+  external_party: Adventure Works
+  justification: The sftp and external file transfer in dev need Adventure Works.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}

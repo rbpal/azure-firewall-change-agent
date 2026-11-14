@@ -5,7 +5,7 @@ firewall, policy and public IP, read from routing.yaml at the pinned commit.
 
 Why the agent uses it: duplicate_rule_check and every rule need an env-site name,
 and locate_address_for_env_site gives one only for an internal address. A ticket
-whose source is an IP group and whose destination is a partner has no such address,
+whose source is an IP group and whose destination is an external party has no such address,
 so on 2026-10-25 the drafter made up "prod-dr" for RITM0011050. This tool takes the
 ticket's own environment and site fields instead.
 

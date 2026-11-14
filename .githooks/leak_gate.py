@@ -4,7 +4,7 @@
 Blocks a commit or push whose added lines, file names or commit messages
 contain:
 
-1. any term from the local block list (real company, partner and app names,
+1. any term from the local block list (real company, external party and app names,
    real address prefixes, subscription and tenant IDs), and
 2. any GUID other than the all-zero one, and any email address outside the
    reserved example domains.

@@ -60,7 +60,7 @@ def collection(block, name, priority, action, keys, kind):
 
 def spoke_file(dnat=2, network=6, app=9, network_keys=None):
     """A xfer.tfvars with DNAT, network and application collections of the given sizes."""
-    keys = lambda n, svc: [f"{i:03d}-{svc}-xfer-to-partner{i}" for i in range(1, n + 1)]
+    keys = lambda n, svc: [f"{i:03d}-{svc}-xfer-to-remote{i}" for i in range(1, n + 1)]
     parts = ['xfer = {\n  name                = "xfer"\n  firewall_policy_key = "firewall_policy"\n  priority            = 200\n']
     if dnat:
         parts.append(collection("nat_rule_collections", "allow-xfer-dnat-rules", 1000, "Dnat", keys(dnat, "sftp"), "dnat"))

@@ -19,7 +19,7 @@ ticket:
   - {environment: lab, site: primary, cidr: 10.106.20.0/24}
   protocol: TCP
   ports: ['22']
-  partner: Proseware
+  external_party: Proseware
   justification: Proseware pushes test files to the lab file transfer servers.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

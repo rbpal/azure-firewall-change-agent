@@ -200,7 +200,7 @@ def test_live_public_names_resolve(target):
 
 
 @live
-def test_live_fake_partner_name_is_nxdomain():
+def test_live_fake_external_name_is_nxdomain():
     ns = _system_nameserver()
     out = dns_lookup_for_fqdn(None, {"target": "api.northwind.example"}, lookup=dnspython_lookup(ns), resolver_name=ns)
     assert out["rcode"] == "NXDOMAIN" and out["resolves"] is False

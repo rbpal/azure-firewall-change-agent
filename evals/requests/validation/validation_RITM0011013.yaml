@@ -22,7 +22,7 @@ ticket:
   - {cidr: 198.51.100.80/28}
   protocol: TCP
   ports: ['22']
-  partner: Wingtip Toys
+  external_party: Wingtip Toys
   justification: The client portal web front ends need Wingtip Toys.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

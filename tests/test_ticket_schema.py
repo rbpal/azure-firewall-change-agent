@@ -37,9 +37,11 @@ def test_valid_remove_ticket(ticket):
     assert ticket_errors(ticket) == []
 
 
-def test_partner_ip_group_is_valid(ticket):
-    ticket["destination"] = [{"ip_group": "ipg-partner-northwind"}]
-    assert ticket_errors(ticket) == []
+@pytest.mark.parametrize("name", ["ipg-northwind", "ipg-supply-northwind"])
+def test_an_ip_group_for_an_external_party_is_refused(ticket, name):
+    """An external party's addresses come on the ticket as an IP address or prefix, never as a group."""
+    ticket["destination"] = [{"ip_group": name}]
+    assert any("ip_group" in e for e in ticket_errors(ticket))
 
 
 def test_wide_but_well_formed_requests_pass_the_schema(ticket):
@@ -81,7 +83,6 @@ BAD = {
     "IP group with unknown environment": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-sett-uat"}
     ),
-    "partner IP group in capitals": lambda t: t["destination"].__setitem__(0, {"ip_group": "ipg-partner-Northwind"}),
     "port above 65535": lambda t: t.update(ports=["70000"]),
     "port range high to low": lambda t: t.update(ports=["9000-8000"]),
     "port zero": lambda t: t.update(ports=["0"]),
@@ -89,8 +90,8 @@ BAD = {
     "two approvals": lambda t: t["approvals"].pop(),
     "duplicate approval group": lambda t: t["approvals"][2].update(group="security"),
     "approved ticket with pending approval": lambda t: t["approvals"][0].update(state="pending"),
-    "empty partner": lambda t: t.update(partner=""),
-    "partner not text": lambda t: t.update(partner=7),
+    "empty external party": lambda t: t.update(external_party=""),
+    "external party not text": lambda t: t.update(external_party=7),
     "unknown field": lambda t: t.update(priority="high"),
     # Temporary rules never come through a ticket, so the fields are refused.
     "temporary field": lambda t: t.update(temporary=True),
@@ -130,8 +131,6 @@ BAD = {
     "IP group in another environment": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-sett-dev"}),
     "internal IP group with no env-site": lambda t: t["destination"].append({"ip_group": "ipg-sett-prod"}),
-    "partner IP group given an env-site": lambda t: t["destination"].__setitem__(
-        0, {"environment": "prod", "site": "primary", "ip_group": "ipg-partner-northwind"}),
     "on-prem IP group tied to an Azure site": lambda t: t["sources"].__setitem__(
         0, {"environment": "lab", "site": "primary", "ip_group": "ipg-onprem-primary"}),
     "unknown on-prem site": lambda t: t["sources"].__setitem__(0, {"ip_group": "ipg-onprem-tertiary"}),
@@ -189,11 +188,10 @@ def test_unquoted_yaml_timestamp_is_refused(tmp_path):
 
 
 def test_ip_groups_at_their_own_env_site_are_valid(ticket):
-    """An internal group at the site its name says, and a partner group with no env-site, both pass."""
+    """An internal group at the site its name says passes."""
     first = ticket["sources"][0]
     env, site = first["environment"], first["site"]
     ticket["sources"][0] = {"environment": env, "site": site, "ip_group": f"ipg-sett-{env}{'-dr' if site == 'dr' else ''}"}
-    ticket["destination"] = [{"ip_group": "ipg-partner-northwind"}]
     assert ticket_errors(ticket) == []
 
 
@@ -209,7 +207,7 @@ def onprem_to_azure(ticket, source):
     ticket["sources"] = [source]
     ticket["destination"] = [{"environment": "prod", "site": "primary", "cidr": "10.100.17.0/24"}]
     ticket["environments"], ticket["dr_site_built"], ticket["change_sites"] = ["prod"], {"prod": True}, {"prod": ["primary"]}
-    ticket["protocol"], ticket["ports"], ticket["partner"] = "HTTPS", ["443"], None
+    ticket["protocol"], ticket["ports"], ticket["external_party"] = "HTTPS", ["443"], None
     return ticket
 
 
@@ -222,7 +220,7 @@ def test_onprem_source_is_internal_not_inbound(ticket, source):
 
 
 def test_external_source_with_https_is_still_inbound_and_refused(ticket):
-    """The same ticket from a partner range is inbound DNAT, which takes TCP or UDP only."""
+    """The same ticket from an external range is inbound DNAT, which takes TCP or UDP only."""
     assert ticket_errors(onprem_to_azure(ticket, {"cidr": "203.0.113.16/28"})) != []
 
 
@@ -248,8 +246,8 @@ def test_a_hostname_over_253_characters_passes_intake_but_the_dns_tool_refuses_i
     assert parse_target(f"https://{host[len(label) + 1:]}/v1/upload")[0]  # 209 characters: the tool accepts it
 
 
-@pytest.mark.parametrize("partner", ["Globex", "Contoso Logistics", None])
-def test_partner_is_free_text_or_none(ticket, partner):
-    """The engineer names the partner from the ticket; any name, or none, passes the schema."""
-    ticket["partner"] = partner
+@pytest.mark.parametrize("party", ["Globex", "Contoso Logistics", None])
+def test_external_party_is_free_text_or_none(ticket, party):
+    """The engineer names the external party from the ticket; any name, or none, passes the schema."""
+    ticket["external_party"] = party
     assert ticket_errors(ticket) == []

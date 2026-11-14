@@ -20,7 +20,7 @@ Enforced: Tier 1
 Map key: `<index>-<service>-<source>-to-<destination>`. The rule's `name` is the key without the index.
 
 - `<service>` is the lower-case service or protocol, such as `https`, `ssh` or `sftp`.
-- `<source>` and `<destination>` are lowerCamelCase: a spoke code, a spoke plus a role, or a partner plus a system. Hub rules use `spokes` as the source. On-prem users are `onpremPrimary` or `onpremSecondary`, after the data centre, or `onprem` when the rule names both.
+- `<source>` and `<destination>` are lowerCamelCase: a spoke code, a spoke plus a role, or an external party plus a system. Hub rules use `spokes` as the source. On-prem users are `onpremPrimary` or `onpremSecondary`, after the data centre, or `onprem` when the rule names both.
 
 Examples: `024-https-sett-to-northwindFs`, `001-https-sett-to-northwindApi`, `001-sftp-northwind-to-xferSftp`, `005-https-onpremPrimary-to-portFs`
 
@@ -38,7 +38,6 @@ Enforced: Tier 1
 ## STD-NAME-04 — IP groups
 
 Internal: `ipg-<spoke>-<env>[-dr]`, such as `ipg-sett-prod` or `ipg-sett-dev-dr`.
-Partner: `ipg-partner-<partner>`, such as `ipg-partner-northwind`.
 On-prem users: `ipg-onprem-primary` and `ipg-onprem-secondary`, the wired, wireless and VPN user subnets at the on-prem primary and on-prem secondary data centres. Each exists in every env-site with the same members. "Primary" and "secondary" name the on-prem site; they do not tie the group to the Azure primary or DR site.
 
 IP groups are created through their own approval process, never through a rule request.

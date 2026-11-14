@@ -19,7 +19,7 @@ ticket:
   - {cidr: 198.51.100.80/28}
   protocol: TCP
   ports: ['587']
-  partner: Wingtip Toys
+  external_party: Wingtip Toys
   justification: The settlement app servers at the prod primary site no longer use Wingtip Toys.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

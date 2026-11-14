@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.16/28}
   protocol: TCP
   ports: ['5671']
-  partner: Tailspin
+  external_party: Tailspin
   justification: The settlement app servers no longer use Tailspin in lab.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

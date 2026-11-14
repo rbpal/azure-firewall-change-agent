@@ -19,7 +19,7 @@ ticket:
   - {cidr: 198.51.100.80/28}
   protocol: TCP
   ports: ['443']
-  partner: Wingtip Toys
+  external_party: Wingtip Toys
   justification: The reporting batch servers in dev send files to Wingtip Toys. DR follows later.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

@@ -60,15 +60,14 @@ def dnat_protocol_problem(ticket: dict) -> str:
         why = (f"Azure Firewall DNAT takes TCP or UDP, not {protocol!r}, and this workflow drafts new inbound "
                "DNAT rules for TCP only (workflow policy)")
     return (f"This inbound ticket asks for {protocol}. {why}. The workflow will not change the protocol. "
-            "Edit the ticket to TCP if the partner connects over TCP, or reject it.")
+            "Edit the ticket to TCP if the external party connects over TCP, or reject it.")
 
 
 def _ip_group_errors(where: str, address: dict) -> list[str]:
-    """An internal group must sit at the env-site its name says; partner and on-prem groups have no env-site."""
+    """An internal group must sit at the env-site its name says; an on-prem group has no env-site."""
     name = address["ip_group"]
-    if name.startswith(("ipg-partner-", "ipg-onprem-")):  # usable at any selected Azure site
-        kind = "partner" if name.startswith("ipg-partner-") else "on-prem"
-        return [f"{where}: {kind} group {name} is outside every env-site, so it takes no environment or site"] \
+    if name.startswith("ipg-onprem-"):  # usable at any selected Azure site
+        return [f"{where}: on-prem group {name} is outside every env-site, so it takes no environment or site"] \
             if "environment" in address else []
     env, dr = name.split("-")[2], name.endswith("-dr")
     if "environment" not in address:

@@ -23,7 +23,7 @@ ticket:
   - {cidr: 203.0.113.16/28}
   protocol: TCP
   ports: ['22']
-  partner: Northwind Traders
+  external_party: Northwind Traders
   justification: The ledger databases need Northwind Traders's service in lab and prod.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

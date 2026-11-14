@@ -29,7 +29,7 @@ ticket:
   - {cidr: 203.0.113.80/28}
   protocol: TCP
   ports: ['5671']
-  partner: Fourth Coffee
+  external_party: Fourth Coffee
   justification: The ledger databases in every environment need Fourth Coffee.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

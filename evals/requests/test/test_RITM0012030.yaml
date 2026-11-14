@@ -21,7 +21,7 @@ ticket:
   - {environment: dev, site: dr, ip_group: ipg-xfer-dev-dr}
   protocol: TCP
   ports: ['22']
-  partner: null
+  external_party: null
   justification: The dev reporting servers no longer upload to the dev file transfer servers.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

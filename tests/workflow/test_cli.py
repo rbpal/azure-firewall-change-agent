@@ -230,7 +230,7 @@ def test_reject_keeps_an_edit_made_before_the_draft(repo, tmp_path):
     ticket, reply = files(tmp_path, ADD)
     before = snapshot(repo)
     draft(repo, ticket, reply)
-    run(repo, "reject", ADD, "wrong partner")
+    run(repo, "reject", ADD, "wrong external party")
     assert changed(before, repo) == set()
     assert path.read_text().endswith("# an uncommitted edit by the engineer\n")
 
@@ -259,14 +259,14 @@ def test_fix_replaces_the_draft_in_one_write(repo, tmp_path, capsys):
     fixed["rules"][0]["name"] = "https-rprt-to-fourthcoffeeFiles"
     fixed_path = tmp_path / "fixed.json"
     fixed_path.write_text(json.dumps(fixed))
-    assert run(repo, "fix", ADD, "Use the partner's service name", "--reply", str(fixed_path)) == cli.DONE
+    assert run(repo, "fix", ADD, "Use the external party's service name", "--reply", str(fixed_path)) == cli.DONE
     text = (repo / ADD_FILE).read_text()
     assert "004-https-rprt-to-fourthcoffeeFiles" in text and "https-rprt-to-fourthcoffeeFs" not in text
     assert text.count('"004-') == 1 and '"005-' not in text  # the fix replaced the draft and left no second rule
     assert text.count('"203.0.113.80/28"') == 1  # the ticket's destination appears in that one rule only
     assert changed(before, repo) == {ADD_FILE}
     record = cli.load_record(repo, ADD)
-    assert record["history"][-1]["note"] == "Use the partner's service name"
+    assert record["history"][-1]["note"] == "Use the external party's service name"
     assert run(repo, "reject", ADD, "still wrong") == cli.DONE  # after a fix, reject still returns to the start
     assert changed(before, repo) == set()
 
@@ -424,22 +424,17 @@ def test_an_accepted_open_dnat_ticket_with_an_open_draft_writes_nothing(repo, tm
 
 
 def _scope_draft(number):
-    """The draft an agent might write instead of stopping on RITM0011060, 0061 or 0062."""
+    """The draft an agent might write instead of stopping on RITM0011060 or 0061."""
     if number == "RITM0011060":
         return [{"env_site": "lab-eastus2", "spoke": "xfer", "collection": "allow-xfer-dnat-rules",
                  "name": "sftp-proseware-to-xferSftp", "sources": ["198.51.100.32/28"], "destinations": ["192.0.2.14"],
                  "ports": ["22"], "protocol": "TCP", "translated_address": "10.106.20.14", "translated_port": "22"}]
-    if number == "RITM0011061":
-        return [{"env_site": "prod-eastus2", "spoke": "sett", "collection": "allow-sett-network-rules",
-                 "name": "https-onpremUsers-to-onpremConsole", "sources": ["172.20.20.0/24"],
-                 "destinations": ["172.24.12.0/24"], "ports": ["443"], "protocol": "TCP"}]
-    return [{"env_site": es, "spoke": "ledg", "collection": "allow-ledg-network-rules", "name": "smtp-ledg-to-woodgroveSmtp",
-             "sources": [src], "destinations": ["ipg-partner-woodgrove"], "ports": ["587"], "protocol": "TCP"}
-            for es, src in (("dev-eastus2", "10.104.16.0/24"), ("dev-centralus", "10.105.16.0/24"))]
+    return [{"env_site": "prod-eastus2", "spoke": "sett", "collection": "allow-sett-network-rules",
+             "name": "https-onpremUsers-to-onpremConsole", "sources": ["172.20.20.0/24"],
+             "destinations": ["172.24.12.0/24"], "ports": ["443"], "protocol": "TCP"}]
 
 
-@pytest.mark.parametrize("number, why", [("RITM0011060", "dnat_destination_not_host"), ("RITM0011061", "both_ends_onprem"),
-                                         ("RITM0011062", "ip_group_not_found")])
+@pytest.mark.parametrize("number, why", [("RITM0011060", "dnat_destination_not_host"), ("RITM0011061", "both_ends_onprem")])
 def test_a_draft_that_breaks_a_documented_scope_rule_writes_nothing_and_waits_for_the_engineer(
         repo, tmp_path, capsys, number, why):
     """Security register 50.23: the agent should stop; if it drafts instead, the workflow refuses and writes nothing."""

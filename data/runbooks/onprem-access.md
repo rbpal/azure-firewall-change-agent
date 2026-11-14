@@ -1,7 +1,7 @@
 # RB-05 — On-prem access request
 
 Use for: on-prem users reach an Azure workload, or an Azure workload reaches on-prem users. The on-prem side is an on-prem CIDR with its `location`, or the IP group `ipg-onprem-primary` or `ipg-onprem-secondary`.
-Do not use for: a partner (use RB-01 or RB-02) or removing a rule (use RB-03).
+Do not use for: an external party (use RB-01 or RB-02) or removing a rule (use RB-03).
 
 ## RB-05-1 — Find where each address lives
 

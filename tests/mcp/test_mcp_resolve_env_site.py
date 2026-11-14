@@ -55,7 +55,7 @@ def test_every_env_site_in_routing_resolves_from_its_own_environment_and_site(en
 
 
 def test_prod_dr_is_prod_centralus():
-    # RITM0011050: prod DR only, an IP-group source and a partner destination, so no address to locate.
+    # RITM0011050: prod DR only, an IP-group source and an external destination, so no address to locate.
     out = call("prod", "dr")
     assert out["match"]["env_site"] == "prod-centralus" and out["match"]["firewall"] == "afw-hub-prod-centralus"
     assert out["source"]["files"] == [ROUTING]

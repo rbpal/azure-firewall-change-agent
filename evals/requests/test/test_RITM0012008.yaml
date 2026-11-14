@@ -22,7 +22,7 @@ ticket:
   - {cidr: 203.0.113.48/28}
   protocol: TCP
   ports: ['587']
-  partner: Woodgrove Bank
+  external_party: Woodgrove Bank
   justification: The client portal web front ends need Woodgrove Bank.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

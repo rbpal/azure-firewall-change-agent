@@ -31,16 +31,19 @@ STOP_REASONS = {
 CODED_2026_10_21 = {  # the escalations that had no code, each with a validation case
     "open_dnat_source", "dnat_destination_not_host",  # RB-02-5
     "both_ends_onprem",  # RB-05-5
-    "ip_group_not_found", "dns_lookup_failed", "non_http_to_hostname",  # RB-01-6
+    "dns_lookup_failed", "non_http_to_hostname",  # RB-01-6
     "rule_allows_more", "hub_rule", "ip_group_change_requested", "partial_site_match",  # RB-03-5
 }
 STOP_REASONS |= CODED_2026_10_21
 CODED_2026_10_25 = {  # coded after the v3 validation run; no validation case yet (a label change, reported apart)
     "url_port_conflict", "env_site_not_found",  # RB-01-6
     "dnat_protocol_not_supported",  # RB-02-5
-    "partner_not_listed", "rule_shared_with_partner",  # RB-04-5, which also uses hub_rule
+    "rule_shared_with_another_party",  # RB-04-4, which also uses hub_rule
 }
 STOP_REASONS |= CODED_2026_10_25
+# RB-01-6 still lists ip_group_not_found for one of our own groups. Its validation case, RITM0011062,
+# was retired on 2026-11-13: it named an IP group for an external party, which never happens.
+STOP_REASONS |= {"ip_group_not_found"}
 RUNBOOKS = make_requests.REPO / "data" / "runbooks"
 RULE_FIELDS = {"env_site", "spoke", "collection", "name", "sources", "destinations", "ports", "protocol"}
 DNAT_FIELDS = RULE_FIELDS | {"translated_address", "translated_port"}  # inbound rules also name the internal host
@@ -65,7 +68,7 @@ def test_script_writes_the_planned_mix(generated):
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation - retired[name], name
         assert counts[("test", name)] == n_test, name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 68
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 67
     assert sum(v for (split, _), v in counts.items() if split == "test") == 34
 
 
@@ -90,11 +93,11 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 102
+    assert written == [] and len(kept) == 101
     assert "expected: {outcome: draft}" in path.read_text()
 
 
-def test_draft_requests_never_share_a_spoke_and_partner_across_splits(generated):
+def test_draft_requests_never_share_a_spoke_and_external_party_across_splits(generated):
     # A near copy in the other split would leak tuning into the test score.
     # Within one split a pair may repeat (the one-sided cases of 2026-10-18).
     seen = {}
@@ -105,8 +108,8 @@ def test_draft_requests_never_share_a_spoke_and_partner_across_splits(generated)
         t = request["ticket"]
         internal = t["destination"] if request["category"] == "inbound-dnat" else t["sources"]
         first = internal[0]
-        key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"], t["partner"])
-        if t["partner"] is None:  # on-prem and spoke-to-spoke flows: the destination tells them apart
+        key = (first["cidr"].split(".")[2] if "cidr" in first else first["ip_group"], t["external_party"])
+        if t["external_party"] is None:  # on-prem and spoke-to-spoke flows: the destination tells them apart
             dest = t["destination"][0]
             key += (dest.get("cidr") or dest.get("ip_group"),)
         split = path.parent.name
@@ -131,8 +134,8 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
     assert len(found) >= 2, f"{item} with {scope} scope: {found}"
 
 
-def test_there_are_102_committed_requests():
-    assert len(COMMITTED) == 102
+def test_there_are_101_committed_requests():
+    assert len(COMMITTED) == 101
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)

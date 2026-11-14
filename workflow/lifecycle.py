@@ -289,7 +289,7 @@ def summary(record: dict | None, ticket: dict | None) -> str:
     src = ", ".join(str(s.get("cidr") or s.get("ip_group") or s) for s in t.get("sources", []))
     dst = ", ".join(str(d.get("cidr") or d.get("fqdn") or d) for d in t.get("destination", []))
     return (f"{t.get('number')}: {', '.join(t.get('environments', []))} {src} to {dst} "
-            f"{t.get('protocol', '')} {','.join(map(str, t.get('ports', [])))} ({t.get('partner') or 'no partner'})").strip()
+            f"{t.get('protocol', '')} {','.join(map(str, t.get('ports', [])))} ({t.get('external_party') or 'no external party'})").strip()
 
 
 # ------------------------------------------------------------ the merge in Azure's snapshot

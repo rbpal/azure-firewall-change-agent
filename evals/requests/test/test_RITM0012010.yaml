@@ -20,7 +20,7 @@ ticket:
   - {fqdn: api.proseware.example}
   protocol: HTTPS
   ports: ['443']
-  partner: Proseware
+  external_party: Proseware
   justification: The settlement app servers call Proseware's API.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

@@ -20,7 +20,7 @@ ticket:
   - {cidr: 203.0.113.16/28}
   protocol: TCP
   ports: ['587']
-  partner: Northwind Traders
+  external_party: Northwind Traders
   justification: Needed in stage before the stage release next week. Northwind Traders confirmed.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

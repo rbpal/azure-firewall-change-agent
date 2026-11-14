@@ -20,7 +20,7 @@ ticket:
   - {cidr: 203.0.113.16/28}
   protocol: TCP
   ports: ['5671']
-  partner: Northwind Traders
+  external_party: Northwind Traders
   justification: The settlement app servers need Northwind Traders in lab.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

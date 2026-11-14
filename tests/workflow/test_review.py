@@ -257,7 +257,7 @@ def test_a_contradiction_needs_an_edit_not_an_accept(repo, tmp_path, reason):
 # direction_unresolved: edit or reject only; the code holds this, not the instructions.
 
 UNRESOLVED = {"outcome": "stop_and_ask", "reason": "direction_unresolved", "rules": [],
-              "explanation": "ipg-partner-northwind answered origin null, so the plan cannot say which way the traffic flows."}
+              "explanation": "the destination IP group answered origin null, so the plan cannot say which way the traffic flows."}
 
 
 def test_a_direction_unresolved_stop_is_not_acceptable_and_keeps_the_tool_evidence(repo, tmp_path, capsys):

@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.64/28}
   protocol: TCP
   ports: ['443']
-  partner: Adventure Works
+  external_party: Adventure Works
   justification: The settlement app servers need Adventure Works.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

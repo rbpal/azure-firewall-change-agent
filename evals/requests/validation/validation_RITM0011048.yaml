@@ -19,7 +19,7 @@ ticket:
   - {cidr: 198.51.100.48/28}
   protocol: TCP
   ports: ['443']
-  partner: Lamna Healthcare
+  external_party: Lamna Healthcare
   justification: The prod DR site no longer sends to Lamna Healthcare.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

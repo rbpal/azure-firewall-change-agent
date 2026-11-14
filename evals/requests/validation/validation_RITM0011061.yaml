@@ -19,7 +19,7 @@ ticket:
   - {location: onprem-secondary, cidr: 172.24.12.0/24}
   protocol: TCP
   ports: ['443']
-  partner: null
+  external_party: null
   justification: Head office wired users need the contact centre's web console at the secondary data centre.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.48/28}
   protocol: TCP
   ports: ['22']
-  partner: Lamna Healthcare
+  external_party: Lamna Healthcare
   justification: The client portal web front ends in stage send files to Lamna Healthcare.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

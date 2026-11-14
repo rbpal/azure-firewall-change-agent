@@ -20,7 +20,7 @@ ticket:
   - {url: 'https://api.adventureworks.example/v1/upload'}
   protocol: HTTPS
   ports: ['443']
-  partner: Adventure Works
+  external_party: Adventure Works
   justification: The settlement app servers call Adventure Works's API.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

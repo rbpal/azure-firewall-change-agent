@@ -19,7 +19,7 @@ ticket:
   - {cidr: 198.51.100.64/28}
   protocol: TCP
   ports: ['5671']
-  partner: Adventure Works
+  external_party: Adventure Works
   justification: The new dev payments servers in 10.104.40.0/24 go live next sprint and send to Adventure Works.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

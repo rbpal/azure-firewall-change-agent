@@ -20,7 +20,7 @@ ticket:
   - {environment: stage, site: dr, cidr: 10.103.20.14/32}
   protocol: TCP
   ports: ['22']
-  partner: Wingtip Toys
+  external_party: Wingtip Toys
   justification: Wingtip Toys pushes files to our SFTP server.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
@@ -31,7 +31,7 @@ expected:
   labelled_against: 6110060
   note: >-
     Inbound: one DNAT rule per destination site. The destination is that site's hub firewall public IP
-    from routing.yaml, never from the ticket (STD-COLL-06); the partner connects on the ticket's port,
+    from routing.yaml, never from the ticket (STD-COLL-06); the external party connects on the ticket's port,
     translated to the same port on the SFTP host. Stage xfer has no DNAT collection yet: code creates it
     (decided 2026-10-13). Port 22 is not yet published on either stage firewall.
   outcome: draft

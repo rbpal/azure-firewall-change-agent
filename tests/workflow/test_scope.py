@@ -270,7 +270,7 @@ def typed_ticket(side, kind):
     if side == "source" and kind == "ip_group":
         t["sources"] = [{"environment": "prod", "site": "primary", "ip_group": "ipg-sett-prod"}]
     if side == "destination" and kind == "ip_group":
-        t["destination"] = [{"ip_group": "ipg-partner-northwind"}]
+        t["destination"] = [{"ip_group": "ipg-onprem-primary"}]
     assert ticket_errors(t) == []
     return t
 
@@ -278,7 +278,7 @@ def typed_ticket(side, kind):
 SWAPS = {  # (side, ticket type, value the reply uses instead)
     "source: CIDR approved, group used": ("source", "cidr", "ipg-sett-prod"),
     "source: group approved, CIDR used": ("source", "ip_group", SOURCE[PRIMARY]),
-    "destination: CIDR approved, group used": ("destination", "cidr", "ipg-partner-northwind"),
+    "destination: CIDR approved, group used": ("destination", "cidr", "ipg-onprem-primary"),
     "destination: group approved, CIDR used": ("destination", "ip_group", NORTHWIND["destinations"][0]),
 }
 
@@ -294,10 +294,9 @@ def test_an_unapproved_type_swap_is_refused(repo, side, kind, value):
 
 
 @pytest.mark.parametrize("side, field, group", [("source", "source_ip_groups", "ipg-sett-prod"),
-                                                ("destination", "destination_ip_groups", "ipg-partner-northwind")])
+                                                ("destination", "destination_ip_groups", "ipg-onprem-primary")])
 def test_a_group_the_ticket_names_is_written_as_a_group(repo, side, field, group):
     """The positive case: the ticket names the group, the reply uses it, and the file gets it as an IP group."""
-    add_ip_group(repo, "ipg-partner-northwind", ["203.0.113.16/28"], [PRIMARY])  # no env-site has a partner group yet
     r = reply([PRIMARY])
     r["rules"][0]["sources" if side == "source" else "destinations"] = [group]
     apply_reply(repo, typed_ticket(side, "ip_group"), r)
@@ -598,14 +597,12 @@ OPEN_DNAT = {  # (ticket sources, reply sources): the ticket approves each, and 
     "host bits 8.8.8.8/0": ([{"cidr": "0.0.0.0/0"}], ["8.8.8.8/0"]),
     "two halves": ([{"cidr": "0.0.0.0/1"}, {"cidr": "128.0.0.0/1"}], ["0.0.0.0/1", "128.0.0.0/1"]),
     "hostname *": ([{"fqdn": "*"}], ["*"]),
-    "IP group holding every address": ([{"ip_group": "ipg-partner-anyone"}], ["ipg-partner-anyone"]),
 }
 
 
 @pytest.mark.parametrize("t_sources, r_sources", OPEN_DNAT.values(), ids=OPEN_DNAT.keys())
 def test_an_open_dnat_add_is_refused_even_when_the_ticket_asks(repo, t_sources, r_sources):
     """Security register 50.21: STD-COLL-04 blocks however the open source is written, and nothing is written."""
-    add_ip_group(repo, "ipg-partner-anyone", ["0.0.0.0/1", "128.0.0.0/1"])
     t, e = dnat_from(t_sources, r_sources)
     before = snapshot(repo)
     with pytest.raises(ApprovalError, match=r"source is open to everyone: .*\(STD-COLL-04, RB-02-5 open_dnat_source\)"):
@@ -623,16 +620,14 @@ def test_an_ipv6_open_source_is_refused_not_a_crash(repo):
 
 
 RESTRICTED_DNAT = {  # (ticket sources, reply sources): restricted, so the draft is written
-    "the partner's range": ([{"cidr": "198.51.100.80/28"}], ["198.51.100.80/28"]),
+    "the external range": ([{"cidr": "198.51.100.80/28"}], ["198.51.100.80/28"]),
     "narrower than the ticket": ([{"cidr": "198.51.100.80/28"}], ["198.51.100.80/29"]),
     "half of every address (a caution, RB-02-6)": ([{"cidr": "0.0.0.0/1"}], ["0.0.0.0/1"]),
-    "partner IP group": ([{"ip_group": "ipg-partner-wingtip"}], ["ipg-partner-wingtip"]),
 }
 
 
 @pytest.mark.parametrize("t_sources, r_sources", RESTRICTED_DNAT.values(), ids=RESTRICTED_DNAT.keys())
 def test_a_dnat_add_with_a_restricted_source_is_written(repo, t_sources, r_sources):
-    add_ip_group(repo, "ipg-partner-wingtip", ["198.51.100.80/28"])
     t, e = dnat_from(t_sources, r_sources)
     before = snapshot(repo)
     apply_reply(repo, t, e)
@@ -730,34 +725,53 @@ def test_an_on_prem_source_to_an_azure_destination_is_still_written(repo):
     assert len(changed(before, repo)) == len({r["env_site"] for r in e["rules"]})
 
 
-def woodgrove(env_sites=("dev-eastus2", "dev-centralus")):
-    """RITM0011062's ticket and a draft that names ipg-partner-woodgrove at each dev site."""
-    t, _ = _label("RITM0011062")
-    src = {"dev-eastus2": "10.104.16.0/24", "dev-centralus": "10.105.16.0/24"}
-    rules = [{"env_site": es, "spoke": "ledg", "collection": "allow-ledg-network-rules", "name": "smtp-ledg-to-woodgroveSmtp",
-              "sources": [src[es]], "destinations": ["ipg-partner-woodgrove"], "ports": ["587"], "protocol": "TCP"}
-             for es in env_sites]
+def drop_ip_group(root, key, env_sites):
+    """Delete one IP group from the named env-sites' ip-groups.tfvars in the copy."""
+    for env_site in env_sites:
+        path = root / "infra" / "envs" / env_site / "ip-groups.tfvars"
+        lines, out, skip = path.read_text().splitlines(keepends=True), [], False
+        for line in lines:
+            skip = skip or line.strip() == f"{key} = {{"
+            if not skip:
+                out.append(line)
+            elif line.strip() == "}":
+                skip = False
+        assert len(out) < len(lines), (env_site, key)
+        path.write_text("".join(out))
+
+
+LEDG = {"dev-eastus2": ("primary", "10.104.16.0/24"), "dev-centralus": ("dr", "10.105.16.0/24")}
+
+
+def onprem_to_ledg():
+    """A ticket from on-prem users to the dev ledger subnets at both sites, and a draft that names ipg-onprem-primary at each."""
+    t = copy.deepcopy(load_ticket(REPO / "data" / "tickets" / "RITM0010042.yaml"))
+    t.update(environments=["dev"], dr_site_built={"dev": True}, change_sites={"dev": ["primary", "dr"]},
+             sources=[{"ip_group": "ipg-onprem-primary"}], protocol="TCP", ports=["443"], external_party=None,
+             destination=[{"environment": "dev", "site": site, "cidr": cidr} for site, cidr in LEDG.values()])
+    assert ticket_errors(t) == []
+    rules = [{"env_site": es, "spoke": "ledg", "collection": "allow-ledg-network-rules", "name": "https-onpremPrimary-to-ledgFs",
+              "sources": ["ipg-onprem-primary"], "destinations": [cidr], "ports": ["443"], "protocol": "TCP"}
+             for es, (_, cidr) in LEDG.items()]
     return t, {"outcome": "draft", "rules": rules}
 
 
-@pytest.mark.parametrize("held_at, missing_at", [((), ["dev-eastus2", "dev-centralus"]), (("dev-eastus2",), ["dev-centralus"])],
+@pytest.mark.parametrize("missing_at", [["dev-eastus2", "dev-centralus"], ["dev-centralus"]],
                          ids=["at no site", "at the primary only"])
-def test_a_rule_naming_a_group_missing_at_its_env_site_is_refused(repo, held_at, missing_at):
+def test_a_rule_naming_a_group_missing_at_its_env_site_is_refused(repo, missing_at):
     """STD-COLL-03 and RB-01-2: the group must already exist where the rule goes; the workflow never creates it."""
-    add_ip_group(repo, "ipg-partner-woodgrove", ["203.0.113.48/28"], held_at)
+    drop_ip_group(repo, "ipg-onprem-primary", missing_at)
     before = snapshot(repo)
     with pytest.raises(ApprovalError) as error:
-        apply_reply(repo, *woodgrove())
-    found = [es for es in ("dev-eastus2", "dev-centralus")
-             if f"IP group ipg-partner-woodgrove does not exist at {es}" in str(error.value)]
+        apply_reply(repo, *onprem_to_ledg())
+    found = [es for es in LEDG if f"IP group ipg-onprem-primary does not exist at {es}" in str(error.value)]
     assert found == missing_at and "ip_group_not_found" in str(error.value)
     assert changed(before, repo) == set()
 
 
 def test_a_rule_naming_a_group_that_exists_at_both_sites_is_written(repo):
-    add_ip_group(repo, "ipg-partner-woodgrove", ["203.0.113.48/28"], ["dev-eastus2", "dev-centralus"])
     before = snapshot(repo)
-    apply_reply(repo, *woodgrove())
+    apply_reply(repo, *onprem_to_ledg())
     assert len(changed(before, repo)) == 2
 
 
@@ -873,7 +887,7 @@ def smtp(scope="both", destination=SMTP, source_group=None):
 
 
 def test_an_add_that_an_existing_rule_already_allows_exactly_is_refused(repo):
-    """RITM0011062 on 2026-11-11: the agent skipped duplicate_rule_check; the write asks the tool itself."""
+    """A draft is checked against existing rules even if the agent skipped duplicate_rule_check."""
     before = snapshot(repo)
     with pytest.raises(ApprovalError) as refused:
         apply_reply(repo, *smtp())

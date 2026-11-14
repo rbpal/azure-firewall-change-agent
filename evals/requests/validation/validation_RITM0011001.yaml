@@ -20,7 +20,7 @@ ticket:
   - {cidr: 198.51.100.32/28}
   protocol: TCP
   ports: ['22']
-  partner: Proseware
+  external_party: Proseware
   justification: The ledger databases in prod send files to Proseware.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

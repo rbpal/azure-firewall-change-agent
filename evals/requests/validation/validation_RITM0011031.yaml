@@ -20,8 +20,8 @@ ticket:
   - {cidr: 203.0.113.16/28}
   protocol: TCP
   ports: ['5671']
-  partner: Northwind Traders
-  justification: The sftp and partner file transfer in lab need Northwind Traders.
+  external_party: Northwind Traders
+  justification: The sftp and external file transfer in lab need Northwind Traders.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}
   - {group: network, approver: Lee Chen, state: approved}

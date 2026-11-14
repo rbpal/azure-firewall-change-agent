@@ -23,7 +23,7 @@ ticket:
   - {environment: stage, site: primary, cidr: 10.102.1.6/32}
   protocol: UDP
   ports: ['123']
-  partner: null
+  external_party: null
   justification: The stage spokes now take time from the platform time service, so the hub NTP rule is no longer needed.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

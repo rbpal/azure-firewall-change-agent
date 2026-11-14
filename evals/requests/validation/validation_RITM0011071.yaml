@@ -20,7 +20,7 @@ ticket:
   - {environment: stage, site: dr, cidr: 10.103.15.0/24}
   protocol: TCP
   ports: ['443']
-  partner: null
+  external_party: null
   justification: Analysts at the head office in ipg-onprem-primary download stage reports on HTTPS from both sites.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

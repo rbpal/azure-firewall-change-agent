@@ -19,7 +19,7 @@ ticket:
   - {environment: prod, site: primary, cidr: 10.100.17.0/24}
   protocol: TCP
   ports: ['443']
-  partner: null
+  external_party: null
   justification: Staff at the head office in ipg-onprem-primary need the prod client portal on HTTPS for support work.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

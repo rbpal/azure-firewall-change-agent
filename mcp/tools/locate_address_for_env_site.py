@@ -26,7 +26,7 @@ An IP group name, such as ipg-onprem-primary, answers with every plan range
 that lists that group and their origin: azure, onprem, or mixed when the plan
 lists it on both. The agent looks up each source this way before it picks a
 runbook, so the direction comes from the plan, never from a name. A group no
-range lists answers origin null: the plan cannot say whether it is a partner's
+range lists answers origin null: the plan cannot say whether it is an external party's
 group or an internal one it does not record, and the tool never guesses.
 
 An address or CIDR no plan range contains also answers `address_space`, from
@@ -106,7 +106,7 @@ def locate_group(name: str, ranges: list[Range | OnPremRange], hubs: dict[str, H
               "origin": origins.pop() if len(origins) == 1 else "mixed" if origins else None}
     if not members:
         result["reason"] = ("no range in the address plan lists this IP group, so the plan cannot say where it is "
-                            "or whether it is a partner's")
+                            "or whether it is an external party's")
     elif result["origin"] == "mixed":
         result["ambiguous"] = "the address plan lists this IP group on both Azure and on-prem ranges"
     return result

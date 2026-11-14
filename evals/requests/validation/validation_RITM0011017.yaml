@@ -23,7 +23,7 @@ ticket:
   - {fqdn: api.wingtip.example}
   protocol: HTTPS
   ports: ['443']
-  partner: Wingtip Toys
+  external_party: Wingtip Toys
   justification: The settlement app servers call Wingtip Toys's API.
   approvals:
   - {group: security, approver: Sam Ortiz, state: approved}

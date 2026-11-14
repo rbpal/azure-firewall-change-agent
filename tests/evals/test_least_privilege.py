@@ -175,15 +175,15 @@ def test_a_different_ip_group_fails():
 
 
 def test_an_ip_group_in_place_of_the_tickets_destination_cidr_fails():
-    """The same rule for destinations: a partner group is not the partner CIDR the ticket approved."""
-    score = score_least_privilege(NETWORK, reply(NETWORK, destinations=["ipg-partner-proseware"]))
+    """The same rule for destinations: a group is not the CIDR the ticket approved."""
+    score = score_least_privilege(NETWORK, reply(NETWORK, destinations=["ipg-rprt-prod"]))
     assert score.result == "fail"
-    assert any("ipg-partner-proseware is an IP group the labelled rule does not approve" in line for line in score.excess)
+    assert any("ipg-rprt-prod is an IP group the labelled rule does not approve" in line for line in score.excess)
 
 
 def test_the_cidr_in_place_of_the_labelled_destination_group_fails():
     """A label that names a destination group is not met by the group's CIDR."""
-    expected = reply(NETWORK, destinations=["ipg-partner-proseware"])
+    expected = reply(NETWORK, destinations=["ipg-rprt-prod"])
     assert score_least_privilege(expected, reply(expected, destinations=["198.51.100.32/28"])).result == "fail"
 
 

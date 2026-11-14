@@ -9,8 +9,9 @@ Why: GitHub main is the source of truth. The agent's tools read a copy of it in 
 is safe only when that copy holds exactly the main revision the ticket branch starts from.
 
 Ready for drafting is not applied in Azure. A marker says the configuration files of one main
-commit are copied and checked, and which agent version matches that commit's instructions. It says
-nothing about any firewall: uploading a snapshot never changes a firewall rule.
+commit are copied and checked, which agent version matches that commit's instructions, and that the
+tool server runs that commit's mcp/ code. It says nothing about any firewall: uploading a snapshot
+never changes a firewall rule.
 
 Safety rule: a snapshot is immutable. A file is uploaded once and never overwritten with other
 bytes, a marker is written once, and a missing, incomplete, mismatched or older snapshot stops the
@@ -32,8 +33,8 @@ from workflow.agent import DATA, AgentError
 READY = "ready/{commit}.json"
 SNAPSHOTS = "snapshots/{commit}/"
 MEANING = ("Ready for drafting: this main commit's configuration files are in Blob storage, checked byte for byte "
-           "against Git, and the agent version matches this commit's instructions. Not a record of anything applied "
-           "to an Azure firewall.")
+           "against Git, the agent version matches this commit's instructions, and the tool server runs this "
+           "commit's mcp/ code. Not a record of anything applied to an Azure firewall.")
 RUN_DEADLINE = timedelta(minutes=30)  # a draft attempt that runs longer writes nothing
 GRACE = timedelta(hours=24)  # a replaced snapshot is kept this long, so no run can outlive its snapshot
 WAIT_TIMEOUT = 600  # seconds a draft waits for the sync job before it stops
@@ -146,6 +147,11 @@ def verify_ready(repo: Path, container, commit: str, contents: bool = True) -> d
     if marker.get("commit") != commit:
         raise SnapshotMismatch("Azure's ready record belongs to a different version of GitHub main",
                                {"main_commit": commit, "marker_commit": marker.get("commit")})
+    tools = marker.get("tools") or {}
+    if tools.get("commit") != commit or not tools.get("code_sha256"):
+        raise SnapshotMismatch("Azure's ready record does not show this version of GitHub main's tool code as "
+                               "deployed and checked, so the release is incomplete",
+                               {"main_commit": commit, "tools_commit": tools.get("commit")})
     wanted = manifest(commit_files(repo, commit))
     if marker.get("files") != wanted:
         raise SnapshotMismatch("Azure's ready record lists different files from GitHub main",
@@ -226,7 +232,8 @@ def write_marker(container, marker: dict) -> dict:
         return marker
     except ResourceExistsError:
         existing = json.loads(container.download_blob(name).readall())
-        if existing.get("files") != marker["files"] or existing.get("agent") != marker["agent"]:
+        if (existing.get("files") != marker["files"] or existing.get("agent") != marker["agent"]
+                or existing.get("tools") != marker.get("tools")):
             raise SnapshotMismatch(f"a different ready marker for {marker['commit'][:12]} already exists") from None
         return existing
 

@@ -1,13 +1,15 @@
 # Copies the files the agent's tools read into Blob storage on every push to
 # main (ADR 0003), checks them byte for byte against Git, matches the agent
-# version to this commit's instructions, then marks the commit ready for
-# drafting. The tools read the copy, never GitHub. Every push gets its own
+# version to this commit's instructions, deploys this commit's mcp/ code to the
+# tool server and checks it answers that code's hash, then marks the commit
+# ready for drafting. All three come from the same commit, in that order. The tools read the copy, never GitHub. Every push gets its own
 # snapshot and marker, docs-only and test-only commits included, so any main
 # commit can be drafted from.
 #
 # Ready for drafting is not applied in Azure. This workflow never changes a
-# firewall policy: it writes only to the network-snapshot container and to the
-# drafter's agent versions. workflow/deploy.py is the only code that publishes
+# firewall policy: it writes only to the network-snapshot container, the
+# drafter's agent versions and the tool server's code (Website Contributor on
+# that one function app, granted in infra/05-func). workflow/deploy.py is the only code that publishes
 # an agent version; it reuses the current one while the definition is unchanged.
 #
 # Sign-in uses no password or key. GitHub signs a token naming this repo and branch, and
@@ -44,11 +46,16 @@ concurrency:
 env:
   ACCOUNT: stfwagentfuncdev
   CONTAINER: network-snapshot
+  # The tool server's token audience (Terraform output mcp_api_identifier_uri in
+  # infra/05-func). Set as a repo variable, so the job never needs Entra directory read.
+  FWAGENT_MCP_AUDIENCE: ${{ vars.FWAGENT_MCP_AUDIENCE }}
+  FWAGENT_FUNCTION_APP: func-fwagentic-dev
+  FWAGENT_RESOURCE_GROUP: rg-fwagentic-dev
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30 # a remote build and a cold Flex restart can take several minutes
     steps:
       # Actions are pinned to a commit, not a tag, so a moved tag cannot change what runs.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,8 +86,9 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
       # Upload once, check every file's bytes, reuse or publish the matching agent
-      # version, read it back, then write ready/<commit>.json. Any failure leaves
-      # no marker, so drafting waits or stops; it never uses an older snapshot.
+      # version and read it back, deploy mcp/ if the server runs other code and
+      # check its code hash, then write ready/<commit>.json. Any failure leaves no
+      # marker, so drafting waits or stops; it never uses an older snapshot.
       - name: Mark this commit ready for drafting
         if: github.event_name == 'push' || inputs.rollback_to == ''
         env:
@@ -88,7 +96,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: uv run --python 3.11 python -m workflow.deploy ready --commit "$TARGET" --run-url "$RUN_URL"
 
-      # A rollback only moves current.json, and only to a commit that is still ready.
+      # A rollback only moves current.json, and only to a commit that is still ready
+      # and whose recorded tool code the server still runs.
       - name: Check the rollback target is ready
         if: github.event_name != 'push' && inputs.rollback_to != ''
         run: uv run --python 3.11 python -m workflow.deploy check --commit "$TARGET"

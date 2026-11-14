@@ -51,7 +51,7 @@ module "func" {
     client_id            = module.mcp_api.client_id
     tenant_auth_endpoint = "https://login.microsoftonline.com/${data.azuread_client_config.current.tenant_id}/v2.0"
     allowed_audiences    = [module.mcp_api.identifier_uri]
-    allowed_applications = concat([module.caller_identity.client_id], local.mcp_test_client_ids)
+    allowed_applications = concat([module.caller_identity.client_id], local.mcp_test_client_ids, local.sync_client_ids)
   }
 }
 
@@ -130,6 +130,32 @@ module "caller_tools_read" {
   app_role_id         = module.mcp_api.app_role_id
   principal_object_id = module.caller_identity.principal_id
   resource_object_id  = module.mcp_api.service_principal_object_id
+}
+
+# sync-network checks the deployed code with the diagnostic code_version tool, so
+# its identity needs the same role every caller needs (gate 2, mcp/auth.py).
+module "sync_tools_read" {
+  source = "../modules/app-role-assignment"
+  count  = var.sync_identity_name == null ? 0 : 1
+
+  app_role_id         = module.mcp_api.app_role_id
+  principal_object_id = data.azurerm_user_assigned_identity.sync[0].principal_id
+  resource_object_id  = module.mcp_api.service_principal_object_id
+}
+
+# sync-network deploys mcp/ from the main commit it releases. Website Contributor
+# is the least-privileged built-in role Microsoft names for a GitHub Actions
+# deploy identity, and it holds Microsoft.Web/sites/*, which includes the publish
+# action. Scoped to this one function app. It needs no storage role: the app's
+# own identity writes the package to app-package (Flex Consumption).
+module "sync_deploy" {
+  source = "../modules/role-assignment"
+  count  = var.sync_identity_name == null ? 0 : 1
+
+  scope                = module.func.id
+  role_definition_name = "Website Contributor"
+  principal_id         = data.azurerm_user_assigned_identity.sync[0].principal_id
+  principal_type       = "ServicePrincipal"
 }
 
 # Demo only: lets the person running Terraform test the tools from a laptop.

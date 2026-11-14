@@ -27,6 +27,8 @@ failed (throttling, sign-in, network) is an infrastructure error: the ticket is
 listed as not run, never scored. A throttled call is retried after the server's
 wait, at most max_attempts times, and every attempt is recorded. No ticket is
 ever dropped from the count; the coverage section says how many were answered.
+After the last ticket the runner checks the tool server's code again: a run whose tools
+changed code during the run is marked invalid, and no score from it counts.
 """
 
 from __future__ import annotations
@@ -479,14 +481,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-gap", type=float, default=60, help="foundry: least seconds between the starts of two attempts; stand-ins make no calls")
     args = parser.parse_args(argv)
     not_run, replies, attempts = [], [], []
-    agent, status = None, "running"
+    agent, status, tool_code = None, "running", None
 
     def record() -> dict:
         """Everything the run has so far, as saved to --out."""
         inner = getattr(agent, "inner", agent)
         return {"agent": args.agent, "split": args.split, "status": status,
                 "agent_version": getattr(inner, "version", None), "snapshot": getattr(inner, "snapshot", None),
-                "replies": replies, "attempts": attempts, "calls": [vars(c) for c in _calls(inner)], "not_run": not_run}
+                "replies": replies, "attempts": attempts, "calls": [vars(c) for c in _calls(inner)], "not_run": not_run,
+                **({"tool_code": tool_code} if tool_code else {})}
 
     def progress(event: dict):
         """Print one line per ticket and save the run so far."""
@@ -550,16 +553,39 @@ def main(argv: list[str] | None = None) -> int:
         report += f"\n\nSnapshot pinned for every tool call: {inner.snapshot}"
         if now != inner.snapshot:
             report += f"\ncurrent.json now names {now}: main moved during the run, and the run kept the pinned snapshot"
+    tool_code = end_of_run_tool_check(inner, REQUESTS.parents[1])
+    if tool_code and not tool_code["valid"]:
+        status = "invalid"
+        report += (f"\n\nRun invalid: {tool_code['why']}. The tools were checked at {tool_code['start'][:12]} at the "
+                   "start; no score from this run counts")
     calls = _calls(inner)
     if calls:
         report += (f"\n\nTokens: {sum(c.input_tokens for c in calls)} in, {sum(c.output_tokens for c in calls)} out, "
                    f"over {len(calls)} calls; tool calls: {sum(len(c.tools) for c in calls)}")
-    if status != "complete":
+    if status in ("stopped", "interrupted"):
         report += f"\n\nRun {status}: the sheet covers only the tickets answered before it stopped"
     print(report)
     if args.out:
         _save(args.out, record())
-    return {"complete": 0, "stopped": 3, "interrupted": 130}[status]
+    return {"complete": 0, "stopped": 3, "interrupted": 130, "invalid": 4}[status]
+
+
+def end_of_run_tool_check(agent, repo: Path, check=None) -> dict | None:
+    """Check the tool server again after the last ticket; the run counts only if it still runs the code checked at the start."""
+    start = getattr(agent, "tool_code", None)
+    if not start:
+        return None  # a stand-in agent calls no tools
+    from workflow import tool_server
+    from workflow.agent import AgentError
+    try:
+        end = (check or tool_server.check)(repo, agent.snapshot)
+    except AgentError as error:
+        return {"start": start["code_sha256"], "end": None, "valid": False,
+                "why": f"the tool server's code could not be confirmed after the run ({error})"}
+    if end["code_sha256"] != start["code_sha256"]:
+        return {"start": start["code_sha256"], "end": end["code_sha256"], "valid": False,
+                "why": "the tool server's code changed during the run"}
+    return {"start": start["code_sha256"], "end": end["code_sha256"], "valid": True, "why": None}
 
 
 def coverage(results: list[TicketResult], not_run: list) -> str:

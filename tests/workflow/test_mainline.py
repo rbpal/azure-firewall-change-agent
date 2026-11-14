@@ -100,10 +100,16 @@ def push(world, rel, text, message="change"):
     return sha
 
 
-def ready(world, container, agents=None, now=NOW):
+def tools_ok(repo, commit):
+    """The tool deploy step with no Azure: the server already runs the commit's code ("test", as conftest's check says)."""
+    return {"commit": commit, "code_sha256": "test", "files": 0, "function_app": "func-test", "deployed": False}
+
+
+def ready(world, container, agents=None, now=NOW, tools=tools_ok):
     """Run the sync job's ready step for pusher's HEAD, as sync-network does; return the marker."""
     project = SimpleNamespace(agents=agents if agents is not None else FakeAgents(missing=True))
-    return mark_ready(world.pusher, git(world.pusher, "rev-parse", "HEAD").strip(), container, project, "run-1", now)
+    return mark_ready(world.pusher, git(world.pusher, "rev-parse", "HEAD").strip(), container, project, "run-1", now,
+                      tools=tools)
 
 
 def settle(agents):
@@ -261,6 +267,83 @@ def test_a_failed_agent_check_leaves_no_marker(world):
     with pytest.raises(AgentError, match="does not match"):
         ready(world, container, agents)
     assert not [n for n in container.blobs if n.startswith("ready/")]
+
+
+def test_the_marker_records_the_checked_tool_code_of_the_same_commit(world):
+    marker = ready(world, FakeContainer())
+    assert marker["tools"] == {"commit": world.first, "code_sha256": "test", "files": 0, "function_app": "func-test"}
+    assert marker["checks"]["tool_code_matches_commit"] is True
+    assert "tool server runs this commit's mcp/ code" in marker["meaning"]
+
+
+def test_a_failed_tool_deploy_leaves_no_marker_and_drafting_cannot_start(world):
+    container = FakeContainer()
+
+    def failed(repo, commit):
+        raise AgentError("after deploying mcp/, the tool server still does not run that code")
+    with pytest.raises(AgentError, match="still does not run that code"):
+        ready(world, container, tools=failed)
+    assert not [n for n in container.blobs if n.startswith("ready/")]
+    assert snap.verify_ready(world.pusher, container, world.first) is None  # no release: drafting waits or stops
+
+
+def test_a_tool_check_for_another_commit_never_marks_this_one_ready(world):
+    container = FakeContainer()
+    with pytest.raises(AgentError, match="did not confirm"):
+        ready(world, container, tools=lambda repo, commit: {**tools_ok(repo, commit), "commit": "b" * 40})
+    assert not [n for n in container.blobs if n.startswith("ready/")]
+
+
+def test_the_tools_are_deployed_only_after_the_snapshot_and_the_agent_check(world):
+    container, agents, calls = FakeContainer(), FakeAgents(missing=True), []
+    agents.get_version = lambda name, version: SimpleNamespace(
+        metadata={"definition_sha": "0"}, definition={"tools": [{"headers": {}}], "structured_inputs": {}})
+
+    def record(repo, commit):
+        calls.append(sorted(n for n in container.blobs if n.startswith("snapshots/")))
+        return tools_ok(repo, commit)
+    with pytest.raises(AgentError, match="does not match"):
+        ready(world, container, agents, tools=record)
+    assert calls == []  # a failed agent check deploys no code
+    calls.clear()
+    ready(world, FakeContainer(), tools=lambda repo, commit: calls.append(commit) or tools_ok(repo, commit))
+    assert calls == [world.first]
+
+
+@pytest.mark.parametrize("tools, why", [
+    (None, "no tool record"),
+    ({"commit": "b" * 40, "code_sha256": "test"}, "tool code of another commit"),
+    ({"commit": "FIRST", "code_sha256": ""}, "no code hash"),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_a_marker_without_this_commits_tool_code_is_an_incomplete_release(world, tools, why):
+    container = FakeContainer()
+    marker = ready(world, container)
+    broken = {k: v for k, v in marker.items() if k != "tools"}
+    if tools is not None:
+        broken["tools"] = {k: (world.first if v == "FIRST" else v) for k, v in tools.items()}
+    container.blobs[f"ready/{world.first}.json"] = json.dumps(broken).encode()
+    with pytest.raises(snap.SnapshotMismatch, match="tool code as deployed and checked, so the release is incomplete"):
+        snap.verify_ready(world.pusher, container, world.first)
+
+
+def test_a_second_marker_with_other_tool_code_is_refused(world):
+    container = FakeContainer()
+    marker = ready(world, container)
+    with pytest.raises(snap.SnapshotMismatch, match="different ready marker"):
+        snap.write_marker(container, {**marker, "tools": {**marker["tools"], "code_sha256": "other"}})
+
+
+def test_the_pinned_agent_stops_when_the_server_runs_other_code_than_the_release_recorded(world, endpoint, monkeypatch):
+    container, agents = FakeContainer(), FakeAgents(missing=True)
+    marker = ready(world, container, agents, tools=lambda repo, commit: {**tools_ok(repo, commit), "code_sha256": "older"})
+    settle(agents)
+    project = SimpleNamespace(agents=agents, get_openai_client=lambda **o: SimpleNamespace(options=o))
+    monkeypatch.setattr("workflow.agent.connect", lambda e: project)
+    evaluate(world.pusher, marker)
+    with pytest.raises(AgentError, match="not the code recorded when this release was marked ready") as stopped:
+        FoundryAgent.pinned(world.pusher, world.first, marker, container)
+    assert stopped.value.detail == {"main_commit": world.first, "deployed_code_sha256": "test",
+                                    "ready_code_sha256": "older"}
 
 
 def test_the_sync_step_refuses_a_checkout_at_another_commit(world):

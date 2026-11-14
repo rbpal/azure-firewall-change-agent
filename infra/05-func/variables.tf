@@ -134,3 +134,9 @@ variable "uami_name" {
   description = "User-assigned managed identity that Foundry Agent Service signs in as to call the tools."
   type        = string
 }
+
+variable "sync_identity_name" {
+  description = "User-assigned identity sync-network signs in as, built by step 06-sync. It deploys and checks mcp/. Null before step 06 exists."
+  type        = string
+  default     = null
+}

@@ -36,4 +36,4 @@ Each item gives the reason code the reply carries when it stops. Every stop carr
 - both ends are on-prem: that traffic never reaches an Azure firewall: `both_ends_onprem`
 - the Azure address is at a site the ticket does not select: `address_for_unselected_site`
 - a selected site has no Azure address: `site_without_address`
-- any reason in RB-01-6 that applies, with the code given there: a skip-approval request, free text naming another environment, or an IP group that does not exist
+- any reason in RB-01-6 that applies, with the code given there: a skip-approval request, free text contradicting the selected environments, Azure sites or on-prem locations, or an IP group that does not exist

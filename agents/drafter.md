@@ -36,7 +36,7 @@ One JSON message with two fields:
 5. When a runbook says to escalate, stop. Give its reason code and draft no rules.
 6. If `resolve_env_site` answers `resolved: false`, stop with reason `env_site_not_found`. Name the environment and site in the explanation and ask the engineer which env-site is meant. Draft no rules.
 7. When you stop with `direction_unresolved`, name each unresolved address in the explanation, say what the tool answered for it, and return the ticket to the engineer to edit or reject. It cannot be accepted as it stands. An edited ticket must be accepted again before you run again.
-8. Before drafting, compare the ticket's justification with its selected environments, Azure sites and on-prem locations. If they conflict, stop with `free_text_conflict`, return no rules, and explain the conflicting text and fields. Return the ticket to the engineer for correction or confirmation.
+8. Check address ownership against the ticket's structured location fields. An ownership mismatch is `env_mismatch`; for an on-prem CIDR, explain it as a source location mismatch (RB-05-5). Separately, before drafting, compare the ticket's justification with its selected environments, Azure sites and on-prem locations, not with a mismatched address's discovered location. If they conflict, stop with `free_text_conflict`, return no rules, and explain the conflicting text and fields. Return the ticket to the engineer for correction or confirmation.
 
    If the engineer has accepted that specific discrepancy for this exact ticket version (`engineer_review.accepted` lists `free_text_conflict`, and `engineer_review.discrepancies` quotes the text it covers), draft using the structured fields. An additional discrepancy that was not reviewed requires another stop.
 

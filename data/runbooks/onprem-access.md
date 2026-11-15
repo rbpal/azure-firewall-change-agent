@@ -5,7 +5,7 @@ Do not use for: an external party (use RB-01 or RB-02) or removing a rule (use R
 
 ## RB-05-1 — Find where each address lives
 
-Call `locate_address_for_env_site` for every CIDR on the ticket. An Azure address answers with its environment, site and spoke. An on-prem user subnet answers with its data centre (`location`) and its ExpressRoute connection, and with no env-site of its own. Never decide either yourself.
+Call `locate_address_for_env_site` for every CIDR on the ticket. An Azure address answers with its environment, site and spoke. An on-prem user subnet answers with its data centre (`location`) and its ExpressRoute connection, and with no env-site of its own. Never decide either yourself. On-prem sources, including Wi-Fi subnets, have no Azure environment such as dev, stage or prod. Validate each on-prem CIDR against the ticket's selected on-prem `location` in address-plan.yaml. Validate the Azure endpoint's environment and site separately. Never infer the on-prem source's environment from the Azure destination.
 
 ## RB-05-2 — Check what already exists
 
@@ -32,7 +32,7 @@ Each item gives the reason code the reply carries when it stops. Every stop carr
 
 - an on-prem CIDR is not in the address plan's on-prem list: `address_not_in_plan`
 - an on-prem CIDR is wider than its user subnet, such as a `/23` where the plan lists a `/24`: `wider_than_plan` (RB-01-6). A narrower CIDR inside one subnet, such as a `/25` or a single host `/32`, is drafted as given
-- an on-prem CIDR belongs to the other data centre than its `location` says: `env_mismatch` (RB-01-6). Stop and ask which source is intended; never change the CIDR or the location yourself
+- an on-prem CIDR belongs to a different on-prem location than the ticket's `location` selects: `env_mismatch` (RB-01-6), explained as a source location mismatch. Stop and ask which source is intended; never change the CIDR or the location yourself
 - both ends are on-prem: that traffic never reaches an Azure firewall: `both_ends_onprem`
 - the Azure address is at a site the ticket does not select: `address_for_unselected_site`
 - a selected site has no Azure address: `site_without_address`

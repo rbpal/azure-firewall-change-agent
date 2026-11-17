@@ -1,0 +1,52 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011074
+category: free-text-accepted-plus-unreviewed
+why: Prod discrepancy accepted; the DR-site request was not reviewed.
+ticket:
+  number: RITM0011074
+  item: Firewall Change Request
+  state: approved
+  requested_for: Casey Nguyen (Contoso portal team)
+  opened: '2026-10-06T08:50:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: false}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {location: onprem-primary, cidr: 172.20.10.0/23}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.17.0/24}
+  protocol: TCP
+  ports: ['443']
+  justification: Head office staff open the dev client portal. Needed in prod before the release. Also add it at the DR site.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+engineer_review:
+  decision: accept
+  engineer: Jordan Patel
+  reason: 'The fields are right: dev only.'
+  ticket_version: 8cd303374868a7fb7ca80ec249cb9e5dbcc4d61373b8c357ddb65040b843ac19
+  accepted: [free_text_conflict]
+  planned: []
+  discrepancies:
+  - code: free_text_conflict
+    where: justification
+    message: the justification says "prod" (the prod environment), but the ticket selects dev. Correct the ticket, or confirm
+      the fields are right and accept this discrepancy
+    matched: [prod]
+    environment: prod
+    selected: [dev]
+expected:
+  labelled_against: 32384fa
+  note: >-
+    The engineer accepted the prod discrepancy only. "Also add it at the DR site" asks for a site the ticket does not select. That second discrepancy was not reviewed (intake checks only environment names), so the agent stops again with free_text_conflict (step 8) and drafts nothing.
+  outcome: stop_and_ask
+  reason: free_text_conflict
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.10.0/23}
+  - {tool: locate_address_for_env_site, address: 10.104.17.0/24}

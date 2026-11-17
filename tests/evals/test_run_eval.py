@@ -1,4 +1,4 @@
-"""The Tier 2 runner, checked with stand-in agents on the 56 validation tickets. Every check here must be able to fail."""
+"""The Tier 2 runner, checked with stand-in agents on the 60 validation tickets. Every check here must be able to fail."""
 
 import copy
 
@@ -31,19 +31,19 @@ def result_for(results, number):
 
 
 def test_the_perfect_agent_passes_every_ticket_complete():
-    """56 of 56 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
+    """60 of 60 passed and complete, no incomplete and no mistakes, so the runner adds nothing of its own."""
     s = summarise(run(perfect(KEYS)))
-    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (56, 56, 56, 0)
+    assert (s["tickets"], s["passed"], s["complete"], s["incomplete"]) == (60, 60, 60, 0)
     assert all(count == 0 for count in s["mistakes"].values())
 
 
 def test_the_always_stop_agent_gives_the_known_baseline():
-    """Always-stop passes 3 stops, gives the wrong reason on 18, and over-abstains on all 35 non-stops."""
+    """Always-stop passes 4 stops, gives the wrong reason on 20, and over-abstains on all 36 non-stops."""
     s = summarise(run(always_stop))
-    assert (s["passed"], s["stops"]) == (3, 21)
-    assert s["mistakes"]["wrong_reason"] == 18
-    assert s["mistakes"]["over_abstain"] == 35
-    assert s["mistakes"]["wrong_outcome"] == 35
+    assert (s["passed"], s["stops"]) == (4, 24)
+    assert s["mistakes"]["wrong_reason"] == 20
+    assert s["mistakes"]["over_abstain"] == 36
+    assert s["mistakes"]["wrong_outcome"] == 36
     assert s["mistakes"]["missed_stop"] == 0
 
 
@@ -65,7 +65,7 @@ def test_the_agent_sees_a_copy_of_the_ticket_and_never_the_answer_key():
 
     # Check outside the agent: the runner turns anything raised inside it into agent_error.
     results = run(spy)
-    assert len(seen) == 56
+    assert len(seen) == 60
     assert seen == [set(r.ticket) for r in REQUESTS]
     # The engineer's decision when the request has one, else the acceptance of a ticket with no findings.
     assert reviews == [review_for(r) for r in REQUESTS]
@@ -92,7 +92,7 @@ def test_a_missing_site_rule_passes_but_is_reported_incomplete():
     assert r.verdict.passed and not r.verdict.complete
     assert r.verdict.incomplete == ["prod-centralus/ledg/allow-ledg-network-rules: rule missing"]
     s = summarise(results)
-    assert (s["passed"], s["complete"], s["incomplete"]) == (56, 55, 1)
+    assert (s["passed"], s["complete"], s["incomplete"]) == (60, 59, 1)
 
 
 def test_a_wider_port_fails_as_too_wide():
@@ -141,11 +141,11 @@ def test_a_crash_fails_one_ticket_and_the_run_goes_on():
         raise RuntimeError("model timed out")
 
     results = run(perfect_except("RITM0011010", crash))
-    assert len(results) == 56
+    assert len(results) == 60
     r = result_for(results, "RITM0011010")
     assert r.verdict.mistakes == ["agent_error"] and r.reply_outcome == "?"
     assert "RuntimeError: model timed out" in r.verdict.detail
-    assert summarise(results)["complete"] == 55
+    assert summarise(results)["complete"] == 59
 
 
 def test_the_test_split_is_sealed(capsys):
@@ -163,7 +163,7 @@ def test_category_rows_add_up_to_the_totals(agent):
     """The by-category table counts every ticket once and matches the headline."""
     s = summarise(run(agent))
     rows = s["by_category"].values()
-    assert sum(total for _, total in rows) == s["tickets"] == 56
+    assert sum(total for _, total in rows) == s["tickets"] == 60
     assert sum(done for done, _ in rows) == s["complete"]
 
 
@@ -182,15 +182,15 @@ def test_unreviewed_answer_keys_are_flagged_on_the_score_sheet():
 
 
 def test_first_pass_and_after_review_tickets_are_counted_apart():
-    """Two validation tickets resume with the engineer's acceptance; the sheet reports them on their own line."""
+    """Five validation tickets resume with the engineer's acceptance; the sheet reports them on their own line."""
     results = run(perfect(KEYS))
     resumed = {r.number for r in REQUESTS if r.engineer_review is not None}
-    assert {r.number for r in results if r.after_review} == resumed and len(resumed) == 2
+    assert {r.number for r in results if r.after_review} == resumed and len(resumed) == 5
     s = summarise(results)
-    assert s["after_review"] == (2, 2)
+    assert s["after_review"] == (5, 5)
     report = format_report(results, "validation", "perfect")
-    assert "First pass, passed and complete    54 / 54" in report
-    assert "After engineer review, passed       2 / 2" in report
+    assert "First pass, passed and complete    55 / 55" in report
+    assert "After engineer review, passed       5 / 5" in report
 
 
 def test_every_ticket_reaches_the_agent_with_an_acceptance_of_its_exact_version():
@@ -204,9 +204,9 @@ def test_every_ticket_reaches_the_agent_with_an_acceptance_of_its_exact_version(
 
     run(spy)
     from workflow.intake import ticket_version
-    assert len(reviews) == 56 and None not in reviews.values()
+    assert len(reviews) == 60 and None not in reviews.values()
     first_pass = [r for r in REQUESTS if r.engineer_review is None]
-    assert len(first_pass) == 54
+    assert len(first_pass) == 55
     for r in first_pass:
         review = reviews[r.number]
         assert review["decision"] == "accept" and review["ticket_version"] == ticket_version(r.ticket), r.number
@@ -262,7 +262,14 @@ def test_an_after_review_acceptance_is_what_production_sends_after_the_agent_sto
     monkeypatch.setattr(cli, "agent_reply", agent)
     cli.submit(cli.REPO, str(path))
     version = cli.load_record(cli.REPO, number)["ticket_version"]
-    assert cli.load_record(cli.REPO, number)["findings"] == []  # submit finds nothing; the agent raises the finding
+    findings = cli.load_record(cli.REPO, number)["findings"]
+    if findings:  # intake holds it (free text names another environment): one accept sends the review
+        assert [f["code"] for f in findings] == recorded["accepted"]
+        sent.append(None)  # no agent stop came first
+        with pytest.raises(cli.Refused, match="captured"):
+            cli.accept(cli.REPO, number, version[:12], recorded["engineer"], recorded["reason"], None, None)
+        assert sent[1] == review_for(request)
+        return
     cli.accept(cli.REPO, number, version[:12], recorded["engineer"], FIRST_PASS_REASON, None, None)
     assert cli.load_record(cli.REPO, number)["status"] == "awaiting_review"
     with pytest.raises(cli.Refused, match="captured"):
@@ -692,7 +699,7 @@ if sys.argv[1] == "run":
     from evals.stand_in_agents import always_stop, perfect
     keys = {r.number: r.expected for r in runner.load_requests("validation")}
     for agent in (perfect(keys), always_stop):
-        assert len(runner.run(agent)) == 56
+        assert len(runner.run(agent)) == 60
 print("ALL", writes)
 print("SAME", tree() == before and len(before) > 0)
 """
@@ -700,7 +707,7 @@ print("SAME", tree() == before and len(before) > 0)
 
 @pytest.mark.parametrize("mode", ["import", "run"])
 def test_importing_the_runner_and_running_it_writes_no_file(mode, tmp_path):
-    """Watch every file write while the runner is imported, then run over all 56 tickets: none, and no tfvars change."""
+    """Watch every file write while the runner is imported, then run over all 60 tickets: none, and no tfvars change."""
     import os
     import subprocess
     import sys

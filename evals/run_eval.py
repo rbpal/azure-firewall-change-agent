@@ -1,7 +1,7 @@
 """Tier 2 runner: give each labelled ticket to an agent, score the reply, print a score sheet.
 
 Example: `uv run --python 3.11 python -m evals.run_eval --agent perfect` reads the
-56 validation files, hands each `ticket:` block to the perfect stand-in agent,
+60 validation files, hands each `ticket:` block to the perfect stand-in agent,
 scores every reply against its `expected:` block and prints the sheet. A ticket
 passes when the outcome word matches, Least-Privilege is pass or not_scored, and
 Abstention is pass. A pass is "complete" only if the draft is not narrower than
@@ -340,7 +340,7 @@ def review_for(request: Request) -> dict:
     if review is None:  # production never calls the agent without a recorded acceptance
         return first_pass_review(request.ticket)
     return acceptance(review["ticket_version"], review["engineer"], review["reason"], review.get("accepted", ()),
-                      review.get("planned", ()), review.get("edits", ()))
+                      review.get("planned", ()), review.get("edits", ()), review.get("discrepancies", ()))
 
 
 def first_pass_review(ticket: dict) -> dict:

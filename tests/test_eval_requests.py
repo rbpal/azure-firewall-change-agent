@@ -74,7 +74,7 @@ def test_script_writes_the_planned_mix(generated):
     for name, n_validation, n_test in make_requests.CATEGORIES:
         assert counts[("validation", name)] == n_validation - retired[("validation", name)], name
         assert counts[("test", name)] == n_test - retired[("test", name)], name
-    assert sum(v for (split, _), v in counts.items() if split == "validation") == 56
+    assert sum(v for (split, _), v in counts.items() if split == "validation") == 60
     assert sum(v for (split, _), v in counts.items() if split == "test") == 32
 
 
@@ -99,7 +99,7 @@ def test_script_never_overwrites_a_file(tmp_path):
     path = next(tmp_path.glob("validation/*.yaml"))
     path.write_text(path.read_text().replace("expected: null", "expected: {outcome: draft}"))
     written, kept = make_requests.write(tmp_path)
-    assert written == [] and len(kept) == 88
+    assert written == [] and len(kept) == 92
     assert "expected: {outcome: draft}" in path.read_text()
 
 
@@ -140,7 +140,7 @@ def test_every_scope_has_eval_cases_for_adds_and_removals(scope, item):
 
 
 def test_there_are_88_committed_requests():
-    assert len(COMMITTED) == 88
+    assert len(COMMITTED) == 92
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -189,7 +189,7 @@ DRAFTS = [p for p in COMMITTED if (load(p)["expected"] or {}).get("outcome") == 
 
 
 def test_the_draft_list_holds_every_draft_label():
-    assert len(DRAFTS) == 56  # RITM0011064 became a draft on 2026-11-14
+    assert len(DRAFTS) == 57  # RITM0011064 became a draft on 2026-11-14; RITM0011073 added 2026-11-17
 
 
 @pytest.mark.parametrize("path", DRAFTS, ids=lambda p: p.name)
@@ -289,6 +289,9 @@ def test_open_dnat_is_one_escalation_in_the_dnat_runbook():
 
 
 REVIEW_KEYS = {"decision", "engineer", "reason", "ticket_version", "accepted", "planned"}
+# Categories whose acceptance covers a free_text_conflict; the last two still stop on what it does not cover.
+FREE_TEXT_ACCEPTED = {"free-text-accepted": "draft", "free-text-accepted-plus-unreviewed": "stop_and_ask",
+                      "free-text-accepted-with-env-mismatch": "stop_and_ask"}
 
 
 @pytest.mark.parametrize("path", COMMITTED, ids=lambda p: p.name)
@@ -298,15 +301,23 @@ def test_an_engineer_review_block_holds_the_decision_and_never_the_answer(path):
     from workflow.planned import check_planned
     request = load(path)
     review = request.get("engineer_review")
-    if request["category"] != "accepted-after-review":
+    if request["category"] not in {"accepted-after-review", *FREE_TEXT_ACCEPTED}:
         assert review is None
         return
+    if request["category"] in FREE_TEXT_ACCEPTED:  # quotes exactly the intake findings it accepts
+        from workflow.intake import free_text_findings
+        keep = ("code", "where", "message", "matched", "environment", "selected")
+        found = [{k: f[k] for k in keep if k in f} for f in free_text_findings(request["ticket"])]
+        assert review["accepted"] == ["free_text_conflict"] and review.pop("discrepancies") == found
+        assert request["expected"]["outcome"] == FREE_TEXT_ACCEPTED[request["category"]]
+        assert request["expected"].get("reason") not in review["accepted"] or request["category"].endswith("unreviewed")
     assert set(review) == REVIEW_KEYS and review["decision"] == "accept" and review["engineer"] and review["reason"]
     assert review["accepted"] and set(review["accepted"]) <= ACCEPTABLE
     assert review["ticket_version"] == ticket_version(request["ticket"])  # bound to this exact ticket
     assert check_planned(make_requests.REPO, request["ticket"], review["planned"]) == []
     assert ("planned_address" in review["accepted"]) == bool(review["planned"])
-    assert request["expected"]["outcome"] == "draft"  # accepted, so the agent drafts within the ticket
+    if request["category"] == "accepted-after-review":
+        assert request["expected"]["outcome"] == "draft"  # accepted, so the agent drafts within the ticket
 
 
 FREE_TEXT_FALSE_ALARMS = {"RITM0011053"}  # intake flags "lab floor"; the label expects address_not_in_plan
@@ -330,7 +341,9 @@ def test_every_eval_ticket_passes_intake(path):
     assert findings == bypass + free_text
     expected = (request["expected"]["outcome"], request["expected"].get("reason"))
     assert not bypass or expected == ("stop_and_ask", "skip_approval_requested")
-    assert not free_text or expected == ("stop_and_ask", "free_text_conflict") or request["id"] in FREE_TEXT_FALSE_ALARMS
+    accepted = (request.get("engineer_review") or {}).get("accepted", [])
+    assert (not free_text or expected == ("stop_and_ask", "free_text_conflict") or request["id"] in FREE_TEXT_FALSE_ALARMS
+            or "free_text_conflict" in accepted)
     assert all(f["acceptable"] for f in free_text)
 
 
@@ -338,6 +351,8 @@ def test_every_accepted_category_is_a_draft_and_every_review_stop_has_no_accepta
     # Awaiting review (a stop, no engineer_review) and accepted for the agent (engineer_review, draft) never mix.
     for path in COMMITTED:
         request = load(path)
+        if request["category"] in FREE_TEXT_ACCEPTED:  # outcome checked against the category above
+            continue
         if request["expected"]["outcome"] == "stop_and_ask":
             assert "engineer_review" not in request, path.name
         if "engineer_review" in request:

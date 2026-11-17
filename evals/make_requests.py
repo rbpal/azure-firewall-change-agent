@@ -4,7 +4,7 @@ Example:
     uv run python evals/make_requests.py            # writes into evals/requests/
     uv run python evals/make_requests.py --out DIR  # writes somewhere else
 
-Why: the eval needs 88 varied tickets, 56 for validation and 32 for test, spread
+Why: the eval needs 92 varied tickets, 60 for validation and 32 for test, spread
 over 42 kinds of request, including changes to the primary site only, the DR
 site only, or both, IP groups, on-prem users, addresses wider or narrower than
 the plan, planned spokes, requests that resume after an engineer's review, and
@@ -140,6 +140,11 @@ CATEGORIES = [
     # ipg-onprem-*, but its Azure name ends in -dr; no validation ticket used one there before.
     ("onprem-group-source-dr-only", 1, 0),
     ("onprem-group-source-both-sites", 1, 0),
+    # Added 2026-11-17, appended so every earlier number keeps its ticket.
+    ("onprem-location-mismatch-fresh", 1, 0),
+    ("free-text-accepted", 1, 0),
+    ("free-text-accepted-plus-unreviewed", 1, 0),
+    ("free-text-accepted-with-env-mismatch", 1, 0),
 ]
 
 ENGINEER = "Jordan Patel"
@@ -741,6 +746,52 @@ def build_accepted_after_review(rng, net, used):
         f"The {env} {role} will call the new payments servers in {dest} once they are built."
 
 
+PORTAL_PRIMARY = {"location": "onprem-primary", "cidr": "172.20.10.0/23"}  # Head office floors 1-2
+PORTAL_MISLABELLED = {"location": "onprem-secondary", "cidr": "172.20.10.0/23"}  # the plan places it at onprem-primary
+PORTAL_TEXT = "Head office staff open the dev client portal."
+
+
+def _accepted_free_text(justification, environments):
+    """An acceptance of the free-text findings that name these environments, quoted as intake reports them."""
+    from workflow.intake import free_text_findings
+    found = [f for f in free_text_findings({"environments": ["dev"], "justification": justification})
+             if f["environment"] in environments]
+    keep = ("code", "where", "message", "matched", "environment", "selected")
+    review = _accept("The fields are right: dev only.", ["free_text_conflict"])
+    review["discrepancies"] = [{k: f[k] for k in keep if k in f} for f in found]
+    return review
+
+
+def build_onprem_location_mismatch_fresh(rng, net, used):
+    """An on-prem CIDR whose location field names the other data centre; a validation twin of the test case."""
+    fields = onprem_to_spoke(net, "dev", ["primary"], "port", [PORTAL_MISLABELLED], "Fs")
+    return "On-prem CIDR labelled onprem-secondary; the plan places it at onprem-primary.", fields, PORTAL_TEXT
+
+
+def build_free_text_accepted(rng, net, used):
+    """Free text names prod on a dev ticket, and the engineer accepted that discrepancy."""
+    text = PORTAL_TEXT + " Needed in prod before the release."
+    fields = onprem_to_spoke(net, "dev", ["primary"], "port", [PORTAL_PRIMARY], "Fs")
+    fields["_engineer_review"] = _accepted_free_text(text, {"prod"})
+    return "Free text names prod; the engineer accepted that discrepancy.", fields, text
+
+
+def build_free_text_accepted_plus_unreviewed(rng, net, used):
+    """The prod discrepancy is accepted, but a second one, the DR site, was never reviewed; intake does not detect sites."""
+    text = PORTAL_TEXT + " Needed in prod before the release. Also add it at the DR site."
+    fields = onprem_to_spoke(net, "dev", ["primary"], "port", [PORTAL_PRIMARY], "Fs")
+    fields["_engineer_review"] = _accepted_free_text(text, {"prod"})
+    return "Prod discrepancy accepted; the DR-site request was not reviewed.", fields, text
+
+
+def build_free_text_accepted_with_env_mismatch(rng, net, used):
+    """The free-text discrepancy is accepted, but the source CIDR is at the other data centre."""
+    text = PORTAL_TEXT + " Needed in prod before the release."
+    fields = onprem_to_spoke(net, "dev", ["primary"], "port", [PORTAL_MISLABELLED], "Fs")
+    fields["_engineer_review"] = _accepted_free_text(text, {"prod"})
+    return "Free text accepted, but the source location is wrong; acceptance does not cover it.", fields, text
+
+
 def _xfer_host(net, env, site):
     """The xfer SFTP host at one site, the same /32 the inbound-dnat cases use."""
     return {"environment": env, "site": site, "cidr": net.spoke_cidr[(env, site, "xfer")].replace(".0/24", ".14/32")}
@@ -941,7 +992,8 @@ def plan():
                 body = ticket(number, rng, fields, justification)
                 if review is not None:  # the acceptance covers exactly this ticket version
                     review = {**review, "ticket_version": version(body)}
-                    review = {k: review[k] for k in ("decision", "engineer", "reason", "ticket_version", "accepted", "planned")}
+                    review = {k: review[k] for k in ("decision", "engineer", "reason", "ticket_version", "accepted", "planned", "discrepancies")
+                              if k in review}
                 out.append((split, number, name, why, body, review, dns))
     return out
 

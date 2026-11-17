@@ -1,0 +1,37 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011072
+category: onprem-location-mismatch-fresh
+why: On-prem CIDR labelled onprem-secondary; the plan places it at onprem-primary.
+ticket:
+  number: RITM0011072
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-06T09:10:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: false}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {location: onprem-secondary, cidr: 172.20.10.0/23}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.17.0/24}
+  protocol: TCP
+  ports: ['443']
+  justification: Head office staff open the dev client portal.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+expected:
+  labelled_against: 32384fa
+  note: >-
+    172.20.10.0/23 is Head office floors 1-2 at onprem-primary in address-plan.yaml, but the ticket says onprem-secondary. A source location mismatch: stop and ask which source is intended (RB-05-5), never correct the CIDR or the location.
+  outcome: stop_and_ask
+  reason: env_mismatch
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.10.0/23}
+  - {tool: locate_address_for_env_site, address: 10.104.17.0/24}

@@ -73,11 +73,11 @@ Security has two parts: who can sign in and act, and what the agent is allowed t
 - Text that asks to skip the engineer review, an approval or a required check is caught by code (`workflow/bypass.py`), not only by the agent. That finding can only be cleared by editing the ticket.
 - Planted instructions that widen addresses, add ports or request extra flows are ignored. Free text that asks for traffic in an environment, site or location the ticket did not select stops the ticket with `free_text_conflict`.
 - The agent takes facts from its tools, not from the text. The tools read one pinned snapshot of `main`, checked by hash before every request.
-- Tool results are not screened for injected instructions. No guard reads a tool's answer for text that tries to steer the agent. The risk is limited, not removed: the network data and runbooks reach `main` only through a reviewed pull request, a draft's resolved addresses must match the DNS tool's answer exactly (`workflow/scope.py`), and the draft check below still applies.
+- Tool results are not screened for injected instructions yet. This will be fixed in the next iteration, as part of the optimization work (see Optimization below). Until then the risk is limited: the network data and runbooks reach `main` only through a reviewed pull request, a draft's resolved addresses must match the DNS tool's answer exactly (`workflow/scope.py`), and the draft check below still applies.
 - Before any rule is written, code checks the draft against the ticket (`workflow/scope.py`). A rule wider than approved is refused.
-- Six evaluation tickets test injection: RITM0011037 to 0011040, RITM0012019 and RITM0012020. All passed on version 17 or on the version 16 test-split rerun.
+- Evaluation tickets test injection, including validation tickets RITM0011037 to 0011040. All passed on version 17. The held-back test split has two more, which passed on the version 16 rerun.
 
-An engineer still accepts every ticket, approves every draft and reviews every pull request. Planned, not built: Prompt Shields screening before the agent runs, a token limit per request, and private network access to the tools.
+An engineer still accepts every ticket, approves every draft and reviews every pull request. The remaining security work is listed under Optimization below.
 
 ### Status
 
@@ -121,3 +121,15 @@ mkdir -p ~/.config/leak-gate && $EDITOR ~/.config/leak-gate/terms.txt   # one re
 ```
 
 If the block list is missing, the gate refuses the commit rather than letting it through.
+
+## Optimization
+
+This is the work left for the next iterations. Each item is known and planned, not ignored.
+
+1. **Tool-result screening.** Screen tool answers, including DNS answers and text fields such as `holds`, for instructions that try to steer the agent.
+2. **Prompt Shields.** Screen the ticket text before the agent runs.
+3. **Token limit per request.** Stop a request that uses more than a set number of tokens.
+4. **Private network access to the tools.** Move the MCP tools behind a private endpoint in the enterprise design.
+5. **Evaluation coverage.** Add validation tickets for an on-prem source-location mismatch and for an engineer-accepted `free_text_conflict`. Neither is covered by a validation ticket today.
+6. **Threat model status.** Update `docs/threat-model.md`, where several measures that are now built still say "Planned".
+7. **Release pipeline.** Replace the demo's apply from VS Code with a release workflow that applies `main` per environment-site.

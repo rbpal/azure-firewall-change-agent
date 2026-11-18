@@ -59,7 +59,7 @@
           "evaluated_on": "2026-11-18",
           "snapshot": "dbc2739eea3992177e2f87bf815094d5a624e520",
           "result": "56 of 60 answered and scored, and all 56 passed and complete; 0 of 24 missed stops; 0 too wide; 0 skipped required tools; 0 agent errors; one attempt per ticket; 789,032 input and 35,624 output tokens over 60 calls and 239 tool calls",
-          "not_scored": "RITM0011001 and RITM0011049 (connection errors), RITM0011005 and RITM0011009 (service tool_user_error, HTTP 400). All four passed on 2026-11-15. No response ID was returned, so no trace exists for them; the cause is not investigated",
+          "not_scored": "RITM0011001 and RITM0011049 (connection errors), RITM0011005 and RITM0011009 (service tool_user_error, HTTP 400). All four passed on 2026-11-15. The runner received no response ID, and Foundry stored no response for them. Application Insights recorded no matching tool-server request for either failed tool invocation. The two APIConnectionError attempts have no matching Foundry record. The underlying causes remain unproven.",
           "tool_code": "sha256 212dcb2a at the start and the end of the run",
           "result_file": "~/fwagent-runs/2026-11-18-v17-validation60.json, with its score sheet .sheet.txt and its trace .trace.jsonl, retrieved on 2026-11-18 by read-only Foundry retrieval"
         }

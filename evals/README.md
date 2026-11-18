@@ -158,7 +158,7 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 | RITM0011009 | draft | `400 tool_user_error`, same message | Yes |
 | RITM0011049 | draft | `APIConnectionError: Connection error` | Yes |
 
-None of the four calls returned a response ID or token count, so no Foundry trace exists for them. Their cause has not been investigated; the two `tool_user_error` request IDs are kept in the run file. The run saved its JSON, its full printed score sheet (with the definition hash), and a per-ticket trace built afterward on 2026-11-18 by read-only Foundry retrieval of the 56 saved response IDs.
+The runner received no response ID or token count for any of the four, and Foundry stored no response for them. Application Insights recorded no matching tool-server request for either failed tool invocation. The two APIConnectionError attempts have no matching Foundry record. The underlying causes remain unproven. The two `tool_user_error` request IDs are kept in the run file. The run saved its JSON, its full printed score sheet (with the definition hash), and a per-ticket trace built afterward on 2026-11-18 by read-only Foundry retrieval of the 56 saved response IDs.
 
 ### Version 17: four new validation tickets, 2026-11-18
 

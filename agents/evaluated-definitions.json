@@ -53,9 +53,20 @@
           "result_file": "~/fwagent-runs/2026-11-18-v17-RITM0011072-0075.json, rescored offline in 2026-11-18-v17-RITM0011072-0075.rescore.txt"
         }
       ],
+      "later_runs": [
+        {
+          "evaluation": "validation split, full rerun, incomplete",
+          "evaluated_on": "2026-11-18",
+          "snapshot": "dbc2739eea3992177e2f87bf815094d5a624e520",
+          "result": "56 of 60 answered and scored, and all 56 passed and complete; 0 of 24 missed stops; 0 too wide; 0 skipped required tools; 0 agent errors; one attempt per ticket; 789,032 input and 35,624 output tokens over 60 calls and 239 tool calls",
+          "not_scored": "RITM0011001 and RITM0011049 (connection errors), RITM0011005 and RITM0011009 (service tool_user_error, HTTP 400). All four passed on 2026-11-15. No response ID was returned, so no trace exists for them; the cause is not investigated",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-18-v17-validation60.json, with its score sheet .sheet.txt and its trace .trace.jsonl, retrieved on 2026-11-18 by read-only Foundry retrieval"
+        }
+      ],
       "data_unchanged": "The two runs read different snapshots of the same network data. git diff --name-only 6dac766 18190c5 lists no file under data/network, infra/envs, agents, mcp or workflow. Between them only the four new ticket files, the ticket generator (make_requests.py), the eval runner, their tests and documentation changed; the 56 earlier labels are unchanged.",
-      "test_split": "not run on this definition. One test-split ticket ran once on 2026-11-15 as a regression check and passed; that is not a test-split score",
-      "caveat": "Every result file is kept outside the repository because it holds each reply and response ID. The 2026-11-18 run saved its JSON but not its full printed score sheet, so the four replies were scored again offline with the repository's own scorers; the verdicts matched. The JSON does not record the definition hash: the runner printed it and refuses to run unless the published definition matches main's, and main at 18190c5 builds 09e684c6275ce61b. No per-ticket trace file was built for the 2026-11-18 run, because building one needs a Foundry retrieval call."
+      "test_split": "not run on this definition. One test-split ticket ran once on 2026-11-15 as a regression check and passed; that is not a test-split score. The full validation rerun of 2026-11-18 had 4 infrastructure errors, so the test split was not started",
+      "caveat": "Every result file is kept outside the repository because it holds each reply and response ID. The 2026-11-18 run saved its JSON but not its full printed score sheet, so the four replies were scored again offline with the repository's own scorers; the verdicts matched. The JSON does not record the definition hash: the runner printed it and refuses to run unless the published definition matches main's, and main at 18190c5 builds 09e684c6275ce61b. The four-ticket run's per-ticket trace was retrieved afterward, on 2026-11-18, by read-only Foundry retrieval of its saved response IDs (no model call): ~/fwagent-runs/2026-11-18-v17-RITM0011072-0075.trace.jsonl."
     }
   }
 }

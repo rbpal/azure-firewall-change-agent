@@ -30,7 +30,7 @@ There are 92 requests: 60 in validation and 32 in the test split, across 46 cate
 | [`requests/validation/`](requests/validation/) | 60 | 34 | 2 | 24 | Tune and gate the agent. A definition may draft only after it passes here and a reviewed pull request adds it to [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json). |
 | [`requests/test/`](requests/test/) | 32 | 23 | 2 | 7 | Held back for one final score per definition. Nothing is tuned against it. The runner refuses it without `--allow-test-split`. |
 
-**Added 2026-11-17: RITM0011072 to RITM0011075.** These cover an on-prem source-location mismatch and the engineer-accepted `free_text_conflict`: accepted and drafted, accepted with a second unreviewed request, and accepted while the source location is still wrong. No agent version has run them yet. Results recorded before this date are on the earlier 56-ticket validation set.
+**Added 2026-11-17: RITM0011072 to RITM0011075.** These cover an on-prem source-location mismatch and the engineer-accepted `free_text_conflict`: accepted and drafted, accepted with a second unreviewed request, and accepted while the source location is still wrong. Version 17 ran them on 2026-11-18 (section 5). Other results recorded before 2026-11-17 are on the earlier 56-ticket validation set.
 
 Retired numbers are listed in [`make_requests.py`](make_requests.py) under `RETIRED`, with a reason, so every other number keeps its ticket.
 
@@ -128,7 +128,31 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 
 ## 5. Latest results
 
-**Current status (2026-11-17):** `sync-network` has published version 17 (definition `09e684c6275ce61b`, `main` at `6dac766`). It passed all 56 validation tickets in one run. It is not yet in the register, so the workflow still refuses to draft with it. Publication only means its snapshot, agent and tool code were checked against that commit.
+**Current status (2026-11-18):** version 17 (definition `09e684c6275ce61b`) passed all 60 validation tickets across two runs: 56 on 2026-11-15 and the 4 new ones on 2026-11-18. No single run covered all 60. It is listed in [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json), so the workflow may draft with it. The test split has not been run on version 17; one test ticket ran once as a regression check, which is not a test-split score (see the 2026-11-15 run below).
+
+### Version 17: four new validation tickets, 2026-11-18
+
+**Passed: 4 of 4, in one run.** One attempt per ticket, no retries. Together with the 2026-11-15 run, version 17 has passed 60 of 60 validation tickets across two runs.
+
+| Item | Value |
+|---|---|
+| Agent | `fwagent-drafter` version 17, definition `09e684c6275ce61b`, the same definition as the 2026-11-15 run |
+| Tickets | RITM0011072, RITM0011073, RITM0011074 and RITM0011075 (`--only`) |
+| Snapshot and tools | Commit `18190c5`, marked ready by `sync-network` with version 17 and no new publish; every tool call read that snapshot; tool code hash `212dcb2a` at the start and end, the same as on 2026-11-15 |
+| Network data | Unchanged: `git diff --name-only 6dac766 18190c5` lists no file under `data/network`, `infra/envs`, `agents`, `mcp` or `workflow`. The 56 earlier labels are unchanged |
+| Runner settings | One attempt per ticket (`--max-attempts 1`), at least 60 s between calls, capped at 150,000 tokens |
+| Tokens | 53,447 input and 1,826 output, over 4 calls and 9 tool calls |
+
+| Ticket | Expected | Agent | Result |
+|---|---|---|---|
+| RITM0011072 | stop, `env_mismatch` | stop, `env_mismatch` | Pass |
+| RITM0011073 | draft, one TCP 443 rule at `dev-eastus2` | draft, the same rule | Pass |
+| RITM0011074 | stop, `free_text_conflict` | stop, `free_text_conflict` | Pass |
+| RITM0011075 | stop, `env_mismatch` | stop, `env_mismatch` | Pass |
+
+Each ticket made every required tool call: both location lookups on all four, and the duplicate check at `dev-eastus2` on RITM0011073. RITM0011073, RITM0011074 and RITM0011075 ran with the engineer's recorded acceptance of the `free_text_conflict`. On RITM0011073 the agent named the rule `https-onpremPrimary-to-portClientPortal`, and the label says `https-onpremPrimary-to-portWeb`; rule names are not scored.
+
+**Offline rescore.** The run saved its JSON file but not its full printed score sheet. The four saved replies and tool calls were scored again offline with `score_reply` and `missing_tools`, with no model or Azure call. The verdicts matched the saved ones. The JSON records the snapshot, tool code hashes, attempts, replies, tool calls and the commit each tool answer names. It does not record the definition hash. The runner printed `09e684c6275ce61b` and refuses to run unless the published definition matches `main`'s. No per-ticket trace file was built for this run; building one needs a Foundry retrieval call.
 
 ### Version 17: validation, 2026-11-15
 
@@ -154,7 +178,7 @@ Version 17 changes drafter step 8 and RB-05: address ownership is checked agains
 
 **Regression check, not a test-split run.** Test ticket RITM0012027 ran once on version 17 (13,187 input and 360 output tokens) and passed: it stopped with `env_mismatch`. The other 31 test tickets were not run on version 17. Passing validation does not mean the test split passed.
 
-**Coverage gaps.** No validation ticket covers an on-prem source-location mismatch; only RITM0012027 does. No ticket in either split exercises an engineer-accepted `free_text_conflict`.
+**Coverage gaps: on-prem source-location mismatch and engineer-accepted `free_text_conflict` (validation closed 2026-11-17).** When this run was made, no validation ticket covered an on-prem source-location mismatch, and no ticket in either split exercised an engineer-accepted `free_text_conflict`. The four tickets added on 2026-11-17 close both gaps in validation only. RITM0011072 and RITM0011075 are on-prem source-location mismatches. RITM0011073, RITM0011074 and RITM0011075 run with an engineer-accepted `free_text_conflict`. Version 17 passed all four on 2026-11-18. The test split still has no engineer-accepted `free_text_conflict` ticket.
 
 ### Version 16: validation, 2026-11-15
 

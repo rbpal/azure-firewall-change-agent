@@ -128,7 +128,7 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 
 ## 5. Latest results
 
-**Current status (2026-11-18):** version 17 (definition `09e684c6275ce61b`) passed all 60 validation tickets across two runs: 56 on 2026-11-15 and the 4 new ones on 2026-11-18. No single run covered all 60. This pull request adds it to [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json); until that merges, the workflow refuses to draft with it. The test split has not been run on version 17.
+**Current status (2026-11-18):** version 17 (definition `09e684c6275ce61b`) passed all 60 validation tickets across two runs: 56 on 2026-11-15 and the 4 new ones on 2026-11-18. No single run covered all 60. It is listed in [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json), so the workflow may draft with it. The test split has not been run on version 17; one test ticket ran once as a regression check, which is not a test-split score (see the 2026-11-15 run below).
 
 ### Version 17: four new validation tickets, 2026-11-18
 
@@ -150,9 +150,9 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 | RITM0011074 | stop, `free_text_conflict` | stop, `free_text_conflict` | Pass |
 | RITM0011075 | stop, `env_mismatch` | stop, `env_mismatch` | Pass |
 
-Each ticket made every required tool call: both location lookups on all four, and the duplicate check at `dev-eastus2` on RITM0011073. Three of the four ran with a recorded engineer acceptance. On RITM0011073 the agent named the rule `https-onpremPrimary-to-portClientPortal`, and the label says `https-onpremPrimary-to-portWeb`; rule names are not scored.
+Each ticket made every required tool call: both location lookups on all four, and the duplicate check at `dev-eastus2` on RITM0011073. RITM0011073, RITM0011074 and RITM0011075 ran with the engineer's recorded acceptance of the `free_text_conflict`. On RITM0011073 the agent named the rule `https-onpremPrimary-to-portClientPortal`, and the label says `https-onpremPrimary-to-portWeb`; rule names are not scored.
 
-**Offline rescore.** The run saved its JSON file but not its full printed score sheet. The four saved replies and tool calls were scored again offline with `score_reply` and `missing_tools`, with no model or Azure call. The verdicts matched the saved ones. The JSON records the snapshot, tool code hashes, attempts, replies, tool calls and the commit each tool answer names. It does not record the definition hash. The runner printed `09e684c6275ce61b` and refuses to run unless the published definition matches `main`'s.
+**Offline rescore.** The run saved its JSON file but not its full printed score sheet. The four saved replies and tool calls were scored again offline with `score_reply` and `missing_tools`, with no model or Azure call. The verdicts matched the saved ones. The JSON records the snapshot, tool code hashes, attempts, replies, tool calls and the commit each tool answer names. It does not record the definition hash. The runner printed `09e684c6275ce61b` and refuses to run unless the published definition matches `main`'s. No per-ticket trace file was built for this run; building one needs a Foundry retrieval call.
 
 ### Version 17: validation, 2026-11-15
 
@@ -178,7 +178,7 @@ Version 17 changes drafter step 8 and RB-05: address ownership is checked agains
 
 **Regression check, not a test-split run.** Test ticket RITM0012027 ran once on version 17 (13,187 input and 360 output tokens) and passed: it stopped with `env_mismatch`. The other 31 test tickets were not run on version 17. Passing validation does not mean the test split passed.
 
-**Coverage gaps (closed 2026-11-17).** When this run was made, no validation ticket covered an on-prem source-location mismatch, and no ticket in either split exercised an engineer-accepted `free_text_conflict`. RITM0011072 to RITM0011075 now cover both, and version 17 passed them on 2026-11-18.
+**Coverage gaps: on-prem source-location mismatch and engineer-accepted `free_text_conflict` (validation closed 2026-11-17).** When this run was made, no validation ticket covered an on-prem source-location mismatch, and no ticket in either split exercised an engineer-accepted `free_text_conflict`. The four tickets added on 2026-11-17 close both gaps in validation only. RITM0011072 and RITM0011075 are on-prem source-location mismatches. RITM0011073, RITM0011074 and RITM0011075 run with an engineer-accepted `free_text_conflict`. Version 17 passed all four on 2026-11-18. The test split still has no engineer-accepted `free_text_conflict` ticket.
 
 ### Version 16: validation, 2026-11-15
 

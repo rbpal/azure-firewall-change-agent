@@ -1,0 +1,52 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011075
+category: free-text-accepted-with-env-mismatch
+why: Free text accepted, but the source location is wrong; acceptance does not cover it.
+ticket:
+  number: RITM0011075
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-06T09:30:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: false}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {location: onprem-secondary, cidr: 172.20.10.0/23}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.17.0/24}
+  protocol: TCP
+  ports: ['443']
+  justification: Head office staff open the dev client portal. Needed in prod before the release.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+engineer_review:
+  decision: accept
+  engineer: Jordan Patel
+  reason: 'The fields are right: dev only.'
+  ticket_version: 91b0a577d40d2d9475619ee70169ac40f3172d2a174185167796990ee73ad6f9
+  accepted: [free_text_conflict]
+  planned: []
+  discrepancies:
+  - code: free_text_conflict
+    where: justification
+    message: the justification says "prod" (the prod environment), but the ticket selects dev. Correct the ticket, or confirm
+      the fields are right and accept this discrepancy
+    matched: [prod]
+    environment: prod
+    selected: [dev]
+expected:
+  labelled_against: 32384fa
+  note: >-
+    The accepted free_text_conflict covers only the prod sentence. 172.20.10.0/23 is at onprem-primary, but the ticket says onprem-secondary: an env_mismatch that the acceptance does not cover. Stop and ask (RB-05-5); draft nothing.
+  outcome: stop_and_ask
+  reason: env_mismatch
+  rules: []
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.10.0/23}
+  - {tool: locate_address_for_env_site, address: 10.104.17.0/24}

@@ -23,12 +23,14 @@ A ticket **passes** only when all four checks pass:
 
 ## 3. Dataset
 
-There are 88 requests: 56 in validation and 32 in the test split, across 42 categories. `make_requests.py` writes the tickets, the same every run.
+There are 92 requests: 60 in validation and 32 in the test split, across 46 categories. `make_requests.py` writes the tickets, the same every run.
 
 | Split | Requests | Draft | Already allowed | Stop and ask | Purpose |
 |---|---|---|---|---|---|
-| [`requests/validation/`](requests/validation/) | 56 | 33 | 2 | 21 | Tune and gate the agent. A definition may draft only after it passes here and a reviewed pull request adds it to [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json). |
+| [`requests/validation/`](requests/validation/) | 60 | 34 | 2 | 24 | Tune and gate the agent. A definition may draft only after it passes here and a reviewed pull request adds it to [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json). |
 | [`requests/test/`](requests/test/) | 32 | 23 | 2 | 7 | Held back for one final score per definition. Nothing is tuned against it. The runner refuses it without `--allow-test-split`. |
+
+**Added 2026-11-17: RITM0011072 to RITM0011075.** These cover an on-prem source-location mismatch and the engineer-accepted `free_text_conflict`: accepted and drafted, accepted with a second unreviewed request, and accepted while the source location is still wrong. No agent version has run them yet. Results recorded before this date are on the earlier 56-ticket validation set.
 
 Retired numbers are listed in [`make_requests.py`](make_requests.py) under `RETIRED`, with a reason, so every other number keeps its ticket.
 
@@ -36,7 +38,7 @@ Retired numbers are listed in [`make_requests.py`](make_requests.py) under `RETI
 
 **Who wrote and reviewed the answer keys.** The `expected:` blocks are written for this project and checked against the network data and tools. `make_requests.py` never writes them. On the 90-request set, 48 dated from the first set, of 2026-10-13, and no review record of them survives. The other 42 were added from 2026-10-18 on. The project owner approved 27 of them by number, between 2026-10-18 and 2026-10-22. The remaining 15 have no recorded by-number approval. Two of the 42, RITM0011063 and RITM0011069, were retired on 2026-11-14. The three FQDN labels rewritten that day (RITM0011015, RITM0011064, RITM0012010) were rewritten at the owner's direction and have no by-number review record yet. No label carries the `review: pending` marker.
 
-**Software tests are not LLM evaluations.** `pytest` runs the software tests in [`tests/`](../tests/). They check the code, including the runner and scorers, and call no model. [`tests/evals/`](../tests/evals/) runs the runner with two stand-in agents from [`stand_in_agents.py`](stand_in_agents.py). `perfect` replays the labels and passes 56 of 56. That shows the scorers accept every label as written; it does not prove the scorers are free of bugs, because a scorer that passed everything would do the same. [`mutate_scorers.py`](mutate_scorers.py) covers that gap only in part: it breaks each scorer on purpose and checks a test fails. `always_stop` passes 3 of 56. Neither stand-in says anything about a model. Only a run with `--agent foundry` evaluates the LLM.
+**Software tests are not LLM evaluations.** `pytest` runs the software tests in [`tests/`](../tests/). They check the code, including the runner and scorers, and call no model. [`tests/evals/`](../tests/evals/) runs the runner with two stand-in agents from [`stand_in_agents.py`](stand_in_agents.py). `perfect` replays the labels and passes 60 of 60. That shows the scorers accept every label as written; it does not prove the scorers are free of bugs, because a scorer that passed everything would do the same. [`mutate_scorers.py`](mutate_scorers.py) covers that gap only in part: it breaks each scorer on purpose and checks a test fails. `always_stop` passes 4 of 60. Neither stand-in says anything about a model. Only a run with `--agent foundry` evaluates the LLM.
 
 ## 4. Examples
 

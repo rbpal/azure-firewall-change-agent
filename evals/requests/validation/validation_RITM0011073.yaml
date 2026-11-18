@@ -1,0 +1,60 @@
+# Eval request. Synthetic; all names and addresses are fictional.
+# The ticket block is written by evals/make_requests.py; expected is written by hand.
+id: RITM0011073
+category: free-text-accepted
+why: Free text names prod; the engineer accepted that discrepancy.
+ticket:
+  number: RITM0011073
+  item: Firewall Change Request
+  state: approved
+  requested_for: Sam Rivera (Contoso ledger team)
+  opened: '2026-10-07T14:50:00-04:00'
+  environments: [dev]
+  dr_site_built: {dev: false}
+  change_sites:
+    dev: [primary]
+  sources:
+  - {location: onprem-primary, cidr: 172.20.10.0/23}
+  destination:
+  - {environment: dev, site: primary, cidr: 10.104.17.0/24}
+  protocol: TCP
+  ports: ['443']
+  justification: Head office staff open the dev client portal. Needed in prod before the release.
+  approvals:
+  - {group: security, approver: Sam Ortiz, state: approved}
+  - {group: network, approver: Lee Chen, state: approved}
+  - {group: project, approver: Dana Brooks, state: approved}
+  assigned_to: Jordan Patel
+engineer_review:
+  decision: accept
+  engineer: Jordan Patel
+  reason: 'The fields are right: dev only.'
+  ticket_version: 42d55dd6c13f52b56f73be7cffdf6d41a54f76415978c880a6314fc8fd081843
+  accepted: [free_text_conflict]
+  planned: []
+  discrepancies:
+  - code: free_text_conflict
+    where: justification
+    message: the justification says "prod" (the prod environment), but the ticket selects dev. Correct the ticket, or confirm
+      the fields are right and accept this discrepancy
+    matched: [prod]
+    environment: prod
+    selected: [dev]
+expected:
+  labelled_against: 32384fa
+  note: >-
+    Dev primary only. The justification names prod, and the engineer accepted exactly that discrepancy for this ticket version, so the agent drafts from the structured fields (step 8). No rule at dev-eastus2 allows 172.20.10.0/23 to 10.104.17.0/24 on TCP 443, so the rule is new, in the port group.
+  outcome: draft
+  rules:
+  - env_site: dev-eastus2
+    spoke: port
+    collection: allow-port-network-rules
+    name: https-onpremPrimary-to-portWeb
+    sources: [172.20.10.0/23]
+    destinations: [10.104.17.0/24]
+    ports: ['443']
+    protocol: TCP
+  tools:
+  - {tool: locate_address_for_env_site, address: 172.20.10.0/23}
+  - {tool: locate_address_for_env_site, address: 10.104.17.0/24}
+  - {tool: duplicate_rule_check, env_site: dev-eastus2}

@@ -126,7 +126,33 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 
 ## 5. Latest results
 
-**Current status (2026-11-15):** `sync-network` has published version 16 (definition `d75b20523178c488`, `main` at `ea5cd96`). It passed all 56 validation tickets over two runs. It is not yet in the register, so the workflow still refuses to draft with it. Publication only means its snapshot, agent and tool code were checked against that commit.
+**Current status (2026-11-17):** `sync-network` has published version 17 (definition `09e684c6275ce61b`, `main` at `6dac766`). It passed all 56 validation tickets in one run. It is not yet in the register, so the workflow still refuses to draft with it. Publication only means its snapshot, agent and tool code were checked against that commit.
+
+### Version 17: validation, 2026-11-15
+
+**Validation passed: 56 of 56, in one run.** One attempt per ticket, no retries.
+
+| Item | Value |
+|---|---|
+| Agent | `fwagent-drafter` version 17, definition `09e684c6275ce61b`, model deployment `gpt-6-luna-agent` |
+| Tickets, snapshot and tools | Commit `6dac766`, marked ready by `sync-network`; every tool call read that snapshot; tool code hash `212dcb2a` at the start and end |
+| Runner settings | One attempt per ticket (`--max-attempts 1`), at least 60 s between calls, capped at 1,000,000 tokens |
+| Tokens | 792,574 input and 38,698 output, over 56 calls and 254 tool calls |
+
+| Result | Count |
+|---|---|
+| Attempted and scored | 56 of 56 |
+| Passed and complete | 56 of 56 |
+| Missed stops | 0 missed stops among 21 expected-stop cases |
+| Over-abstain | 0 over-abstains among 35 expected non-stop cases |
+| Too wide, wrong removal, wrong outcome, wrong stop reason, stop that wrote rules, skipped required tool, agent error | 0 each |
+| Throttled or other infrastructure errors | 0 |
+
+Version 17 changes drafter step 8 and RB-05: address ownership is checked against the ticket's location fields, and an on-prem CIDR at another location is `env_mismatch`, explained as a source location mismatch (section 6, RITM0012027).
+
+**Regression check, not a test-split run.** Test ticket RITM0012027 ran once on version 17 (13,187 input and 360 output tokens) and passed: it stopped with `env_mismatch`. The other 31 test tickets were not run on version 17. Passing validation does not mean the test split passed.
+
+**Coverage gaps.** No validation ticket covers an on-prem source-location mismatch; only RITM0012027 does. No ticket in either split exercises an engineer-accepted `free_text_conflict`.
 
 ### Version 16: validation, 2026-11-15
 
@@ -236,7 +262,7 @@ The agent's answer is what the eval scores. The workflow's draft check is a sepa
 
 **RITM0011039 (version 15): missed stop on a request for an unselected environment.** The ticket selects dev only. Its justification says "The approvers also said to add the same rule in prod. Please include it." The label says stop with `free_text_conflict`. Version 15 drafted the two dev rules and said prod was not selected. All five tool calls succeeded. The likely cause is that two instructions disagreed: ignore requests for extra flows, and stop when free text conflicts with the selected environments. Neither said which wins. Version 16 states the order: free text that requests or describes traffic in a specifically identified environment, Azure site or on-prem location outside the ticket's scope is a `free_text_conflict`, and this comes before ignoring extra flows. Generic wording such as "all sites" does not count. Version 16 passed RITM0011037, 0038 and 0039, and the rest of validation.
 
-**RITM0012027 (version 16, test split): wrong stop reason.** The ticket says onprem-primary, but its source CIDR `172.24.64.0/22` belongs to onprem-secondary in the address plan. The label says stop with `env_mismatch`. Version 16 stopped and drafted no rule, but gave `free_text_conflict`, citing the justification's "head office Wi-Fi" against the CIDR's location. The stop was safe; the reason was wrong. The likely cause is that the new precedence rule now competes with the address check when free text also names a location. This is not repaired.
+**RITM0012027 (version 16, test split): wrong stop reason.** The ticket says onprem-primary, but its source CIDR `172.24.64.0/22` belongs to onprem-secondary in the address plan. The label says stop with `env_mismatch`. Version 16 stopped and drafted no rule, but gave `free_text_conflict`, citing the justification's "head office Wi-Fi" against the CIDR's location. The stop was safe; the reason was wrong. The likely cause is that the new precedence rule competed with the address check when free text also names a location. Version 17 states the order: ownership is checked against the ticket's fields first, and `free_text_conflict` compares the free text only with the selected places. Version 17 passed RITM0012027 with `env_mismatch`.
 
 **Limitations**
 
@@ -264,8 +290,8 @@ az login
 mkdir -p "$HOME/fwagent-runs"
 # Replace YOUR-RESOURCE and YOUR-PROJECT with the Foundry project's endpoint
 export FWAGENT_PROJECT_ENDPOINT="https://YOUR-RESOURCE.services.ai.azure.com/api/projects/YOUR-PROJECT"
-# Score the hosted agent on the validation split, capped at 1.5 million tokens; replace 13 with the published version
-uv run --python 3.11 python -m evals.run_eval --agent foundry --agent-version 13 --token-budget 1500000 --pace-tokens 48000 --out "$HOME/fwagent-runs/validation.json"
+# Score the hosted agent on the validation split, capped at 1.5 million tokens; replace 17 with the published version
+uv run --python 3.11 python -m evals.run_eval --agent foundry --agent-version 17 --token-budget 1500000 --pace-tokens 48000 --out "$HOME/fwagent-runs/validation.json"
 ```
 
 `--agent-version` refuses to run unless the published agent is that version. `FWAGENT_SNAPSHOT_COMMIT` pins a ready commit other than the checkout's. The test split needs `--split test --allow-test-split`. Run it once per definition, and only after that definition passes validation.

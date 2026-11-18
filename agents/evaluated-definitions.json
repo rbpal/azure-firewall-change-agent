@@ -27,6 +27,35 @@
         }
       ],
       "caveat": "The 2026-11-11 validation rerun made one mistake that counts. It drafted a network rule with an FQDN destination, which this project’s Basic firewall SKU does not support. The draft check now blocks unsupported FQDN network rules. It also runs the duplicate check itself, refusing exact duplicates before files are written. An engineer still reviews every draft."
+    },
+    "09e684c6275ce61b": {
+      "agent_version": "17",
+      "evaluation": "validation split, passed",
+      "evaluated_on": "2026-11-18",
+      "main_commit": "18190c517cacda57b71579a06ab3a1839a82f4a3",
+      "result": "60 of 60 validation tickets passed and complete, across two runs: 56 on 2026-11-15 and the 4 added on 2026-11-17, run on 2026-11-18. No single run covered all 60. 0 of 24 missed stops; 0 of 36 over-abstains; 0 too wide; 0 skipped required tools; 0 agent errors; 0 infrastructure errors",
+      "tool_code_sha256": "212dcb2abf503fb747a84338ebb293dec52bf97f83d3a6e33591ec1840213893",
+      "runs": [
+        {
+          "evaluated_on": "2026-11-15",
+          "snapshot": "6dac7660aba7c85fdeb139828aadba1ac0c5cec3",
+          "tickets": "the 56 validation tickets that existed before RITM0011072 to RITM0011075",
+          "result": "56 of 56 passed and complete; one attempt per ticket; 792,574 input and 38,698 output tokens over 56 calls and 254 tool calls",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-15-v17-validation.json, with its score sheet 2026-11-15-v17-validation.sheet.txt"
+        },
+        {
+          "evaluated_on": "2026-11-18",
+          "snapshot": "18190c517cacda57b71579a06ab3a1839a82f4a3",
+          "tickets": "RITM0011072, RITM0011073, RITM0011074, RITM0011075",
+          "result": "4 of 4 passed and complete; one attempt per ticket; 53,447 input and 1,826 output tokens over 4 calls and 9 tool calls",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-18-v17-RITM0011072-0075.json, rescored offline in 2026-11-18-v17-RITM0011072-0075.rescore.txt"
+        }
+      ],
+      "data_unchanged": "The two runs read different snapshots of the same network data. git diff --name-only 6dac766 18190c5 lists no file under data/network, infra/envs, agents, mcp or workflow. Between them only the four new ticket files, the eval runner, its tests and documentation changed; the 56 earlier labels are unchanged.",
+      "test_split": "not run on this definition",
+      "caveat": "Every result file is kept outside the repository because it holds each reply and response ID. The 2026-11-18 run saved its JSON but not its full printed score sheet, so the four replies were scored again offline with the repository's own scorers; the verdicts matched. The JSON does not record the definition hash: the runner printed it and refuses to run unless the published definition matches main's, and main at 18190c5 builds 09e684c6275ce61b."
     }
   }
 }

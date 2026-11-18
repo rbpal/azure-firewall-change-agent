@@ -128,7 +128,37 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 
 ## 5. Latest results
 
-**Current status (2026-11-18):** version 17 (definition `09e684c6275ce61b`) passed all 60 validation tickets across two runs: 56 on 2026-11-15 and the 4 new ones on 2026-11-18. No single run covered all 60. It is listed in [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json), so the workflow may draft with it. The test split has not been run on version 17; one test ticket ran once as a regression check, which is not a test-split score (see the 2026-11-15 run below).
+**Current status (2026-11-18):** version 17 (definition `09e684c6275ce61b`) passed all 60 validation tickets across two runs: 56 on 2026-11-15 and the 4 new ones on 2026-11-18. No single run covered all 60. It is listed in [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json), so the workflow may draft with it. A full 60-ticket rerun on 2026-11-18 scored 56, all passed and complete; 4 calls failed on infrastructure and were not scored. The test split has not been run on version 17; one test ticket ran once as a regression check, which is not a test-split score (see the 2026-11-15 run below).
+
+### Version 17: full validation rerun, 2026-11-18
+
+**Not a complete run: 56 of 60 answered and scored, and all 56 passed and complete. 4 calls failed on infrastructure.** One attempt per ticket, no retries. The rerun was planned as one run covering all 60 tickets, followed by the test split only if every ticket passed without error. Because 4 calls failed, the test split was not started.
+
+| Item | Value |
+|---|---|
+| Agent | `fwagent-drafter` version 17, definition `09e684c6275ce61b`; still the latest published version, and `sync-network` published no new one |
+| Snapshot and tools | Commit `dbc2739` (`main` after the register entry merged), pinned with `FWAGENT_SNAPSHOT_COMMIT` and marked ready by `sync-network` with version 17; every tool answer named that snapshot; tool code hash `212dcb2a` at the start and end |
+| Network data | Unchanged: under `data/network`, `infra/envs`, `agents`, `mcp` and `workflow`, the only file that differs between `18190c5` and `dbc2739` is `agents/evaluated-definitions.json`, which is not part of the definition |
+| Runner settings | One attempt per ticket (`--max-attempts 1`), at least 60 s between calls, paced at 48,000 tokens a minute, capped at 1,500,000 tokens |
+| Tokens | 789,032 input and 35,624 output, over 60 calls and 239 tool calls |
+
+| Result | Count |
+|---|---|
+| Answered and scored | 56 of 60 |
+| Passed and complete | 56 of 56 scored |
+| Missed stops | 0 among 24 expected-stop cases |
+| Over-abstain | 0 among 32 scored expected non-stop cases |
+| Too wide, wrong removal, wrong outcome, wrong stop reason, stop that wrote rules, skipped required tool, agent error | 0 each |
+| Infrastructure errors (not scored) | 4: 2 connection errors, 2 service `tool_user_error` responses |
+
+| Ticket | Expected | Error | Passed on 2026-11-15 |
+|---|---|---|---|
+| RITM0011001 | draft | `APIConnectionError: Connection error` | Yes |
+| RITM0011005 | draft | `400 tool_user_error`, "A user error occurred while executing a tool call" | Yes |
+| RITM0011009 | draft | `400 tool_user_error`, same message | Yes |
+| RITM0011049 | draft | `APIConnectionError: Connection error` | Yes |
+
+The runner received no response ID or token count for any of the four, and Foundry stored no response for them. Application Insights recorded no matching tool-server request for either failed tool invocation. The two APIConnectionError attempts have no matching Foundry record. The underlying causes remain unproven. The two `tool_user_error` request IDs are kept in the run file. The run saved its JSON, its full printed score sheet (with the definition hash), and a per-ticket trace built afterward on 2026-11-18 by read-only Foundry retrieval of the 56 saved response IDs.
 
 ### Version 17: four new validation tickets, 2026-11-18
 
@@ -152,7 +182,7 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 
 Each ticket made every required tool call: both location lookups on all four, and the duplicate check at `dev-eastus2` on RITM0011073. RITM0011073, RITM0011074 and RITM0011075 ran with the engineer's recorded acceptance of the `free_text_conflict`. On RITM0011073 the agent named the rule `https-onpremPrimary-to-portClientPortal`, and the label says `https-onpremPrimary-to-portWeb`; rule names are not scored.
 
-**Offline rescore.** The run saved its JSON file but not its full printed score sheet. The four saved replies and tool calls were scored again offline with `score_reply` and `missing_tools`, with no model or Azure call. The verdicts matched the saved ones. The JSON records the snapshot, tool code hashes, attempts, replies, tool calls and the commit each tool answer names. It does not record the definition hash. The runner printed `09e684c6275ce61b` and refuses to run unless the published definition matches `main`'s. No per-ticket trace file was built for this run; building one needs a Foundry retrieval call.
+**Offline rescore.** The run saved its JSON file but not its full printed score sheet. The four saved replies and tool calls were scored again offline with `score_reply` and `missing_tools`, with no model or Azure call. The verdicts matched the saved ones. The JSON records the snapshot, tool code hashes, attempts, replies, tool calls and the commit each tool answer names. It does not record the definition hash. The runner printed `09e684c6275ce61b` and refuses to run unless the published definition matches `main`'s. Its per-ticket trace was built afterward, on 2026-11-18, by read-only Foundry retrieval of the four saved response IDs (no model call), and is kept with the run file as `~/fwagent-runs/2026-11-18-v17-RITM0011072-0075.trace.jsonl`.
 
 ### Version 17: validation, 2026-11-15
 

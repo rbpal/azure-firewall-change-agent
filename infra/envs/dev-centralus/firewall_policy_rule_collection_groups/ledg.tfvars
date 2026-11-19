@@ -92,6 +92,13 @@ ledg = {
           destination_addresses = ["203.0.113.144/28"]
           destination_ports     = ["443"]
         }
+        "010-tcp-ledg-to-fabrikamReconciliation" = {
+          name                  = "tcp-ledg-to-fabrikamReconciliation"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.105.16.0/24"]
+          destination_addresses = ["203.0.113.192/28"]
+          destination_ports     = ["8443"]
+        }
       }
     }
   }

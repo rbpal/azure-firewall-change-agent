@@ -143,3 +143,13 @@ def test_the_timeline_shows_what_each_tool_answered():
     columns = {c.strip() for c in final.split("\n")[0].split(",") + final.split("\n")[1].split(",")}
     assert {"arguments", "answer", "result"} <= columns
     assert 'Properties["gen_ai.tool.call.result"]' in queries()["timeline"]
+
+
+def test_the_timeline_names_both_sides_of_a_tool_call():
+    """Foundry's wait and the Function App's run carry distinct labels and a service column."""
+    timeline = queries()["timeline"]
+    final = timeline.rsplit("| project ", 1)[1].split("\n")[0]
+    assert "service" in {c.strip() for c in final.split(",")}
+    assert '"Tool invocation — Foundry"' in timeline and '"Tool execution — Function App"' in timeline
+    assert timeline.count("service = AppRoleName") == 2
+    assert '"tool server"' not in timeline

@@ -1,6 +1,10 @@
 // Execution timeline for the selected run: every Foundry span and tool-server
-// request with the same OperationId, in time order. A tool-server request is
-// "exact" when its parent is a tool span, "inferred" when it points only at the run.
+// request with the same OperationId, in time order. Each tool call shows as a pair of
+// rows, the same call seen from two sides: "Tool invocation — Foundry" is Foundry asking
+// for the tool and waiting for its answer; "Tool execution — Function App" is the
+// Function App running it, inside that wait. Do not add the two durations. "service" is
+// the AppRoleName each record carries. An execution row's link is "exact" when its
+// parent is the invocation span, "inferred" when it points only at the run.
 // Each tool row shows what the tool answered: "answer" is a one-line reading of the
 // result, "result" is the full JSON the tool returned. ResultCode on a tool span
 // (execute_tool) is always 0, even when no answer was recorded, so it says nothing
@@ -31,7 +35,9 @@ union
            isnotempty(tostring(r.match.location)), strcat("on-prem: ", tostring(r.match.location)),
            isnotempty(tostring(r.reason)), strcat("not found: ", tostring(r.reason)),
            "see result")
-     | project TimeGenerated, span_kind = tostring(Properties["span_type"]), name = Name, DurationMs, Success,
+     | project TimeGenerated,
+               span_kind = iff(is_tool, "Tool invocation — Foundry", tostring(Properties["span_type"])),
+               service = AppRoleName, name = Name, DurationMs, Success,
                ResultCode = tostring(ResultCode), link = "",
                tool_call_id = tostring(Properties["gen_ai.tool.call.id"]),
                arguments = tostring(Properties["gen_ai.tool.call.arguments"]), answer,
@@ -39,11 +45,11 @@ union
     (AppRequests
      | where TimeGenerated {TimeRange} and OperationId == op
      | summarize arg_min(TimeGenerated, *) by Id
-     | project TimeGenerated, span_kind = "tool server", name = Name, DurationMs, Success,
+     | project TimeGenerated, span_kind = "Tool execution — Function App", service = AppRoleName, name = Name, DurationMs, Success,
                ResultCode = tostring(ResultCode),
                link = iff(ParentId in (tool_span_ids), "exact", "inferred by name and time"),
                tool_call_id = "", arguments = "", answer = "", result = "")
 | extend offset_seconds = round(datetime_diff("millisecond", TimeGenerated, t0) / 1000.0, 2)
-| project offset_seconds, span_kind, name, seconds = round(DurationMs / 1000.0, 2), Success, ResultCode, link,
+| project offset_seconds, span_kind, service, name, seconds = round(DurationMs / 1000.0, 2), Success, ResultCode, link,
           tool_call_id, arguments, answer, result, TimeGenerated
 | order by TimeGenerated asc

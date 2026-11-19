@@ -206,6 +206,13 @@ sett = {
           destination_addresses = ["64.239.123.1", "64.239.123.65"]
           destination_ports     = ["443"]
         }
+        "025-https-sett-to-github" = {
+          name                  = "https-sett-to-github"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.105.14.0/24"]
+          destination_addresses = ["140.82.112.3"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

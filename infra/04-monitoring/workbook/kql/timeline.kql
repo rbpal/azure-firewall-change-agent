@@ -2,8 +2,9 @@
 // request with the same OperationId, in time order. A tool-server request is
 // "exact" when its parent is a tool span, "inferred" when it points only at the run.
 // Each tool row shows what the tool answered: "answer" is a one-line reading of the
-// result, "result" is the full JSON the tool returned. ResultCode on a Foundry span
-// is always 0 and says nothing about the answer.
+// result, "result" is the full JSON the tool returned. ResultCode on a tool span
+// (execute_tool) is always 0, even when no answer was recorded, so it says nothing
+// about the answer. A failed run span (invoke_agent) carries 500.
 let op = "{OperationId}";
 let spans = AppDependencies
     | where TimeGenerated {TimeRange} and OperationId == op and AppRoleName == "responsesapi"
@@ -30,7 +31,6 @@ union
            isnotempty(tostring(r.match.location)), strcat("on-prem: ", tostring(r.match.location)),
            isnotempty(tostring(r.reason)), strcat("not found: ", tostring(r.reason)),
            "see result")
-     | extend answer = iff(strlen(result) == 8192, strcat(answer, " (result cut at 8,192 characters)"), answer)
      | project TimeGenerated, span_kind = tostring(Properties["span_type"]), name = Name, DurationMs, Success,
                ResultCode = tostring(ResultCode), link = "",
                tool_call_id = tostring(Properties["gen_ai.tool.call.id"]),

@@ -393,7 +393,19 @@
               "crossComponentResources": [
                 ${jsonencode(workspace_id)}
               ],
-              "visualization": "table"
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "^result$",
+                    "formatter": 7,
+                    "formatOptions": {
+                      "linkTarget": "CellDetails",
+                      "linkIsContextBlade": true
+                    }
+                  }
+                ]
+              }
             },
             "name": "timeline",
             "conditionalVisibility": {
@@ -405,7 +417,7 @@
           {
             "type": 1,
             "content": {
-              "json": "Each tool call appears as a pair of rows: the same call seen from two sides. **Tool invocation — Foundry** is Foundry asking for the tool and waiting for its answer. **Tool execution — Function App** is the Function App running that tool, inside the wait. Do not add the two durations. **service** is the service name each record carries. **link** says how an execution row was paired with its invocation: **exact** when its parent is the invocation span, **inferred by name and time** when it points only at the run. **answer** is a one-line reading of **result**; *unknown: no answer recorded* means Foundry stored no result for that call."
+              "json": "Each tool call appears as a pair of rows: the same call seen from two sides. **Tool invocation — Foundry** is Foundry asking for the tool and waiting for its answer. **Tool execution — Function App** is the Function App running that tool, inside the wait. Do not add the two durations. **service** is the service name each record carries. **link** says how an execution row was paired with its invocation: **exact** when its parent is the invocation span, **inferred by name and time** when it points only at the run. **answer** is a one-line reading of **result**. Select a **result** to open the full recorded JSON in a side panel. *no answer recorded* means Foundry stored no result for that call."
             },
             "name": "timeline help",
             "conditionalVisibility": {

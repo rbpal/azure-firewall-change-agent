@@ -153,3 +153,17 @@ def test_the_timeline_names_both_sides_of_a_tool_call():
     assert '"Tool invocation — Foundry"' in timeline and '"Tool execution — Function App"' in timeline
     assert timeline.count("service = AppRoleName") == 2
     assert '"tool server"' not in timeline
+
+
+def test_a_tool_result_opens_in_full_and_a_missing_one_says_so():
+    """The result column links to Cell Details, and a tool call with no stored result reads 'no answer recorded'."""
+    def items(node):
+        """Every workbook item, nested groups included."""
+        for item in node.get("items", []):
+            yield item
+            yield from items(item.get("content", {}))
+    timeline = next(i for i in items(render()) if i.get("name") == "timeline")
+    formatters = timeline["content"]["gridSettings"]["formatters"]
+    link = next(f for f in formatters if f["columnMatch"] == "^result$")
+    assert link["formatter"] == 7 and link["formatOptions"]["linkTarget"] == "CellDetails"
+    assert '"no answer recorded"' in queries()["timeline"].split("| project TimeGenerated,", 1)[1]

@@ -199,6 +199,13 @@ sett = {
           destination_addresses = ["208.80.154.224"]
           destination_ports     = ["443"]
         }
+        "024-https-sett-to-vercelApi" = {
+          name                  = "https-sett-to-vercelApi"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.104.14.0/24"]
+          destination_addresses = ["64.239.123.1", "64.239.123.65"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

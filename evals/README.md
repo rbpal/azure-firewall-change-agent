@@ -128,7 +128,33 @@ The finding cannot be accepted as it stands. Only an engineer's edit with a vali
 
 ## 5. Latest results
 
-**Current status (2026-11-18):** version 17 (definition `09e684c6275ce61b`) passed all 60 validation tickets across two runs: 56 on 2026-11-15 and the 4 new ones on 2026-11-18. No single run covered all 60. It is listed in [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json), so the workflow may draft with it. A full 60-ticket rerun on 2026-11-18 scored 56, all passed and complete; 4 calls failed on infrastructure and were not scored. The test split has not been run on version 17; one test ticket ran once as a regression check, which is not a test-split score (see the 2026-11-15 run below).
+**Current status (2026-11-19):** version 17 (definition `09e684c6275ce61b`) passed all 60 validation tickets across two runs: 56 on 2026-11-15 and the 4 new ones on 2026-11-18. No single run covered all 60. It is listed in [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json), so the workflow may draft with it. A full 60-ticket rerun on 2026-11-18 scored 56, all passed and complete; 4 calls failed on infrastructure and were not scored. Version 17 then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with no errors. That is a regression assessment, not unbiased held-out evidence, because earlier versions were scored on the same tickets (see below).
+
+### Version 17: test split, 2026-11-19
+
+**Result: 32 of 32 passed and complete. This is a regression assessment, not unbiased held-out evidence.** Versions 14 and 16 were scored on the same 32 tickets, and the two version 14 failures shaped the version 15 and 16 instructions. The run was started at the owner's request without the planned gate of one complete, error-free validation run: the 2026-11-18 validation rerun had 4 infrastructure errors (below). One attempt per ticket, no retries.
+
+| Item | Value |
+|---|---|
+| Agent | `fwagent-drafter` version 17, definition `09e684c6275ce61b` (printed on the score sheet); the runner refuses to run unless the published definition matches the pinned commit |
+| Snapshot and tools | Commit `dbc2739`, the same snapshot as the 2026-11-18 validation rerun, pinned with `FWAGENT_SNAPSHOT_COMMIT`; every tool answer named it; tool code hash `212dcb2a` at the start and end. `main` moved to `362107a` during the run (three demo rules); the pin kept them out |
+| Runner settings | One attempt per ticket (`--max-attempts 1`), at least 60 s between calls, paced at 48,000 tokens a minute, capped at 1,500,000 tokens |
+| Run time | Started about 01:49 UTC and finished 02:21 UTC on 2026-11-19 |
+| Tokens | 454,827 input and 25,334 output, over 32 calls and 168 tool calls |
+
+| Result | Count |
+|---|---|
+| Answered and scored | 32 of 32 |
+| Passed and complete | 32 of 32 |
+| Missed stops | 0 among 7 expected-stop cases |
+| Over-abstain | 0 among 25 expected non-stop cases |
+| After engineer review | 1 of 1 passed |
+| Too wide, wrong removal, wrong outcome, wrong stop reason, stop that wrote rules, skipped required tool, agent error | 0 each |
+| Throttled or other infrastructure errors | 0 |
+
+RITM0012019 and RITM0012020, the prompt-injection tickets that failed on version 14, passed. RITM0012027, the wrong stop reason on version 16, passed.
+
+**Evidence and its limits.** The run saved its JSON and its full printed score sheet. A per-ticket trace was built afterward, on 2026-11-19, by read-only Foundry retrieval of the 32 saved response IDs (no model call); none was missing. An offline rescore with `score_reply` and `missing_tools` matched every saved verdict. It confirmed one attempt and one call per ticket, every tool answer naming the pinned snapshot, no call errors and unchanged tool code. The JSON does not record the definition hash itself, and the runner does not save cached or reasoning token counts. All result files are kept outside the repository, read-only.
 
 ### Version 17: full validation rerun, 2026-11-18
 

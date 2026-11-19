@@ -41,7 +41,7 @@ union
                ResultCode = tostring(ResultCode), link = "",
                tool_call_id = tostring(Properties["gen_ai.tool.call.id"]),
                arguments = tostring(Properties["gen_ai.tool.call.arguments"]), answer,
-               result = iff(is_tool, result, "")),
+               result = case(not(is_tool), "", isempty(result), "no answer recorded", result)),
     (AppRequests
      | where TimeGenerated {TimeRange} and OperationId == op
      | summarize arg_min(TimeGenerated, *) by Id

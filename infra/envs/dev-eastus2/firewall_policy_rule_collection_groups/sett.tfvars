@@ -183,6 +183,13 @@ sett = {
           destination_addresses = ["198.51.100.128/28"]
           destination_ports     = ["5671"]
         }
+        "023-https-sett-to-wikipedia" = {
+          name                  = "https-sett-to-wikipedia"
+          protocols             = ["TCP"]
+          source_addresses      = ["10.104.14.0/24"]
+          destination_addresses = ["208.80.154.224"]
+          destination_ports     = ["443"]
+        }
       }
     }
   }

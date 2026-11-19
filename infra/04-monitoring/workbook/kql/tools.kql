@@ -1,0 +1,16 @@
+// Tool calls per tool. Tools return errors inside a successful answer as
+// {"error": ...}, so errors are read from the result; an empty result is unknown.
+AppDependencies
+| where TimeGenerated {TimeRange}
+| where AppRoleName == "responsesapi" and Name startswith "execute_tool"
+| summarize arg_min(TimeGenerated, *) by Id  // a span ingested twice counts once
+| extend result = tostring(Properties["gen_ai.tool.call.result"])
+| extend error_code = tostring(parse_json(result).error)
+| summarize calls = count(),
+            p50_seconds = round(percentile(DurationMs, 50) / 1000.0, 2),
+            p95_seconds = round(percentile(DurationMs, 95) / 1000.0, 2),
+            failed_spans = countif(Success == false),
+            returned_errors = countif(isnotempty(error_code)),
+            result_unknown = countif(isempty(result))
+    by tool = tostring(Properties["gen_ai.tool.name"])
+| order by calls desc

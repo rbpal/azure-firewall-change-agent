@@ -1,0 +1,46 @@
+// Shared definition, pasted in place of "// @include agent_runs" (see main.tf).
+// One row per agent run that Foundry received (an invoke_agent span).
+// Ticket and reply outcome are read at query time from AppGenAIContent, the full
+// message record each span names in _MS.GenAIContentId. The span's own copy is cut
+// at 8,192 characters (26 of 1,094 runs in the 30 days to 2026-11-19), so it is not used.
+// A run whose messages cannot be parsed keeps "unknown", never a blank or zero.
+// The prompt and reply text never leave this block: only ticket and outcome do.
+let agent_spans = AppDependencies
+    | where TimeGenerated {TimeRange}
+    | where AppRoleName == "responsesapi" and Name startswith "invoke_agent"
+    | project TimeGenerated, OperationId, span_id = Id, DurationMs, Success, ResultCode,
+              response_id = tostring(Properties["gen_ai.response.id"]),
+              agent_version = tostring(Properties["gen_ai.agent.version"]),
+              content_id = tostring(Properties["_MS.GenAIContentId"])
+    | summarize arg_min(TimeGenerated, *) by span_id;  // a span ingested twice counts once
+let contents = AppGenAIContent
+    | where TimeGenerated {TimeRange}
+    | project content_id = Id, inmsg = tostring(InputMessages), outmsg = tostring(OutputMessages)
+    | summarize arg_min(inmsg, outmsg) by content_id;
+let messages = agent_spans
+    | project span_id, content_id
+    | join kind=inner contents on content_id;
+let run_tickets = messages
+    | mv-expand m = parse_json(inmsg)
+    | where tostring(m.role) == "user"
+    | extend ticket_number = tostring(parse_json(tostring(m.parts[0].content)).ticket.number)
+    | where isnotempty(ticket_number)
+    | summarize ticket_number = take_any(ticket_number) by span_id;
+let run_outcomes = messages
+    | mv-expand o = parse_json(outmsg)
+    | where tostring(o.role) == "assistant"
+    | mv-expand p = o.parts
+    | where tostring(p.type) == "text"
+    | extend reply_outcome = tostring(parse_json(tostring(p.content)).reply.outcome)
+    | where isnotempty(reply_outcome)
+    | summarize reply_outcome = take_any(reply_outcome) by span_id;
+let agent_runs = agent_spans
+    | project-away content_id
+    | join kind=leftouter run_tickets on span_id
+    | join kind=leftouter run_outcomes on span_id
+    | extend ticket = iff(isempty(ticket_number), "unknown", ticket_number),
+             outcome = iff(isempty(reply_outcome), "unknown", reply_outcome)
+    | project TimeGenerated, OperationId, DurationMs, Success, ResultCode, response_id, agent_version, ticket, outcome
+    | where "*" in ({AgentVersion}) or agent_version in ({AgentVersion})
+    | where "*" in ({Outcome}) or outcome in ({Outcome})
+    | where isempty("{Ticket}") or ticket == "{Ticket}";

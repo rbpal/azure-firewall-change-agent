@@ -1,0 +1,7 @@
+// Ticket search: one row per run, newest first. Selecting a row opens its timeline.
+// @include agent_runs
+agent_runs
+| project TimeGenerated, ticket, reply_outcome = outcome, agent_version, Success, ResultCode,
+          seconds = round(DurationMs / 1000.0, 1), response_id, OperationId
+| order by TimeGenerated desc
+| take 500

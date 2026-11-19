@@ -1,0 +1,8 @@
+// Overview: runs Foundry received, success rate, median and p95 run time.
+// @include agent_runs
+agent_runs
+| summarize runs = count(), succeeded = countif(Success == true), failed = countif(Success == false),
+            p50_seconds = round(percentile(DurationMs, 50) / 1000.0, 1),
+            p95_seconds = round(percentile(DurationMs, 95) / 1000.0, 1)
+| extend success_rate_percent = iff(runs == 0, real(null), round(100.0 * succeeded / runs, 1))
+| project runs, succeeded, failed, success_rate_percent, p50_seconds, p95_seconds

@@ -1,0 +1,6 @@
+// Agent versions seen in Foundry spans, per day. Observed only: no drift
+// verdict is made until the approved baseline and recorded hashes arrive.
+// @include agent_runs
+agent_runs
+| summarize runs = count(), first_seen = min(TimeGenerated), last_seen = max(TimeGenerated) by agent_version
+| order by last_seen desc

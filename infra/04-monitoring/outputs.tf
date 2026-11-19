@@ -12,3 +12,8 @@ output "application_insights_name" {
   description = "Name of Application Insights. Later steps look it up by this name."
   value       = module.application_insights.name
 }
+
+output "workbook_id" {
+  description = "Resource ID of the observability workbook."
+  value       = module.workbook.id
+}

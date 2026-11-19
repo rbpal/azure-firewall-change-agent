@@ -1,0 +1,7 @@
+// Billable ingestion per day against the workspace daily cap (log.tfvars).
+// Usage reports MB; the cap is set in GB and shown here as decimal MB.
+Usage
+| where TimeGenerated {TimeRange} and IsBillable
+| summarize ingested_mb = round(sum(Quantity), 1) by bin(TimeGenerated, 1d)
+| extend daily_cap_mb = todouble({DailyCapMB}), percent_of_cap = round(100.0 * ingested_mb / todouble({DailyCapMB}), 1)
+| order by TimeGenerated asc

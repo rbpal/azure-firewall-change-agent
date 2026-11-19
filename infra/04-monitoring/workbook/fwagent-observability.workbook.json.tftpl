@@ -1,0 +1,552 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Firewall agent observability\nReads **law-fwagentic-dev**. Every figure covers agent runs that Foundry received. Missing data is shown as unknown, never as zero. Panels marked **AWAITING STAGE 2 DATA** need runner records that are not in Azure yet."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "name": "filters",
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "parameters": [
+          {
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 604800000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                },
+                {
+                  "durationMs": 1209600000
+                },
+                {
+                  "durationMs": 2592000000
+                }
+              ],
+              "allowCustom": true
+            }
+          },
+          {
+            "name": "AgentVersion",
+            "label": "Agent version",
+            "type": 2,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": ${jsonencode(queries["agent_version_values"])},
+            "crossComponentResources": [
+              ${jsonencode(workspace_id)}
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "selectAllValue": "*",
+              "showDefault": false
+            },
+            "defaultValue": "value::all",
+            "timeContextFromParameter": "TimeRange",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces"
+          },
+          {
+            "name": "Outcome",
+            "label": "Reply outcome",
+            "type": 2,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "jsonData": "[{\"value\": \"draft\"}, {\"value\": \"already_allowed\"}, {\"value\": \"stop_and_ask\"}, {\"value\": \"unknown\"}]",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "selectAllValue": "*",
+              "showDefault": false
+            },
+            "defaultValue": "value::all"
+          },
+          {
+            "name": "Ticket",
+            "label": "Ticket (e.g. RITM0013519)",
+            "type": 1,
+            "value": ""
+          },
+          {
+            "name": "DailyCapMB",
+            "label": "Daily cap (MB)",
+            "type": 1,
+            "value": ${jsonencode(daily_cap_mb)},
+            "isHiddenWhenLocked": true
+          }
+        ]
+      }
+    },
+    {
+      "type": 11,
+      "name": "tabs",
+      "content": {
+        "version": "LinkItem/1.0",
+        "style": "tabs",
+        "links": [
+          {
+            "id": "tab-overview",
+            "cellValue": "Tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Overview",
+            "subTarget": "overview",
+            "style": "link"
+          },
+          {
+            "id": "tab-tokens",
+            "cellValue": "Tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Tokens and cost",
+            "subTarget": "tokens",
+            "style": "link"
+          },
+          {
+            "id": "tab-tools",
+            "cellValue": "Tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Tools",
+            "subTarget": "tools",
+            "style": "link"
+          },
+          {
+            "id": "tab-ticket",
+            "cellValue": "Tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Ticket drill-down",
+            "subTarget": "ticket",
+            "style": "link"
+          },
+          {
+            "id": "tab-trends",
+            "cellValue": "Tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Trends",
+            "subTarget": "trends",
+            "style": "link"
+          },
+          {
+            "id": "tab-config",
+            "cellValue": "Tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Configuration",
+            "subTarget": "config",
+            "style": "link"
+          },
+          {
+            "id": "tab-health",
+            "cellValue": "Tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Platform health",
+            "subTarget": "health",
+            "style": "link"
+          }
+        ]
+      }
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["run_summary"])},
+              "size": 0,
+              "title": "Agent runs Foundry received: success rate, median and p95 run time",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "run summary"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["reply_outcomes"])},
+              "size": 0,
+              "title": "Reply outcome: what the agent answered (not policy validation)",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "barchart"
+            },
+            "name": "reply outcomes"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "**AWAITING STAGE 2 DATA.** Not shown yet:\n- **Execution errors before Foundry**: calls that failed on the client side (for example APIConnectionError) leave no span.\n- **Eval correctness**: whether a reply passed against its label, or was an incorrect draft.\n- **Policy validation**: whether the drafted rules were written to tfvars and passed tier1-gate. A draft reply above is not a validated change.",
+              "style": "warning"
+            },
+            "name": "overview stage 2"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "Tab",
+        "comparison": "isEqualTo",
+        "value": "overview"
+      },
+      "name": "tab overview"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "**Input tokens are complete**: they matched the runner for 56 of 56 calls checked on 2026-11-19. **Output and cached tokens here are partial**: telemetry held about half the runner's output tokens, and cached tokens disagreed with Foundry's own record. Do not use them for cost.",
+              "style": "info"
+            },
+            "name": "token note"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["tokens_by_ticket"])},
+              "size": 0,
+              "title": "Tokens per ticket (input complete; output and cached partial)",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "tokens per ticket"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["tokens_daily"])},
+              "size": 0,
+              "title": "Input tokens per day (complete) and output tokens (partial)",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "timechart"
+            },
+            "name": "tokens per day"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "**AWAITING STAGE 2 DATA.** **Estimated model cost is not shown.** It needs the runner's token counts (input, cached, output and reasoning, from response.usage) and a dated price source. Billed Azure spending is in Cost Management, not in this workbook.",
+              "style": "warning"
+            },
+            "name": "cost stage 2"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "Tab",
+        "comparison": "isEqualTo",
+        "value": "tokens"
+      },
+      "name": "tab tokens"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["tools"])},
+              "size": 0,
+              "title": "Tool calls: count, p50 and p95, failed spans, errors returned in the answer, unknown results",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "tools"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["tool_links"])},
+              "size": 0,
+              "title": "Tool-server requests: exact link to a tool call, or inferred by name and time",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "tool links"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "Tab",
+        "comparison": "isEqualTo",
+        "value": "tools"
+      },
+      "name": "tab tools"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "Type a ticket number in the **Ticket** filter, then select a run to see its timeline."
+            },
+            "name": "ticket help"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["runs"])},
+              "size": 0,
+              "title": "Runs (select one)",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table",
+              "exportFieldName": "OperationId",
+              "exportParameterName": "OperationId",
+              "exportDefaultValue": ""
+            },
+            "name": "ticket runs"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["timeline"])},
+              "size": 0,
+              "title": "Execution timeline for the selected run",
+              "noDataMessage": "Select a run above.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "timeline",
+            "conditionalVisibility": {
+              "parameterName": "OperationId",
+              "comparison": "isNotEqualTo",
+              "value": ""
+            }
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "Tab",
+        "comparison": "isEqualTo",
+        "value": "ticket"
+      },
+      "name": "tab ticket"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "These are trends in volume, speed and reliability. A change here does not show that drafts became more or less correct.",
+              "style": "info"
+            },
+            "name": "trend note"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["trends_daily"])},
+              "size": 0,
+              "title": "Runs, failure rate, p50 and p95 per day",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "timechart"
+            },
+            "name": "trends"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "Tab",
+        "comparison": "isEqualTo",
+        "value": "trends"
+      },
+      "name": "tab trends"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["agent_versions_observed"])},
+              "size": 0,
+              "title": "Agent versions observed in Foundry spans",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "versions"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "**AWAITING STAGE 2 DATA.** **No drift verdict.** Comparing against the approved baseline needs the definition hash, tool code hash and snapshot of each run, plus the baseline from agents/evaluated-definitions.json. The versions above are observations only.",
+              "style": "warning"
+            },
+            "name": "config stage 2"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "Tab",
+        "comparison": "isEqualTo",
+        "value": "config"
+      },
+      "name": "tab config"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["tool_server_health"])},
+              "size": 0,
+              "title": "Tool server: storage warnings and host stops per day",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "barchart"
+            },
+            "name": "tool server health"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["ingestion_daily"])},
+              "size": 0,
+              "title": "Billable ingestion per day against the daily cap",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "ingestion"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "Tab",
+        "comparison": "isEqualTo",
+        "value": "health"
+      },
+      "name": "tab health"
+    }
+  ],
+  "fallbackResourceIds": [
+    ${jsonencode(workspace_id)}
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

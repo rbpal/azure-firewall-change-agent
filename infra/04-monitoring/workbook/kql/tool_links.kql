@@ -1,0 +1,15 @@
+// How each tool-server request links to its tool call: "exact" when the
+// request's parent is a tool span, "inferred" when it points only at the run.
+let tool_spans = AppDependencies
+    | where TimeGenerated {TimeRange}
+    | where AppRoleName == "responsesapi" and Name startswith "execute_tool"
+    | distinct OperationId, ParentId = Id;
+AppRequests
+| where TimeGenerated {TimeRange}
+| where AppRoleName == "func-fwagentic-dev" and Name endswith "_tool" and Name != "code_version_tool"
+| summarize arg_min(TimeGenerated, *) by Id  // a request ingested twice counts once
+| join kind=leftouter (tool_spans | extend exact = true) on OperationId, ParentId
+| summarize requests = count(), exact = countif(exact == true), inferred_by_name_and_time = countif(isnull(exact)),
+            server_failures = countif(Success == false)
+    by tool_server_function = Name
+| order by requests desc

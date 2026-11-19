@@ -1,0 +1,26 @@
+// Execution timeline for the selected run: every Foundry span and tool-server
+// request with the same OperationId, in time order. A tool-server request is
+// "exact" when its parent is a tool span, "inferred" when it points only at the run.
+let op = "{OperationId}";
+let spans = AppDependencies
+    | where TimeGenerated {TimeRange} and OperationId == op and AppRoleName == "responsesapi"
+    | summarize arg_min(TimeGenerated, *) by Id;
+let t0 = toscalar(spans | where Name startswith "invoke_agent" | summarize min(TimeGenerated));
+let tool_span_ids = spans | where Name startswith "execute_tool" | project Id;
+union
+    (spans
+     | project TimeGenerated, span_kind = tostring(Properties["span_type"]), name = Name, DurationMs, Success,
+               ResultCode = tostring(ResultCode), link = "",
+               tool_call_id = tostring(Properties["gen_ai.tool.call.id"]),
+               arguments = tostring(Properties["gen_ai.tool.call.arguments"])),
+    (AppRequests
+     | where TimeGenerated {TimeRange} and OperationId == op
+     | summarize arg_min(TimeGenerated, *) by Id
+     | project TimeGenerated, span_kind = "tool server", name = Name, DurationMs, Success,
+               ResultCode = tostring(ResultCode),
+               link = iff(ParentId in (tool_span_ids), "exact", "inferred by name and time"),
+               tool_call_id = "", arguments = "")
+| extend offset_seconds = round(datetime_diff("millisecond", TimeGenerated, t0) / 1000.0, 2)
+| project offset_seconds, span_kind, name, seconds = round(DurationMs / 1000.0, 2), Success, ResultCode, link,
+          tool_call_id, arguments, TimeGenerated
+| order by TimeGenerated asc

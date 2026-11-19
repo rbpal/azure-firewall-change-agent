@@ -1,0 +1,8 @@
+// Tool-server health per day: storage "unhealthy" warnings and host stops.
+AppTraces
+| where TimeGenerated {TimeRange}
+| where AppRoleName == "func-fwagentic-dev"
+| summarize storage_warnings = countif(Message has "AzureWebJobsStorage"),
+            host_stops = countif(Message has "Stopping JobHost")
+    by bin(TimeGenerated, 1d)
+| order by TimeGenerated asc

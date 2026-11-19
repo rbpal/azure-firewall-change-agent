@@ -60,3 +60,20 @@ variable "appi_local_authentication_disabled" {
   description = "Whether Application Insights refuses the ingestion key."
   type        = bool
 }
+
+# ---- Workbook: values in workbook.tfvars
+
+variable "workbook_name_seed" {
+  description = "Text that uuidv5() turns into the workbook's fixed GUID name."
+  type        = string
+}
+
+variable "workbook_display_name" {
+  description = "Workbook name shown in the portal."
+  type        = string
+}
+
+variable "workbook_description" {
+  description = "One sentence shown under the workbook name."
+  type        = string
+}

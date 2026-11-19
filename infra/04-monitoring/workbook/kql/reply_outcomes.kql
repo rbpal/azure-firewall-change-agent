@@ -1,0 +1,6 @@
+// The agent's reply outcome per run. This is what the agent answered, not
+// whether the rules were written to tfvars or passed tier1-gate.
+// @include agent_runs
+agent_runs
+| summarize runs = count() by reply_outcome = outcome
+| order by runs desc

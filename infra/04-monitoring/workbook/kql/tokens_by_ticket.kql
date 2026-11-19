@@ -1,0 +1,20 @@
+// Tokens per ticket from the chat span. Input is complete (it matched the runner
+// for 56 of 56 calls). Output and cached are partial and must not be used for cost.
+// A run with no chat span has unknown tokens; it is counted, never added as zero.
+// @include agent_runs
+let chat = AppDependencies
+    | where TimeGenerated {TimeRange}
+    | where AppRoleName == "responsesapi" and Name startswith "chat"
+    | summarize arg_min(TimeGenerated, *) by Id  // a span ingested twice counts once
+    | summarize input_tokens = sum(tolong(Properties["gen_ai.usage.input_tokens"])),
+                output_tokens_partial = sum(tolong(Properties["gen_ai.usage.output_tokens"])),
+                cached_input_tokens_partial = sum(tolong(Properties["gen_ai.usage.cache_read.input_tokens"]))
+        by OperationId;
+agent_runs
+| join kind=leftouter chat on OperationId
+| summarize runs = count(), runs_with_unknown_tokens = countif(isnull(input_tokens)),
+            input_tokens = sumif(input_tokens, isnotnull(input_tokens)),
+            output_tokens_partial = sumif(output_tokens_partial, isnotnull(output_tokens_partial)),
+            cached_input_tokens_partial = sumif(cached_input_tokens_partial, isnotnull(cached_input_tokens_partial))
+    by ticket
+| order by input_tokens desc

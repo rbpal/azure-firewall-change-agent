@@ -1,0 +1,6 @@
+// Values for the Agent version filter: every version seen in Foundry spans.
+AppDependencies
+| where TimeGenerated {TimeRange}
+| where AppRoleName == "responsesapi" and Name startswith "invoke_agent"
+| summarize by agent_version = tostring(Properties["gen_ai.agent.version"])
+| order by agent_version desc

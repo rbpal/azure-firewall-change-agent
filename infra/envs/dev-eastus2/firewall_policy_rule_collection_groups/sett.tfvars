@@ -19,6 +19,15 @@ sett = {
           translated_address  = "10.104.14.20"
           translated_port     = "8443"
         }
+        "002-tcp-contosoPharmaceuticals-to-settSettlementApi" = {
+          name                = "tcp-contosoPharmaceuticals-to-settSettlementApi"
+          protocols           = ["TCP"]
+          source_addresses    = ["198.51.100.192/28"]
+          destination_address = "192.0.2.14"
+          destination_ports   = ["7443"]
+          translated_address  = "10.104.14.20"
+          translated_port     = "7443"
+        }
       }
     }
   }

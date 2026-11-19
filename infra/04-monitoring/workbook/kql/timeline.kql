@@ -1,6 +1,14 @@
 // Execution timeline for the selected run: every Foundry span and tool-server
-// request with the same OperationId, in time order. A tool-server request is
-// "exact" when its parent is a tool span, "inferred" when it points only at the run.
+// request with the same OperationId, in time order. Each tool call shows as a pair of
+// rows, the same call seen from two sides: "Tool invocation — Foundry" is Foundry asking
+// for the tool and waiting for its answer; "Tool execution — Function App" is the
+// Function App running it, inside that wait. Do not add the two durations. "service" is
+// the AppRoleName each record carries. An execution row's link is "exact" when its
+// parent is the invocation span, "inferred" when it points only at the run.
+// Each tool row shows what the tool answered: "answer" is a one-line reading of the
+// result, "result" is the full JSON the tool returned. ResultCode on a tool span
+// (execute_tool) is always 0, even when no answer was recorded, so it says nothing
+// about the answer. A failed run span (invoke_agent) carries 500.
 let op = "{OperationId}";
 let spans = AppDependencies
     | where TimeGenerated {TimeRange} and OperationId == op and AppRoleName == "responsesapi"
@@ -9,18 +17,39 @@ let t0 = toscalar(spans | where Name startswith "invoke_agent" | summarize min(T
 let tool_span_ids = spans | where Name startswith "execute_tool" | project Id;
 union
     (spans
-     | project TimeGenerated, span_kind = tostring(Properties["span_type"]), name = Name, DurationMs, Success,
+     | extend result = tostring(Properties["gen_ai.tool.call.result"]), is_tool = Name startswith "execute_tool"
+     | extend r = parse_json(result)
+     | extend answer = case(
+           not(is_tool), "",
+           isempty(result), "unknown: no answer recorded",
+           isnotempty(tostring(r.error)), strcat("error: ", tostring(r.error), " - ", tostring(r.reason)),
+           isnotempty(tostring(r.status)), strcat("status: ", tostring(r.status)),
+           isnotnull(r.already_allowed), strcat("already_allowed: ", tostring(r.already_allowed)),
+           isnotnull(r.resolves), strcat("resolves: ", tostring(r.resolves)),
+           isnotempty(tostring(r.origin)), strcat("IP group, origin: ", tostring(r.origin)),
+           isnotnull(r.wider_than_plan), strcat("wider than plan: ", tostring(r.wider_than_plan.extra_addresses),
+               " addresses outside the plan ranges it covers"),
+           isnotempty(tostring(r.no_owner)), strcat("no owner: ", tostring(r.no_owner)),
+           isnotempty(tostring(r.match.firewall)), strcat("in plan: ", tostring(r.match.firewall), ", spoke ",
+               tostring(r.match.spoke), ", public IP ", tostring(r.match.firewall_public_ip)),
+           isnotempty(tostring(r.match.location)), strcat("on-prem: ", tostring(r.match.location)),
+           isnotempty(tostring(r.reason)), strcat("not found: ", tostring(r.reason)),
+           "see result")
+     | project TimeGenerated,
+               span_kind = iff(is_tool, "Tool invocation — Foundry", tostring(Properties["span_type"])),
+               service = AppRoleName, name = Name, DurationMs, Success,
                ResultCode = tostring(ResultCode), link = "",
                tool_call_id = tostring(Properties["gen_ai.tool.call.id"]),
-               arguments = tostring(Properties["gen_ai.tool.call.arguments"])),
+               arguments = tostring(Properties["gen_ai.tool.call.arguments"]), answer,
+               result = iff(is_tool, result, "")),
     (AppRequests
      | where TimeGenerated {TimeRange} and OperationId == op
      | summarize arg_min(TimeGenerated, *) by Id
-     | project TimeGenerated, span_kind = "tool server", name = Name, DurationMs, Success,
+     | project TimeGenerated, span_kind = "Tool execution — Function App", service = AppRoleName, name = Name, DurationMs, Success,
                ResultCode = tostring(ResultCode),
                link = iff(ParentId in (tool_span_ids), "exact", "inferred by name and time"),
-               tool_call_id = "", arguments = "")
+               tool_call_id = "", arguments = "", answer = "", result = "")
 | extend offset_seconds = round(datetime_diff("millisecond", TimeGenerated, t0) / 1000.0, 2)
-| project offset_seconds, span_kind, name, seconds = round(DurationMs / 1000.0, 2), Success, ResultCode, link,
-          tool_call_id, arguments, TimeGenerated
+| project offset_seconds, span_kind, service, name, seconds = round(DurationMs / 1000.0, 2), Success, ResultCode, link,
+          tool_call_id, arguments, answer, result, TimeGenerated
 | order by TimeGenerated asc

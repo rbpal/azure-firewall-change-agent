@@ -93,6 +93,47 @@ Security has two parts: who can sign in and act, and what the agent is allowed t
 
 An engineer still accepts every ticket, approves every draft and reviews every pull request. The remaining security work is listed under Optimization below.
 
+### Observability
+
+Every agent run is traced to Log Analytics, and an Azure Monitor workbook reads the traces. It has seven tabs. The figures below cover the 7 days to 2026-11-19.
+
+**Overview.** Shows how many runs Foundry received, how many succeeded, how long they took and what the agent answered. There were 345 runs, and 99.4% succeeded. The agent returned 208 drafts, 120 stops to ask and 15 already-allowed answers.
+
+Run time is shown as percentiles; "p" means percentile.
+
+- **p50 (median):** half of the runs finished faster than this, and half slower. It is 17.5 s, so a typical run takes about 17.5 seconds.
+- **p95:** 95% of runs finished faster than this, and the slowest 5% took longer. It is 61.5 s, so about 1 run in 20 takes over a minute.
+
+The p50 shows the normal case. The p95 shows how bad the slow cases get.
+
+![Workbook Overview tab: 345 runs, 343 succeeded, 2 failed, 99.4% success, p50 17.5 s, p95 61.5 s, and reply outcomes draft, stop_and_ask, already_allowed and unknown](docs/images/workbook-overview.png)
+
+**Tokens and cost.** Shows tokens per ticket and per day. Input tokens match the runner's own count. Output and cached tokens are partial, so the cost estimate uses the runner's counts.
+
+![Workbook Tokens and cost tab: tokens per ticket with complete input tokens and partial output and cached tokens, and input tokens per day](docs/images/workbook-tokens-and-cost.png)
+
+**Tools.** Shows each MCP tool's call count, p50 and p95 time, and errors. It also shows how each Function App request was linked to its tool call: exactly, or by name and time.
+
+![Workbook Tools tab: calls, p50, p95, failed spans and returned errors for the five MCP tools, and tool-server requests split into exact and inferred links](docs/images/workbook-tools.png)
+
+**Ticket drill-down.** Type a ticket number and select a run to see its timeline. Each tool call appears twice, once as Foundry asking for it and once as the Function App running it, with its arguments and answer.
+
+![Workbook Ticket drill-down for RITM0013522: one draft run on agent version 17 taking 56.4 s, and its execution timeline of tool invocations and executions with arguments](docs/images/workbook-ticket-drill-down.png)
+
+**Trends.** Shows runs, failures, and p50 and p95 run time for each day. It tracks volume, speed and reliability, not whether drafts became more correct.
+
+![Workbook Trends tab: runs, failed runs, p50 and p95 seconds and failure rate per day from 2026-11-14 to 2026-11-18, chart only](docs/images/workbook-trends.png)
+
+**Configuration.** Lists the agent versions seen in Foundry traces, with run counts and first and last seen. Version 17 has 156 runs since 2026-11-15. A check against the approved baseline waits for the next iteration's records.
+
+![Workbook Configuration tab: agent versions 17, 16, 15, 14 and 12 with runs, first seen and last seen, and a notice that the drift check awaits data](docs/images/workbook-configuration.png)
+
+**Platform health.** Shows the tool server's storage warnings and host stops per day, and Log Analytics ingestion against the 160 MB daily cap. The busiest day, 2026-11-14, used 61.4 MB, 38.4% of the cap.
+
+![Workbook Platform health tab: tool-server storage warnings and host stops per day, and billable ingestion per day against the 160 MB daily cap](docs/images/workbook-platform-health.png)
+
+Cost, correctness and workflow events are not in the workbook yet. The next iteration adds them; see [Optimization](#optimization), item 8.
+
 ### Trade-offs
 
 | Bend | What it gives up | Why |
@@ -132,3 +173,19 @@ This is the work left for the next iterations. Each item is known and planned, n
 5. **Evaluation coverage.** Add validation tickets for an on-prem source-location mismatch and for an engineer-accepted `free_text_conflict`. Neither is covered by a validation ticket today.
 6. **Threat model status.** Update `docs/threat-model.md`, where several measures that are now built still say "Planned".
 7. **Release pipeline.** Replace the demo's apply from VS Code with a release workflow that applies `main` per environment-site.
+8. **Observability records.** Upload the laptop's run records to two new Log Analytics tables, so the workbook can show cost, correctness and workflow events.
+   - `FwAgentAttempt_CL`, one row per agent run:
+     - **Which run:** ticket, run ID, attempt number, start and end time.
+     - **What happened:** answered, error or not sent, and the reply (draft, already allowed, stop and ask).
+     - **Tokens:** input, cached, output and reasoning, taken from Foundry's own response. These are the complete counts the workbook lacks today.
+     - **Eval verdict:** passed or incorrect, plus the scorer's mistake codes. This covers evaluation runs only; demo tickets get "not applicable".
+     - **What it ran on:** agent version, definition hash, tool code hash and data snapshot commit.
+   - `FwAgentWorkflowEvent_CL`, workflow steps after the draft: the rules written into the tfvars files and the Tier 1 policy check in CI. Each is marked succeeded, refused or failed, per environment-site.
+
+   Prompts, replies, labels and test-split answers are never sent. With these rows, the workbook shows:
+   - **Cost:** complete token counts multiplied by a dated price list. This is still an estimate; the real bill stays in Azure Cost Management.
+   - **Correctness:** pass and fail rates for evaluation runs.
+   - **Drift:** whether each run used the approved agent version and tools.
+   - **Workflow:** whether drafts were written and passed the Tier 1 check.
+
+   The engineer's review decision and the Terraform plan and apply are not included. They stay in the archive evidence files.

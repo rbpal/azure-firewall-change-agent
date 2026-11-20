@@ -167,3 +167,15 @@ def test_a_tool_result_opens_in_full_and_a_missing_one_says_so():
     link = next(f for f in formatters if f["columnMatch"] == "^result$")
     assert link["formatter"] == 7 and link["formatOptions"]["linkTarget"] == "CellDetails"
     assert '"no answer recorded"' in queries()["timeline"].split("| project TimeGenerated,", 1)[1]
+
+
+def test_trends_never_add_up_rates_or_percentiles_across_days():
+    """Daily rate and percentile charts hide the summed legend numbers; the range figures come from all runs."""
+    charts = [n["content"] for n in items(3) if n["content"].get("visualization") == "timechart"]
+    daily = [c for c in charts if re.search(r"percentile\(|_percent\b", c["query"])]
+    assert daily
+    for content in daily:
+        assert content.get("chartSettings", {}).get("showMetrics") is False, content["title"]
+    overall = (KQL / "trends_overall.kql").read_text()
+    assert "bin(" not in overall
+    assert "100.0 * failed / runs" in overall and "percentile(DurationMs, 95)" in overall

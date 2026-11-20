@@ -1,0 +1,5 @@
+// Trends: runs and failed runs per day. Counts, so the chart's totals are real.
+// @include agent_runs
+agent_runs
+| summarize runs = count(), failed = countif(Success == false) by bin(TimeGenerated, 1d)
+| order by TimeGenerated asc

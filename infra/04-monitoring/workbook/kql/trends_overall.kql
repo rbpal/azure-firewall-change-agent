@@ -1,0 +1,10 @@
+// Trends: one row for the whole selected range. The failure rate is total failed
+// runs divided by total runs, and p50 and p95 come from every run's own duration,
+// so neither is an average or a sum of daily figures.
+// @include agent_runs
+agent_runs
+| summarize runs = count(), failed = countif(Success == false),
+            p50_seconds = round(percentile(DurationMs, 50) / 1000.0, 1),
+            p95_seconds = round(percentile(DurationMs, 95) / 1000.0, 1)
+| extend failure_rate_percent = iff(runs == 0, real(null), round(100.0 * failed / runs, 1))
+| project runs, failed, failure_rate_percent, p50_seconds, p95_seconds

@@ -120,9 +120,9 @@ The p50 shows the normal case. The p95 shows how bad the slow cases get.
 
 ![Workbook Ticket drill-down for RITM0013522: one draft run on agent version 17 taking 56.4 s, and its execution timeline of tool invocations and executions with arguments](docs/images/workbook-ticket-drill-down.png)
 
-**Trends.** Shows runs, failures, and p50 and p95 run time for each day. It tracks volume, speed and reliability, not whether drafts became more correct.
+**Trends.** A row for the selected range sits above three daily charts. Its failure rate is total failed runs divided by total runs, and its p50 and p95 come from every run, not from daily figures. The charts show runs and failed runs, the failure rate, and p50 and p95 run time per day. They track volume, speed and reliability, not whether drafts became more correct.
 
-![Workbook Trends tab: runs, failed runs, p50 and p95 seconds and failure rate per day from 2026-11-14 to 2026-11-18, chart only](docs/images/workbook-trends.png)
+![Workbook Trends tab: the selected-range row with 345 runs, 2 failed, 0.6% failure rate, p50 17.5 s and p95 61.5 s, then daily charts for runs and failed runs, failure rate, and p50 and p95 run time](docs/images/workbook-trends.png)
 
 **Configuration.** Lists the agent versions seen in Foundry traces, with run counts and first and last seen. Version 17 has 156 runs since 2026-11-15. A check against the approved baseline waits for the next iteration's records.
 

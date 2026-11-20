@@ -3,29 +3,43 @@ Agentic firewall change requests on Microsoft Foundry: agent drafting, determini
 
 ## Problem
 
-Turning an approved firewall change request into an accurate Azure Firewall change is a slow, manual process. In a financial organisation handling around 100 Azure Firewall tickets each month, engineers must identify where the source and destination addresses belong, check whether access already exists, and write rules into the correct Terraform files for the requested primary and disaster recovery (DR) sites.
+Turning an approved firewall change request into a correct Azure Firewall change is slow, manual work. A financial organisation handles about 100 Azure Firewall tickets a month. For each one, an engineer finds where the source and destination addresses belong, checks whether access already exists, and writes rules into the right Terraform files for the primary and disaster recovery (DR) sites.
 
-This demo models eight environment-site combinations across paired Azure regions, using Azure Virtual WAN secured hubs. Each spoke landing zone has a separate Terraform variables (.tfvars) file for its rule collection group. In a highly regulated financial environment, errors can have serious consequences: an overly broad rule can grant unapproved access, while a missed site can leave primary and DR configurations inconsistent.
+Mistakes are costly in a regulated environment. An overly broad rule grants unapproved access. A missed site leaves primary and DR out of step.
 
-The demo uses locally created tickets to represent approved firewall requests. An AI agent investigates each request and drafts the required rules, supported by code-based validation. It checks address ownership and existing rules, follows the project's security standards, and asks the DevOps engineer for clarification when a request is ambiguous or inconsistent. For supported FQDN destinations, it performs a DNS lookup and includes the requested hostname or URL and resolved IP addresses in the PR description for traceability and review.
+This project has an AI agent investigate each request and draft the rules. Code checks the draft, and engineers approve every step.
 
-The project also generates a PR description identifying the ticket, affected environments and sites, exact Terraform files, rule collections, and rules added, changed or removed. Packet-flow diagrams illustrate the proposed access, while a risk analysis highlights concerns such as broad address ranges and the limits of port-based filtering.
+## Scope
 
-Each PR includes an AI-assistance notice, ticket-tracking details, and execution metrics covering the agent version, token usage, tool calls, runtime and estimated cost. The change then follows the approval process through PR review, a single build and a release approval gate.
+In scope:
 
-A future integration with ServiceNow could replace the locally created demo tickets with approved requests from an enterprise ticketing workflow.
+- **Requests:** approved firewall change requests and rule removals. Each ticket selects environments (lab, dev, stage, prod) and sites (primary, DR).
+- **Firewall estate:** eight environment-sites in Virtual WAN secured hubs, East US 2 (primary) and Central US (DR), each with its own Terraform folder in `infra/envs/`. Each spoke landing zone has its own rule collection group file, such as `sett.tfvars`.
+- **Rule types:** network rules (TCP, UDP, ICMP, Any), application rules (HTTP, HTTPS) and DNAT rules.
+- **Destinations:** IP addresses, CIDR ranges, IP groups and FQDNs. A network rule to an FQDN is resolved through DNS to IPv4 addresses.
+- **Agent work:** one Foundry agent drafts rules that follow the project's security standards. Five read-only tools locate addresses, check for existing access, check DNAT ports, look up DNS and resolve environment-sites. When a ticket is ambiguous or inconsistent, the agent stops and asks the engineer.
+- **Code checks:** the draft is compared with the ticket. Rules wider than approved, attempts to bypass the process and conflicting free text are stopped before any file is written.
+- **Pull request:** the description names the ticket, environments, sites, Terraform files, rule collections and every rule added, changed or removed. It adds a packet-flow diagram, security-policy risks, the FQDN and its resolved addresses, an AI-assistance notice, tracking details, and the agent version, tokens, tool calls, runtime and estimated cost.
+- **Delivery:** CI checks (tests, Tier 1 policy checks, Terraform plans), pull request review and a Terraform apply from `main`.
+- **Observability:** each agent run is traced to Log Analytics. A workbook shows the run, every tool call, its arguments and answers, and token counts.
+
+Out of scope for the demo:
+
+- **Deploying beyond dev:** only the two dev firewall policies exist in Azure and are applied. Lab, stage and prod are Terraform folders the agent drafts into, not deployed policies.
+- **Cost and correctness in Azure:** cost is estimated from tokens locally, and review outcomes stay in local records.
+
+The demo's other limits are in [Trade-offs](#trade-offs): the YAML ticket in place of ServiceNow, intake on the laptop, GitHub Actions in place of Azure DevOps, one person in every role and no firewall attached.
+
+## Status
+
+- **Evaluation:** agent version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
+- **Changes:** 23 firewall change tickets, RITM0013005 to RITM0013522, went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to the dev firewall policies. Two more tickets were abandoned before a pull request was opened.
 
 ## The demo
 
 ![Demo flow in eleven steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, then a GitHub pull request, review and merge, and an apply from main to the dev firewall policies](docs/images/demo-flow-steps.png)
 
-The demo runs the same agent, workflow code and checks as the enterprise flow. A DevOps engineer runs it on a personal Azure subscription, so a few things change:
-
-- A YAML file stands in for the ServiceNow ticket.
-- You run each step from your laptop with the scripts in `evals/raj-demo/00-script`, helped by a coding assistant in VS Code. Step 4 sends the ticket to the Foundry agent.
-- GitHub Actions stands in for Azure DevOps for the pull request checks.
-- For the demo only, Terraform applies main to the dev firewall policies from VS Code. The enterprise flow uses a release pipeline.
-- You hold every human role at the four gates: accept the ticket, write the draft, review and merge, and apply.
+The demo runs the same agent, workflow code and checks as the enterprise flow, on a personal Azure subscription. You run each step from your laptop with the scripts in `evals/raj-demo/00-script`, helped by a coding assistant in VS Code. Step 4 sends the ticket to the Foundry agent.
 
 ### Cost
 
@@ -33,7 +47,7 @@ Estimates for the demo, checked against Microsoft pricing pages on 2026-11-17. E
 
 | Item | Plan or tier | Estimated monthly cost |
 |---|---|---|
-| Firewall policies (8) and IP groups | Basic policy, no firewall attached | $0. A policy with zero or one firewall association is free. |
+| Firewall policies (2, dev primary and DR) and IP groups (13) | Basic policy, no firewall attached | $0. A policy with zero or one firewall association is free. |
 | Function app (MCP tools) | Flex Consumption (FC1), 512 MB, no always-ready instances | $0 within the free grant of 250,000 executions and 100,000 GB-s a month |
 | Storage account | Standard LRS | Under $0.10. It holds the function package and a few KB per network snapshot. |
 | Log Analytics and Application Insights | Pay-as-you-go, daily cap 0.16 GB each | $0 within the free 5 GB a month per billing account |
@@ -79,20 +93,46 @@ Security has two parts: who can sign in and act, and what the agent is allowed t
 
 An engineer still accepts every ticket, approves every draft and reviews every pull request. The remaining security work is listed under Optimization below.
 
-### Status
+### Observability
 
-Built and running in the demo:
+Every agent run is traced to Log Analytics, and an Azure Monitor workbook reads the traces. It has seven tabs. The figures below cover the 7 days to 2026-11-19.
 
-- **Agent:** one Foundry agent (version 11) inside a fixed workflow. It reads the network data through five read-only MCP tools and returns a draft. It never holds write access to Azure or the repo.
-- **Evaluation:** version 11 passed the validation set, 65 of 65 scored tickets, with 0 of 25 missed stops. On the held-out test set, scored once, it passed 32 of 34, with 0 of 7 missed stops and no rule wider than approved. Both misses were stops, not wrong rules. One was the agent being too cautious. The other came from a tool deployment that lagged behind `main`; it was redeployed on 2026-11-10.
-- **Changes:** 18 firewall change tickets went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to both dev firewall policies.
+**Overview.** Shows how many runs Foundry received, how many succeeded, how long they took and what the agent answered. There were 345 runs, and 99.4% succeeded. The agent returned 208 drafts, 120 stops to ask and 15 already-allowed answers.
 
-Not built yet:
+Run time is shown as percentiles; "p" means percentile.
 
-- **Release workflow:** the engineer applies each merge with Terraform from the laptop. The release step in the diagram is not automated yet.
-- **ServiceNow adapter:** a YAML file stands in for the ticket.
-- **Prompt Shields:** designed in ADR 0002, not built.
-- **Azure DevOps pipelines** for the enterprise flow.
+- **p50 (median):** half of the runs finished faster than this, and half slower. It is 17.5 s, so a typical run takes about 17.5 seconds.
+- **p95:** 95% of runs finished faster than this, and the slowest 5% took longer. It is 61.5 s, so about 1 run in 20 takes over a minute.
+
+The p50 shows the normal case. The p95 shows how bad the slow cases get.
+
+![Workbook Overview tab: 345 runs, 343 succeeded, 2 failed, 99.4% success, p50 17.5 s, p95 61.5 s, and reply outcomes draft, stop_and_ask, already_allowed and unknown](docs/images/workbook-overview.png)
+
+**Tokens and cost.** Shows tokens per ticket and per day. Input tokens match the runner's own count. Output and cached tokens are partial, so the cost estimate uses the runner's counts.
+
+![Workbook Tokens and cost tab: tokens per ticket with complete input tokens and partial output and cached tokens, and input tokens per day](docs/images/workbook-tokens-and-cost.png)
+
+**Tools.** Shows each MCP tool's call count, p50 and p95 time, and errors. It also shows how each Function App request was linked to its tool call: exactly, or by name and time.
+
+![Workbook Tools tab: calls, p50, p95, failed spans and returned errors for the five MCP tools, and tool-server requests split into exact and inferred links](docs/images/workbook-tools.png)
+
+**Ticket drill-down.** Type a ticket number and select a run to see its timeline. Each tool call appears twice, once as Foundry asking for it and once as the Function App running it, with its arguments and answer.
+
+![Workbook Ticket drill-down for RITM0013522: one draft run on agent version 17 taking 56.4 s, and its execution timeline of tool invocations and executions with arguments](docs/images/workbook-ticket-drill-down.png)
+
+**Trends.** Shows runs, failures, and p50 and p95 run time for each day. It tracks volume, speed and reliability, not whether drafts became more correct.
+
+![Workbook Trends tab: runs, failed runs, p50 and p95 seconds and failure rate per day from 2026-11-14 to 2026-11-18, chart only](docs/images/workbook-trends.png)
+
+**Configuration.** Lists the agent versions seen in Foundry traces, with run counts and first and last seen. Version 17 has 156 runs since 2026-11-15. A check against the approved baseline waits for the next iteration's records.
+
+![Workbook Configuration tab: agent versions 17, 16, 15, 14 and 12 with runs, first seen and last seen, and a notice that the drift check awaits data](docs/images/workbook-configuration.png)
+
+**Platform health.** Shows the tool server's storage warnings and host stops per day, and Log Analytics ingestion against the 160 MB daily cap. The busiest day, 2026-11-14, used 61.4 MB, 38.4% of the cap.
+
+![Workbook Platform health tab: tool-server storage warnings and host stops per day, and billable ingestion per day against the 160 MB daily cap](docs/images/workbook-platform-health.png)
+
+Cost, correctness and workflow events are not in the workbook yet. The next iteration adds them; see [Optimization](#optimization), item 8.
 
 ### Trade-offs
 
@@ -133,3 +173,19 @@ This is the work left for the next iterations. Each item is known and planned, n
 5. **Evaluation coverage.** Add validation tickets for an on-prem source-location mismatch and for an engineer-accepted `free_text_conflict`. Neither is covered by a validation ticket today.
 6. **Threat model status.** Update `docs/threat-model.md`, where several measures that are now built still say "Planned".
 7. **Release pipeline.** Replace the demo's apply from VS Code with a release workflow that applies `main` per environment-site.
+8. **Observability records.** Upload the laptop's run records to two new Log Analytics tables, so the workbook can show cost, correctness and workflow events.
+   - `FwAgentAttempt_CL`, one row per agent run:
+     - **Which run:** ticket, run ID, attempt number, start and end time.
+     - **What happened:** answered, error or not sent, and the reply (draft, already allowed, stop and ask).
+     - **Tokens:** input, cached, output and reasoning, taken from Foundry's own response. These are the complete counts the workbook lacks today.
+     - **Eval verdict:** passed or incorrect, plus the scorer's mistake codes. This covers evaluation runs only; demo tickets get "not applicable".
+     - **What it ran on:** agent version, definition hash, tool code hash and data snapshot commit.
+   - `FwAgentWorkflowEvent_CL`, workflow steps after the draft: the rules written into the tfvars files and the Tier 1 policy check in CI. Each is marked succeeded, refused or failed, per environment-site.
+
+   Prompts, replies, labels and test-split answers are never sent. With these rows, the workbook shows:
+   - **Cost:** complete token counts multiplied by a dated price list. This is still an estimate; the real bill stays in Azure Cost Management.
+   - **Correctness:** pass and fail rates for evaluation runs.
+   - **Drift:** whether each run used the approved agent version and tools.
+   - **Workflow:** whether drafts were written and passed the Tier 1 check.
+
+   The engineer's review decision and the Terraform plan and apply are not included. They stay in the archive evidence files.

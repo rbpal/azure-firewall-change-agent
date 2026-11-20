@@ -3,29 +3,38 @@ Agentic firewall change requests on Microsoft Foundry: agent drafting, determini
 
 ## Problem
 
-Turning an approved firewall change request into an accurate Azure Firewall change is a slow, manual process. In a financial organisation handling around 100 Azure Firewall tickets each month, engineers must identify where the source and destination addresses belong, check whether access already exists, and write rules into the correct Terraform files for the requested primary and disaster recovery (DR) sites.
+Turning an approved firewall change request into a correct Azure Firewall change is slow, manual work. A financial organisation handles about 100 Azure Firewall tickets a month. For each one, an engineer finds where the source and destination addresses belong, checks whether access already exists, and writes rules into the right Terraform files for the primary and disaster recovery (DR) sites.
 
-This demo models eight environment-site combinations across paired Azure regions, using Azure Virtual WAN secured hubs. Each spoke landing zone has a separate Terraform variables (.tfvars) file for its rule collection group. In a highly regulated financial environment, errors can have serious consequences: an overly broad rule can grant unapproved access, while a missed site can leave primary and DR configurations inconsistent.
+Mistakes are costly in a regulated environment. An overly broad rule grants unapproved access. A missed site leaves primary and DR out of step.
 
-The demo uses locally created tickets to represent approved firewall requests. An AI agent investigates each request and drafts the required rules, supported by code-based validation. It checks address ownership and existing rules, follows the project's security standards, and asks the DevOps engineer for clarification when a request is ambiguous or inconsistent. For supported FQDN destinations, it performs a DNS lookup and includes the requested hostname or URL and resolved IP addresses in the PR description for traceability and review.
+This project has an AI agent investigate each request and draft the rules. Code checks the draft, and engineers approve every step.
 
-The project also generates a PR description identifying the ticket, affected environments and sites, exact Terraform files, rule collections, and rules added, changed or removed. Packet-flow diagrams illustrate the proposed access, while a risk analysis highlights concerns such as broad address ranges and the limits of port-based filtering.
+## Scope
 
-Each PR includes an AI-assistance notice, ticket-tracking details, and execution metrics covering the agent version, token usage, tool calls, runtime and estimated cost. The change then follows the approval process through PR review, a single build and a release approval gate.
+In scope:
 
-A future integration with ServiceNow could replace the locally created demo tickets with approved requests from an enterprise ticketing workflow.
+- **Requests:** approved firewall change requests and rule removals. Each ticket selects environments (lab, dev, stage, prod) and sites (primary, DR).
+- **Firewall estate:** eight environment-sites in Virtual WAN secured hubs, East US 2 (primary) and Central US (DR), each with its own Terraform folder in `infra/envs/`. Each spoke landing zone has its own rule collection group file, such as `sett.tfvars`.
+- **Rule types:** network rules (TCP, UDP, ICMP, Any), application rules (HTTP, HTTPS) and DNAT rules.
+- **Destinations:** IP addresses, CIDR ranges, IP groups and FQDNs. A network rule to an FQDN is resolved through DNS to IPv4 addresses.
+- **Agent work:** one Foundry agent drafts rules that follow the project's security standards. Five read-only tools locate addresses, check for existing access, check DNAT ports, look up DNS and resolve environment-sites. When a ticket is ambiguous or inconsistent, the agent stops and asks the engineer.
+- **Code checks:** the draft is compared with the ticket. Rules wider than approved, attempts to bypass the process and conflicting free text are stopped before any file is written.
+- **Pull request:** the description names the ticket, environments, sites, Terraform files, rule collections and every rule added, changed or removed. It adds a packet-flow diagram, security-policy risks, the FQDN and its resolved addresses, an AI-assistance notice, tracking details, and the agent version, tokens, tool calls, runtime and estimated cost.
+- **Delivery:** CI checks (tests, Tier 1 policy checks, Terraform plans), pull request review and a Terraform apply from `main`.
+- **Observability:** each agent run is traced to Log Analytics. A workbook shows the run, every tool call, its arguments and answers, and token counts.
+
+Out of scope for the demo:
+
+- **Deploying beyond dev:** only the two dev firewall policies exist in Azure and are applied. Lab, stage and prod are Terraform folders the agent drafts into, not deployed policies.
+- **Cost and correctness in Azure:** cost is estimated from tokens locally, and review outcomes stay in local records.
+
+The demo's other limits are in [Trade-offs](#trade-offs): the YAML ticket in place of ServiceNow, intake on the laptop, GitHub Actions in place of Azure DevOps, one person in every role and no firewall attached.
 
 ## The demo
 
 ![Demo flow in eleven steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, then a GitHub pull request, review and merge, and an apply from main to the dev firewall policies](docs/images/demo-flow-steps.png)
 
-The demo runs the same agent, workflow code and checks as the enterprise flow. A DevOps engineer runs it on a personal Azure subscription, so a few things change:
-
-- A YAML file stands in for the ServiceNow ticket.
-- You run each step from your laptop with the scripts in `evals/raj-demo/00-script`, helped by a coding assistant in VS Code. Step 4 sends the ticket to the Foundry agent.
-- GitHub Actions stands in for Azure DevOps for the pull request checks.
-- For the demo only, Terraform applies main to the dev firewall policies from VS Code. The enterprise flow uses a release pipeline.
-- You hold every human role at the four gates: accept the ticket, write the draft, review and merge, and apply.
+The demo runs the same agent, workflow code and checks as the enterprise flow, on a personal Azure subscription. You run each step from your laptop with the scripts in `evals/raj-demo/00-script`, helped by a coding assistant in VS Code. Step 4 sends the ticket to the Foundry agent.
 
 ### Cost
 
@@ -33,7 +42,7 @@ Estimates for the demo, checked against Microsoft pricing pages on 2026-11-17. E
 
 | Item | Plan or tier | Estimated monthly cost |
 |---|---|---|
-| Firewall policies (8) and IP groups | Basic policy, no firewall attached | $0. A policy with zero or one firewall association is free. |
+| Firewall policies (2, dev primary and DR) and IP groups (13) | Basic policy, no firewall attached | $0. A policy with zero or one firewall association is free. |
 | Function app (MCP tools) | Flex Consumption (FC1), 512 MB, no always-ready instances | $0 within the free grant of 250,000 executions and 100,000 GB-s a month |
 | Storage account | Standard LRS | Under $0.10. It holds the function package and a few KB per network snapshot. |
 | Log Analytics and Application Insights | Pay-as-you-go, daily cap 0.16 GB each | $0 within the free 5 GB a month per billing account |
@@ -83,9 +92,9 @@ An engineer still accepts every ticket, approves every draft and reviews every p
 
 Built and running in the demo:
 
-- **Agent:** one Foundry agent (version 11) inside a fixed workflow. It reads the network data through five read-only MCP tools and returns a draft. It never holds write access to Azure or the repo.
-- **Evaluation:** version 11 passed the validation set, 65 of 65 scored tickets, with 0 of 25 missed stops. On the held-out test set, scored once, it passed 32 of 34, with 0 of 7 missed stops and no rule wider than approved. Both misses were stops, not wrong rules. One was the agent being too cautious. The other came from a tool deployment that lagged behind `main`; it was redeployed on 2026-11-10.
-- **Changes:** 18 firewall change tickets went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to both dev firewall policies.
+- **Agent:** one Foundry agent (version 17) inside a fixed workflow. It reads the network data through five read-only MCP tools and returns a draft. It never holds write access to Azure or the repo.
+- **Evaluation:** version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
+- **Changes:** 23 firewall change tickets, RITM0013005 to RITM0013522, went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to the dev firewall policies. Two more tickets were abandoned before a pull request was opened.
 
 Not built yet:
 

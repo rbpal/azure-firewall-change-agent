@@ -90,18 +90,8 @@ An engineer still accepts every ticket, approves every draft and reviews every p
 
 ### Status
 
-Built and running in the demo:
-
-- **Agent:** one Foundry agent (version 17) inside a fixed workflow. It reads the network data through five read-only MCP tools and returns a draft. It never holds write access to Azure or the repo.
-- **Evaluation:** version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
+- **Evaluation:** agent version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
 - **Changes:** 23 firewall change tickets, RITM0013005 to RITM0013522, went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to the dev firewall policies. Two more tickets were abandoned before a pull request was opened.
-
-Not built yet:
-
-- **Release workflow:** the engineer applies each merge with Terraform from the laptop. The release step in the diagram is not automated yet.
-- **ServiceNow adapter:** a YAML file stands in for the ticket.
-- **Prompt Shields:** designed in ADR 0002, not built.
-- **Azure DevOps pipelines** for the enterprise flow.
 
 ### Trade-offs
 

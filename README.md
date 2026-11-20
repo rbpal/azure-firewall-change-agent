@@ -30,6 +30,11 @@ Out of scope for the demo:
 
 The demo's other limits are in [Trade-offs](#trade-offs): the YAML ticket in place of ServiceNow, intake on the laptop, GitHub Actions in place of Azure DevOps, one person in every role and no firewall attached.
 
+## Status
+
+- **Evaluation:** agent version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
+- **Changes:** 23 firewall change tickets, RITM0013005 to RITM0013522, went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to the dev firewall policies. Two more tickets were abandoned before a pull request was opened.
+
 ## The demo
 
 ![Demo flow in eleven steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, then a GitHub pull request, review and merge, and an apply from main to the dev firewall policies](docs/images/demo-flow-steps.png)
@@ -87,11 +92,6 @@ Security has two parts: who can sign in and act, and what the agent is allowed t
 - Evaluation tickets test injection, including validation tickets RITM0011037 to 0011040. All passed on version 17. The held-back test split has two more, which passed on the version 16 rerun.
 
 An engineer still accepts every ticket, approves every draft and reviews every pull request. The remaining security work is listed under Optimization below.
-
-### Status
-
-- **Evaluation:** agent version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
-- **Changes:** 23 firewall change tickets, RITM0013005 to RITM0013522, went through the flow. Each was drafted, reviewed, checked in CI (tests, Tier 1 policy checks, Terraform plans for both dev sites), merged as a pull request and applied to the dev firewall policies. Two more tickets were abandoned before a pull request was opened.
 
 ### Trade-offs
 

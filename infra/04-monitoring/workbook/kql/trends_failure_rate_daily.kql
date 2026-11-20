@@ -1,0 +1,8 @@
+// Trends: each day's failed runs as a percentage of that day's runs.
+// A day's rate is not added to or averaged with other days; see trends_overall.
+// @include agent_runs
+agent_runs
+| summarize runs = count(), failed = countif(Success == false) by bin(TimeGenerated, 1d)
+| extend failure_rate_percent = round(100.0 * failed / runs, 1)
+| project TimeGenerated, failure_rate_percent
+| order by TimeGenerated asc

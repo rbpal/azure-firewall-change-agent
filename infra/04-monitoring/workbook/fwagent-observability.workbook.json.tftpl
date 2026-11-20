@@ -453,9 +453,49 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": ${jsonencode(queries["trends_daily"])},
+              "query": ${jsonencode(queries["trends_overall"])},
               "size": 0,
-              "title": "Runs, failure rate, p50 and p95 per day",
+              "title": "Selected range: failure rate from total failed runs over total runs; p50 and p95 from every run",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "table"
+            },
+            "name": "trends overall"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["trends_runs_daily"])},
+              "size": 0,
+              "title": "Runs and failed runs per day",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "timechart",
+              "chartSettings": {
+                "showMetrics": true,
+                "showLegend": true
+              }
+            },
+            "name": "trends runs"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["trends_failure_rate_daily"])},
+              "size": 0,
+              "title": "Failure rate per day (percent of that day's runs)",
               "noDataMessage": "No data in this time range.",
               "timeContextFromParameter": "TimeRange",
               "queryType": 0,
@@ -469,7 +509,29 @@
                 "showLegend": true
               }
             },
-            "name": "trends"
+            "name": "trends failure rate"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": ${jsonencode(queries["trends_latency_daily"])},
+              "size": 0,
+              "title": "p50 and p95 run time per day (seconds)",
+              "noDataMessage": "No data in this time range.",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                ${jsonencode(workspace_id)}
+              ],
+              "visualization": "timechart",
+              "chartSettings": {
+                "showMetrics": false,
+                "showLegend": true
+              }
+            },
+            "name": "trends latency"
           }
         ]
       },

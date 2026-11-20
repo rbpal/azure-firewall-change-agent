@@ -1,0 +1,8 @@
+// Trends: p50 and p95 run time in seconds, per day, from that day's runs.
+// Daily percentiles cannot be added or averaged; see trends_overall for the range.
+// @include agent_runs
+agent_runs
+| summarize p50_seconds = round(percentile(DurationMs, 50) / 1000.0, 1),
+            p95_seconds = round(percentile(DurationMs, 95) / 1000.0, 1)
+    by bin(TimeGenerated, 1d)
+| order by TimeGenerated asc

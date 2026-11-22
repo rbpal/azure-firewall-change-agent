@@ -20,13 +20,12 @@ Every rule must use the ticket's protocol, and its ports must sit inside the
 ticket's ports. A removal must name exactly the ticket's ports, because deleting
 a rule for other traffic was never approved (RB-03-2). An added DNAT rule
 translates to the same port it publishes (RB-02-2). The one documented substitute: HTTP
-or HTTPS to addresses is written as a TCP network rule (RB-01-4). Ports are read the way the
+or HTTPS to addresses or an exact FQDN is written as a TCP network rule (RB-01-4). Ports are read the way the
 ticket schema writes them, so a malformed port is refused, never corrected.
-An exact FQDN on the ticket, a URL's FQDN included, is drafted as a network rule to the
-IPv4 addresses dns_lookup_for_fqdn returned for it; an added rule never names an exact
-FQDN. The addresses are checked against the tool's own answer in the same Foundry response
-(the first successful lookup of that FQDN): each must be in it, and the rule must hold all
-of it. With no such answer, no address is accepted. Each address then passes the scope checks: never a loopback, link-local,
+An exact FQDN on the ticket, a URL's FQDN included, is drafted as a network rule that
+names the FQDN itself (destination_fqdns), never its addresses. The FQDN must have a
+successful dns_lookup_for_fqdn answer in the same Foundry response (the first successful
+lookup of that FQDN); with none, the rule is refused. Each answered address then passes the scope checks: never a loopback, link-local,
 multicast, reserved or "this network" address; in the plan, at the rule's own env-site,
 or on-prem; a private or shared address outside the plan is refused; an address at the
 other site of the environment is refused, because routing.yaml records no path between
@@ -185,12 +184,13 @@ def flow_errors(ticket: dict, rule: dict, removal: bool) -> list[str]:
     """Every way one reply rule's protocol or ports differ from the ticket's."""
     errors = []
     want, protocol = ticket["protocol"], str(rule.get("protocol") or "")
-    to_addresses = "translated_address" not in rule and all(_kind(str(d)) != "fqdn" for d in rule.get("destinations") or [])
-    web_as_network = want.upper() in WEB and protocol.upper() == "TCP" and to_addresses
-    if protocol.upper() != want.upper() and not web_as_network:  # RB-01-4: HTTP or HTTPS to addresses is TCP
+    to_network = "translated_address" not in rule and not any(_wildcard(str(d)) for d in rule.get("destinations") or [])
+    web_as_network = want.upper() in WEB and protocol.upper() == "TCP" and to_network
+    if protocol.upper() != want.upper() and not web_as_network:  # RB-01-4: HTTP or HTTPS to addresses or an exact FQDN is TCP
         errors.append(f"protocol {protocol or '(none)'} is not the ticket's {want}")
-    elif not removal and want.upper() in WEB and protocol.upper() in WEB and to_addresses and rule.get("destinations"):
-        errors.append(f"protocol {protocol} to addresses: HTTP and HTTPS to addresses become a TCP network rule (RB-01-4)")
+    elif not removal and want.upper() in WEB and protocol.upper() in WEB and to_network and rule.get("destinations"):
+        errors.append(f"protocol {protocol} to addresses or an exact FQDN: HTTP and HTTPS to them become a TCP "
+                      "network rule (RB-01-4)")
     approved, ports = _ports(ticket["ports"]), _port_spans(rule.get("ports"))
     if ports is None:
         errors.append(f"ports {rule.get('ports')!r} are not written as a ticket writes ports (22, 1000-2000 or *)")
@@ -222,39 +222,21 @@ def open_dnat_error(repo: Path, rule: dict) -> str:
             "even when the ticket asks (STD-COLL-04, RB-02-5 open_dnat_source)") if why else ""
 
 
+def _wildcard(value: str) -> bool:
+    """True for a wildcard domain pattern such as *.google.com."""
+    return _kind(value) == "fqdn" and value.startswith("*")
+
+
 def fqdn_destination_error(rule: dict) -> str:
-    """Say why an added rule names an exact FQDN, or a wildcard domain pattern outside HTTP or HTTPS, or return ''."""
+    """Say why an added rule names a wildcard domain pattern outside HTTP or HTTPS, or return ''."""
     if "translated_address" in rule:
         return ""
-    names = [str(d) for d in rule.get("destinations") or [] if _kind(str(d)) == "fqdn"]
-    exact = [n for n in names if not n.startswith("*")]
-    if exact:
-        return (f"{', '.join(exact)} is an exact FQDN. It is drafted as a network rule to the IPv4 addresses "
-                "dns_lookup_for_fqdn returned for it, never named in a rule (RB-01-4, STD-COLL-03)")
+    names = [str(d) for d in rule.get("destinations") or [] if _wildcard(str(d))]
     if names and str(rule.get("protocol") or "").upper() not in WEB:
         return (f"{', '.join(names)} is a wildcard domain pattern, but the rule's protocol is "
                 f"{rule.get('protocol') or '(none)'}. A pattern cannot be resolved, so only an HTTP or HTTPS "
                 "application rule may name it (RB-01-6 non_http_to_hostname)")
     return ""
-
-
-def _exact_names(entries: list[dict]) -> list[str]:
-    """The ticket's exact FQDN destinations, a URL's FQDN included; wildcard domain patterns are left out."""
-    names = []
-    for a in entries:
-        name = urlsplit(a["url"]).hostname if "url" in a else a.get("fqdn")
-        if isinstance(name, str) and not name.startswith("*"):
-            names.append(name.lower())
-    return names
-
-
-def _host(value: str) -> ipaddress.IPv4Address | None:
-    """The IPv4 address a rule destination names when it is one host (192.0.2.20 or 192.0.2.20/32), else None."""
-    try:
-        net = ipaddress.ip_network(value, strict=True)
-    except ValueError:
-        return None
-    return net.network_address if net.version == 4 and net.prefixlen == 32 else None
 
 
 def _where(repo: Path, value: str) -> dict:
@@ -341,23 +323,14 @@ def already_allowed_error(source: LocalSource, rule: dict) -> str:
             "rule is needed: the answer is already_allowed (STD-COLL-07, RB-01-1)") if same else ""
 
 
-def dns_answer_errors(ticket: dict, rule: dict, resolved: list[str], dns_answers: list[dict] | None) -> list[str]:
-    """Say why a rule's resolved addresses are not exactly the DNS tool's answer for the ticket's FQDNs, or return []."""
+def dns_answer_errors(rule: dict, names: list[str], dns_answers: list[dict] | None) -> tuple[list[str], list[str]]:
+    """The answered addresses of a rule's exact FQDNs, and why any FQDN has no successful DNS answer in the response."""
     from workflow.agent import designated_addresses  # imported here: the agent module reads this one
-    names = _exact_names(ticket["destination"])
     answers = designated_addresses(dns_answers or [])
-    where = f"{rule['env_site']} {rule['name']}"
     missing = [n for n in names if n not in answers]
-    if missing:
-        return [f"{where}: no successful dns_lookup_for_fqdn answer for {', '.join(missing)} in this draft's response, "
-                "so no address is approved for it; the lookup failed or was not made (RB-01-4 dns_lookup_failed)"]
-    given = {str(_host(v)) for v in resolved}
-    allowed = {a for n in names for a in answers[n]}
-    errors = [f"{where}: destination {a} is not an address dns_lookup_for_fqdn returned for "
-              f"{', '.join(names)} in this draft's response (RB-01-4)" for a in sorted(given - allowed)]
-    errors += [f"{where}: destination {a}, returned by dns_lookup_for_fqdn for {n}, is missing; the rule uses every "
-               "address of that answer (RB-01-4)" for n in names for a in answers[n] if a not in given]
-    return errors
+    errors = [f"{rule['env_site']} {rule['name']}: no successful dns_lookup_for_fqdn answer for {', '.join(missing)} in "
+              "this draft's response; an exact FQDN must resolve before it is drafted (RB-01-4 dns_lookup_failed)"] if missing else []
+    return [a for n in names if n in answers for a in answers[n]], errors
 
 
 def approval_errors(repo: Path, ticket: dict, reply: dict, base: dict[Path, str] | None = None,
@@ -391,21 +364,17 @@ def approval_errors(repo: Path, ticket: dict, reply: dict, base: dict[Path, str]
             checks.append(("translated address", [rule["translated_address"]], ticket["destination"]))
         else:
             checks.append(("destination", rule.get("destinations") or [], ticket["destination"]))
-        names = [] if removal or "translated_address" in rule else _exact_names(ticket["destination"])
-        resolved: list[str] = []
         for side, values, entries in checks:
             approved = _approved(entries, env, site)
-            for v in values:
-                why = _not_approved(str(v), approved)
-                if why and side == "destination" and names and _host(str(v)) is not None:
-                    resolved.append(str(v))  # stands for the ticket's FQDN: checked for scope below
-                elif why:
-                    errors.append(f"{rule['env_site']} {rule['name']}: {side} {why}")
-        if names:  # the ticket gives an exact FQDN: the rule holds exactly its DNS answer (empty for a removal or DNAT)
-            errors += dns_answer_errors(ticket, rule, resolved, dns_answers)
+            errors += [f"{rule['env_site']} {rule['name']}: {side} {why}"
+                       for v in values if (why := _not_approved(str(v), approved))]
+        names = [] if removal or "translated_address" in rule else [
+            str(d).lower() for d in rule.get("destinations") or [] if _kind(str(d)) == "fqdn" and not _wildcard(str(d))]
+        resolved, missing = dns_answer_errors(rule, names, dns_answers) if names else ([], [])
+        errors += missing  # an exact FQDN in the rule must resolve; its answered addresses pass the scope checks below
         towards = set()
         for v in resolved:
-            toward, why = resolved_address_error(repo, sites, rule["env_site"], str(_host(v)))
+            toward, why = resolved_address_error(repo, sites, rule["env_site"], v)
             if why:
                 errors.append(f"{rule['env_site']} {rule['name']}: destination {why}")
             towards.add(toward)

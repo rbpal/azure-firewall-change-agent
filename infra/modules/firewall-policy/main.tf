@@ -80,6 +80,7 @@ resource "azurerm_firewall_policy_rule_collection_group" "this" {
           source_ip_groups      = length(lookup(rule.value, "source_ip_groups", [])) > 0 ? [for n in rule.value.source_ip_groups : local.ip_group_ids[n]] : null
           destination_addresses = lookup(rule.value, "destination_addresses", null)
           destination_ip_groups = length(lookup(rule.value, "destination_ip_groups", [])) > 0 ? [for n in rule.value.destination_ip_groups : local.ip_group_ids[n]] : null
+          destination_fqdns     = lookup(rule.value, "destination_fqdns", null)
           destination_ports     = rule.value.destination_ports
         }
       }

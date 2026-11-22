@@ -28,7 +28,7 @@ def reply(expected, **changes):
 
 
 def resolved(expected, addresses=STUB_ADDRESSES):
-    """A DNS label with each destinations_from_dns replaced by these addresses, as the runner does with the run's answer."""
+    """A DNS label with each destinations_from_dns as its destination, as the runner does when the run's answer resolved it."""
     hosts = {r["destinations_from_dns"] for r in expected.get("rules") or [] if "destinations_from_dns" in r}
     return with_dns(expected, {h: list(addresses) for h in hosts})
 
@@ -169,29 +169,24 @@ def test_an_extra_hostname_fails():
     assert score.result == "fail"
 
 
-# An exact FQDN is scored by the addresses the run's own DNS answer gave: exactly those, by containment.
+# An exact FQDN is scored by the FQDN itself, approved only when the run's own DNS answer resolved it.
 
-def test_the_resolved_addresses_pass():
+def test_the_resolved_fqdn_passes():
     score = score_least_privilege(RESOLVED, reply(RESOLVED))
     assert (score.result, score.excess, score.incomplete) == ("pass", [], [])
 
 
-def test_an_address_the_dns_answer_did_not_give_fails():
-    score = score_least_privilege(RESOLVED, reply(RESOLVED, destinations=[*STUB_ADDRESSES, "192.0.2.99"]))
+def test_an_extra_destination_beside_the_fqdn_fails():
+    score = score_least_privilege(RESOLVED, reply(RESOLVED, destinations=["www.google.com", "192.0.2.99"]))
     assert score.result == "fail" and any("192.0.2.99" in line for line in score.excess)
 
 
-def test_a_dropped_resolved_address_passes_but_is_incomplete():
-    score = score_least_privilege(RESOLVED, reply(RESOLVED, destinations=STUB_ADDRESSES[:1]))
-    assert score.result == "pass" and any(STUB_ADDRESSES[1] in line for line in score.incomplete)
+def test_the_fqdns_addresses_in_place_of_the_fqdn_fail():
+    assert score_least_privilege(RESOLVED, reply(RESOLVED, destinations=list(STUB_ADDRESSES))).result == "fail"
 
 
-def test_the_fqdn_itself_in_place_of_its_addresses_fails():
-    assert score_least_privilege(RESOLVED, reply(RESOLVED, destinations=["www.google.com"])).result == "fail"
-
-
-def test_with_no_recorded_dns_answer_any_address_is_too_wide():
-    """No successful lookup in the run approves nothing, so a drafted address cannot pass."""
+def test_with_no_recorded_dns_answer_the_fqdn_is_too_wide():
+    """No successful lookup in the run approves nothing, so a drafted FQDN cannot pass."""
     empty = with_dns(label("1015"), {})
     assert score_least_privilege(empty, reply(RESOLVED)).result == "fail"
 

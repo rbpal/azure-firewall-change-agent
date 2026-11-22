@@ -177,14 +177,15 @@ def controlled_dns(conditions: dict) -> Lookup:
 
 
 def with_dns(expected: dict, resolved: dict[str, list[str]]) -> dict:
-    """The label with each `destinations_from_dns: FQDN` replaced by the addresses the DNS tool returned in this run."""
+    """The label with each `destinations_from_dns: FQDN` as the rule's destination, only if the DNS tool answered it in this run."""
     if not any("destinations_from_dns" in r for r in expected.get("rules") or []):
         return expected
     rules = []
     for rule in expected["rules"]:
         rule = dict(rule)
-        if "destinations_from_dns" in rule:  # no recorded answer leaves nothing approved, so any address is too wide
-            rule["destinations"] = list(resolved.get(str(rule.pop("destinations_from_dns")).lower(), []))
+        if "destinations_from_dns" in rule:  # no recorded answer leaves nothing approved: the name had to resolve
+            name = str(rule.pop("destinations_from_dns"))
+            rule["destinations"] = [name] if resolved.get(name.lower()) else []
         rules.append(rule)
     return {**expected, "rules": rules}
 

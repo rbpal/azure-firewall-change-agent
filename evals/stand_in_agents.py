@@ -40,13 +40,12 @@ class StubCall:
     output_tokens: int = 0
 
 
-def with_stub_addresses(expected: dict) -> dict:
-    """A copy of a label as a reply would carry it: each destinations_from_dns becomes the stub DNS addresses."""
+def with_fqdn_destinations(expected: dict) -> dict:
+    """A copy of a label as a reply would carry it: each destinations_from_dns becomes the FQDN as the destination."""
     out = copy.deepcopy(expected)
     for rule in out.get("rules") or []:
         if "destinations_from_dns" in rule:
-            del rule["destinations_from_dns"]
-            rule["destinations"] = list(STUB_ADDRESSES)
+            rule["destinations"] = [rule.pop("destinations_from_dns")]
     return out
 
 
@@ -55,13 +54,14 @@ def perfect(answers: dict[str, dict]) -> Agent:
     keys = copy.deepcopy(answers)
 
     def agent(ticket: dict, engineer_review: dict | None = None, dns_lookup=None) -> dict:
-        """Return the labelled answer for this ticket, in reply shape; a DNS-derived destination gets the stub addresses."""
+        """Return the labelled answer for this ticket, in reply shape; a DNS-checked FQDN becomes the destination."""
         expected = keys[ticket["number"]]
         reply = {k: copy.deepcopy(expected[k]) for k in REPLY_KEYS if k in expected}
-        hosts = {r.pop("destinations_from_dns") for r in reply.get("rules") or [] if "destinations_from_dns" in r}
+        hosts = set()
         for rule in reply.get("rules") or []:
-            if "destinations" not in rule:
-                rule["destinations"] = list(STUB_ADDRESSES)
+            if "destinations_from_dns" in rule:
+                hosts.add(rule["destinations_from_dns"])
+                rule["destinations"] = [rule.pop("destinations_from_dns")]
         if hosts:  # only a DNS ticket records a call, so every other ticket is scored exactly as before
             agent.calls.append(StubCall([{"host": h, "resolves": True, "a": list(STUB_ADDRESSES)} for h in sorted(hosts)]))
         return reply

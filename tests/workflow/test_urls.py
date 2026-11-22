@@ -35,7 +35,7 @@ def v3_reply(number):
 
 
 def resolved_label(number):
-    """The label with its destinations_from_dns replaced by the stand-in's documentation addresses, as scoring does."""
+    """The label with its destinations_from_dns as the rule destination, resolved by the stand-in DNS, as scoring does."""
     _, label = request(number)
     hosts = {r["destinations_from_dns"] for r in label["rules"] if "destinations_from_dns" in r}
     return with_dns(label, {h: list(STUB_ADDRESSES) for h in hosts})
@@ -53,13 +53,13 @@ def with_url(url, protocol="HTTPS", ports=("443",)):
 def test_the_instructions_say_a_url_gives_its_hostname_and_port_and_the_path_stays_on_the_ticket():
     text = instructions(REPO)
     schema = json.loads((REPO / "data" / "tickets" / "schema.json").read_text())
-    assert "The rule uses the IPv4 addresses DNS returns for its FQDN, on the ticket's port" in json.dumps(schema)
+    assert "The rule names its FQDN, which DNS must resolve, on the ticket's port" in json.dumps(schema)
     assert "- A URL approves the FQDN extracted from it, handled as an exact FQDN, and the ticket's port" in text  # STD-COLL-03
     assert "the rule does not restrict the path" in text
     assert "Never correct or guess an FQDN or URL" in text  # drafter.md
     assert "`url_port_conflict`" in text  # RB-01-6
     assert "a wildcard domain pattern on a TCP, UDP, ICMP or Any ticket" in text  # RB-01-6 non_http_to_hostname
-    assert "Never name the exact FQDN in a rule, never draft an application rule for it" in text  # RB-01-4
+    assert "Never put the returned addresses in the rule, never draft an application rule for it" in text  # RB-01-4
     assert "as the ticket gives them, except an exact FQDN or URL" in text  # drafter.md, the rule's fields
     assert "HTTP and HTTPS become TCP" in text  # RB-01-4 and STD-COLL-03
     assert "the hostname does not resolve" not in text  # the old RB-01-7 caution, now a stop

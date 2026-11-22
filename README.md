@@ -30,35 +30,6 @@ Out of scope for the demo:
 
 The demo's other limits are in [Trade-offs](#trade-offs): the YAML ticket in place of ServiceNow, intake on the laptop, GitHub Actions in place of Azure DevOps, one person in every role and no firewall attached.
 
-## Status and Pending Optimization
-
-- **Evaluation:** agent version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
-
-The work below is left for the next iterations. Each item is known and planned, not ignored.
-
-1. **Tool-result screening.** Screen tool answers, including DNS answers and text fields such as `holds`, for instructions that try to steer the agent.
-2. **Prompt Shields.** Screen the ticket text before the agent runs.
-3. **Token limit per request.** Stop a request that uses more than a set number of tokens.
-4. **Private network access to the tools.** Move the MCP tools behind a private endpoint in the enterprise design.
-5. **Threat model status.** Update `docs/threat-model.md`, where several measures that are now built still say "Planned".
-6. **Release pipeline.** Replace the demo's apply from VS Code with a release workflow that applies `main` per environment-site.
-7. **Observability records.** Upload the laptop's run records to two new Log Analytics tables, so the workbook can show cost, correctness and workflow events.
-   - `FwAgentAttempt_CL`, one row per agent run:
-     - **Which run:** ticket, run ID, attempt number, start and end time.
-     - **What happened:** answered, error or not sent, and the reply (draft, already allowed, stop and ask).
-     - **Tokens:** input, cached, output and reasoning, taken from Foundry's own response. These are the complete counts the workbook lacks today.
-     - **Eval verdict:** passed or incorrect, plus the scorer's mistake codes. This covers evaluation runs only; demo tickets get "not applicable".
-     - **What it ran on:** agent version, definition hash, tool code hash and data snapshot commit.
-   - `FwAgentWorkflowEvent_CL`, workflow steps after the draft: the rules written into the tfvars files and the Tier 1 policy check in CI. Each is marked succeeded, refused or failed, per environment-site.
-
-   Prompts, replies, labels and test-split answers are never sent. With these rows, the workbook shows:
-   - **Cost:** complete token counts multiplied by a dated price list. This is still an estimate; the real bill stays in Azure Cost Management.
-   - **Correctness:** pass and fail rates for evaluation runs.
-   - **Drift:** whether each run used the approved agent version and tools.
-   - **Workflow:** whether drafts were written and passed the Tier 1 check.
-
-   The engineer's review decision and the Terraform plan and apply are not included. They stay in the archive evidence files.
-
 ## The demo
 
 ![Demo flow in eleven steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, then a GitHub pull request, review and merge, and an apply from main to the dev firewall policies](docs/images/demo-flow-steps.png)
@@ -185,3 +156,32 @@ mkdir -p ~/.config/leak-gate && $EDITOR ~/.config/leak-gate/terms.txt   # one re
 ```
 
 If the block list is missing, the gate refuses the commit rather than letting it through.
+
+## Status and Pending Optimization
+
+- **Evaluation:** agent version 17 passed all 60 validation tickets across two runs (56 on 2026-11-15, 4 on 2026-11-18). It then ran the test split once on 2026-11-19: 32 of 32 passed and complete, with 0 of 7 missed stops. Earlier versions were scored on the same test tickets, so this is a regression check, not unbiased held-out evidence. Details are in `evals/README.md`.
+
+The work below is left for the next iterations. Each item is known and planned, not ignored.
+
+1. **Tool-result screening.** Screen tool answers, including DNS answers and text fields such as `holds`, for instructions that try to steer the agent.
+2. **Prompt Shields.** Screen the ticket text before the agent runs.
+3. **Token limit per request.** Stop a request that uses more than a set number of tokens.
+4. **Private network access to the tools.** Move the MCP tools behind a private endpoint in the enterprise design.
+5. **Threat model status.** Update `docs/threat-model.md`, where several measures that are now built still say "Planned".
+6. **Release pipeline.** Replace the demo's apply from VS Code with a release workflow that applies `main` per environment-site.
+7. **Observability records.** Upload the laptop's run records to two new Log Analytics tables, so the workbook can show cost, correctness and workflow events.
+   - `FwAgentAttempt_CL`, one row per agent run:
+     - **Which run:** ticket, run ID, attempt number, start and end time.
+     - **What happened:** answered, error or not sent, and the reply (draft, already allowed, stop and ask).
+     - **Tokens:** input, cached, output and reasoning, taken from Foundry's own response. These are the complete counts the workbook lacks today.
+     - **Eval verdict:** passed or incorrect, plus the scorer's mistake codes. This covers evaluation runs only; demo tickets get "not applicable".
+     - **What it ran on:** agent version, definition hash, tool code hash and data snapshot commit.
+   - `FwAgentWorkflowEvent_CL`, workflow steps after the draft: the rules written into the tfvars files and the Tier 1 policy check in CI. Each is marked succeeded, refused or failed, per environment-site.
+
+   Prompts, replies, labels and test-split answers are never sent. With these rows, the workbook shows:
+   - **Cost:** complete token counts multiplied by a dated price list. This is still an estimate; the real bill stays in Azure Cost Management.
+   - **Correctness:** pass and fail rates for evaluation runs.
+   - **Drift:** whether each run used the approved agent version and tools.
+   - **Workflow:** whether drafts were written and passed the Tier 1 check.
+
+   The engineer's review decision and the Terraform plan and apply are not included. They stay in the archive evidence files.

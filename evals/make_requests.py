@@ -322,7 +322,7 @@ PUBLIC_SITES = {
 
 
 def build_fqdn_destination(rng, net, used):
-    """HTTPS 443 to a public site, by FQDN or, one time in three, by its URL: network rules to the resolved addresses."""
+    """HTTPS 443 to a public site, by FQDN or, one time in three, by its URL: network rules to the FQDN, which must resolve."""
     envs = pick_envs(rng, rng.choice([1, 2]))
     options = [
         (spoke, code) for spoke in EGRESS_SPOKES for code in sorted(net.parties)
@@ -871,7 +871,7 @@ def build_dns_lookup_failed(rng, net, used):
 
 
 def build_fqdn_destination_stage(rng, net, used):
-    """HTTPS 443 to a public site's bare FQDN from stage reporting: network rules to the resolved addresses.
+    """HTTPS 443 to a public site's bare FQDN from stage reporting: network rules to the FQDN, which must resolve.
 
     Until 2026-11-14 this was AMQPS (TCP 5671) to a made-up hostname, stopped as non_http_to_hostname. Exact
     FQDNs now resolve to network rules, so the ticket became the validation split's bare-FQDN case.

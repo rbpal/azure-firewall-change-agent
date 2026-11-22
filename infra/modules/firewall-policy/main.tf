@@ -13,6 +13,11 @@ resource "azurerm_firewall_policy" "this" {
   location            = var.location
   sku                 = var.sku
   tags                = var.tags
+
+  # DNS proxy lets network rules name an exact FQDN. Standard and Premium only.
+  dns {
+    proxy_enabled = var.dns_proxy_enabled
+  }
 }
 
 resource "azurerm_ip_group" "this" {

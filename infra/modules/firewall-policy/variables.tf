@@ -14,8 +14,13 @@ variable "location" {
 }
 
 variable "sku" {
-  description = "Policy tier. Basic, to match the firewall SKU."
+  description = "Policy tier: Standard, so network rules can name an exact FQDN."
   type        = string
+}
+
+variable "dns_proxy_enabled" {
+  description = "Turn on DNS proxy, which network rules with FQDNs need. Standard or Premium only."
+  type        = bool
 }
 
 variable "tags" {

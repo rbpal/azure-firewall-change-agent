@@ -18,8 +18,13 @@ variable "firewall_policy_name" {
 }
 
 variable "firewall_policy_sku" {
-  description = "Policy tier: Basic, to match the firewall SKU."
+  description = "Policy tier: Standard, so network rules can name an exact FQDN."
   type        = string
+}
+
+variable "firewall_policy_dns_proxy_enabled" {
+  description = "Turn on DNS proxy, which network rules with FQDNs need."
+  type        = bool
 }
 
 variable "tags" {

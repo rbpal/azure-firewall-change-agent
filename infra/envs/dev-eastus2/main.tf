@@ -8,6 +8,7 @@ module "firewall_policy" {
   resource_group_name = data.azurerm_resource_group.this.name
   location            = var.location
   sku                 = var.firewall_policy_sku
+  dns_proxy_enabled   = var.firewall_policy_dns_proxy_enabled
   tags                = var.tags
   ip_groups           = var.ip_groups
 

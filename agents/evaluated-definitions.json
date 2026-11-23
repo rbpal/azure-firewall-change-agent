@@ -26,7 +26,7 @@
           "not_scored": "RITM0011069 needs a controlled DNS answer the deployed tool cannot get"
         }
       ],
-      "caveat": "The 2026-11-11 validation rerun made one mistake that counts. It drafted a network rule with an FQDN destination, which this project’s Basic firewall SKU does not support. The draft check now blocks unsupported FQDN network rules. It also runs the duplicate check itself, refusing exact duplicates before files are written. An engineer still reviews every draft."
+      "caveat": "The 2026-11-11 validation rerun made one mistake that counts. It drafted a network rule with an FQDN destination, which this project\u2019s Basic firewall SKU does not support. The draft check now blocks unsupported FQDN network rules. It also runs the duplicate check itself, refusing exact duplicates before files are written. An engineer still reviews every draft."
     },
     "09e684c6275ce61b": {
       "agent_version": "17",
@@ -111,6 +111,25 @@
         }
       ],
       "caveat": "Every run used agent version 19, definition 02a49c389cf74b6e and the same pinned snapshot, one attempt per call. RITM0011038 failed to connect twice before it was answered; the cause of the connection errors is not proven. The test split has not been run on this definition. Result files are kept outside the repository because they hold each reply and response ID."
+    },
+    "412d5c398cd04be8": {
+      "agent_version": "20",
+      "evaluation": "validation split, passed",
+      "evaluated_on": "2026-11-23",
+      "main_commit": "6f7745e1d6ea61e8be3c8706582c7f524da6d667",
+      "result": "60 of 60 validation tickets passed and complete in one run on 2026-11-23. 0 of 24 missed stops; 0 of 36 over-abstains; 0 wrong stop reasons; 0 too wide; 0 skipped required tools; 0 agent errors; 0 infrastructure errors; one attempt per ticket; 869,040 input and 42,340 output tokens over 60 calls and 270 tool calls",
+      "tool_code_sha256": "212dcb2abf503fb747a84338ebb293dec52bf97f83d3a6e33591ec1840213893",
+      "runs": [
+        {
+          "evaluated_on": "2026-11-23",
+          "snapshot": "6f7745e1d6ea61e8be3c8706582c7f524da6d667",
+          "tickets": "all 60 validation tickets",
+          "result": "60 of 60 answered, and all 60 passed and complete; one attempt per ticket",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-23-v20-validation60.json, with its score sheet .sheet.txt"
+        }
+      ],
+      "caveat": "The test split has not run on version 20. The result file is kept outside the repository because it holds each reply and response ID."
     }
   }
 }

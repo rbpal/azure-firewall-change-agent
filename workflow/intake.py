@@ -27,7 +27,7 @@ import yaml
 
 from workflow.bypass import CODE as BYPASS, bypass_message, bypass_requests
 from workflow.tickets import DNAT_PROTOCOL_CODE, dnat_protocol_problem, ticket_errors
-from workflow.urls import name_findings, url_conflicts
+from workflow.urls import bare_host, hostname_problems, name_findings, url_conflicts
 
 ADDRESS_PLAN = "data/network/address-plan.yaml"
 SIDES = ("sources", "destination")
@@ -169,6 +169,9 @@ def intake_findings(repo: Path, ticket: dict) -> list[dict]:
             elif "vnet" in address or "subnet" in address:
                 out.append(missing_address_finding(repo, where, address))
                 explained.add(where)
+            elif isinstance(address.get("fqdn"), str) and bare_host(address["fqdn"]) != address["fqdn"] \
+                    and not hostname_problems(address["fqdn"]):
+                explained.add(f"{where}/fqdn")  # spaces, https:// or a path the agent drops (RB-01-4); not a typo
     for f in name_findings(ticket):  # explained in plain words, never corrected; the schema's pattern error is dropped
         out.append(finding(f["code"], f["where"], f["message"]))
         explained.add(f["where"].rsplit("/", 1)[0])

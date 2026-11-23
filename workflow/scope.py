@@ -78,7 +78,7 @@ import yaml
 
 from workflow.bypass import check_no_bypass
 from workflow.rule_index import next_index
-from workflow.urls import WEB, name_findings, url_conflicts
+from workflow.urls import WEB, bare_host, clean_fqdn, name_findings, url_conflicts
 from workflow.tfvars_writer import DraftError, insert_rule, remove_rule, rule_fields, rule_type, spoke_path
 from workflow.tickets import DNAT_PROTOCOL_CODE, SCHEMA_PATH, dnat_protocol_problem
 
@@ -140,7 +140,7 @@ def _not_approved(value: str, approved: list[tuple[str, str]]) -> str:
             given, ok = ipaddress.ip_network(value, strict=False), ipaddress.ip_network(v)
             if given.version == ok.version and given.subnet_of(ok):  # ::/0 is refused, never a crash
                 return ""
-        if k == kind and k != "cidr" and v.lower() == value.lower():
+        if k == kind and k != "cidr" and value.lower() in _names(v):
             return ""
     given = ", ".join(f"{v} ({k.replace('_', ' ')})" for k, v in approved) or "nothing"
     same = [v for k, v in approved if k == kind]
@@ -222,15 +222,24 @@ def open_dnat_error(repo: Path, rule: dict) -> str:
             "even when the ticket asks (STD-COLL-04, RB-02-5 open_dnat_source)") if why else ""
 
 
+def _names(value: str) -> set[str]:
+    """The lower-case names a rule may use for one ticket hostname: cleaned (clean_fqdn), or as written when already bare."""
+    return {clean_fqdn(value).lower()} | ({value.lower()} if bare_host(value) == value else set())
+
+
 def _wildcard(value: str) -> bool:
     """True for a wildcard domain pattern such as *.google.com."""
     return _kind(value) == "fqdn" and value.startswith("*")
 
 
 def fqdn_destination_error(rule: dict) -> str:
-    """Say why an added rule names a wildcard domain pattern outside HTTP or HTTPS, or return ''."""
+    """Say why an added rule names a wildcard domain pattern outside HTTP or HTTPS, or an FQDN that is not clean (clean_fqdn) in a network rule, or return ''."""
     if "translated_address" in rule:
         return ""
+    www = [str(d) for d in rule.get("destinations") or [] if _kind(str(d)) == "fqdn" and clean_fqdn(str(d)) != str(d)]
+    if www and str(rule.get("protocol") or "").upper() not in WEB:
+        return (f"{', '.join(www)} is not a clean FQDN; a network rule names it without spaces, https:// "
+                f"or a path, and without a leading www., such as {clean_fqdn(www[0])} (RB-01-4)")
     names = [str(d) for d in rule.get("destinations") or [] if _wildcard(str(d))]
     if names and str(rule.get("protocol") or "").upper() not in WEB:
         return (f"{', '.join(names)} is a wildcard domain pattern, but the rule's protocol is "

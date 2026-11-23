@@ -37,7 +37,7 @@ expected:
     collection: allow-xfer-network-rules
     name: https-xfer-to-googleWeb
     sources: [10.106.20.0/24]
-    destinations_from_dns: www.google.com
+    destinations_from_dns: google.com
     ports: ['443']
     protocol: TCP
   - env_site: lab-centralus
@@ -45,12 +45,12 @@ expected:
     collection: allow-xfer-network-rules
     name: https-xfer-to-googleWeb
     sources: [10.107.20.0/24]
-    destinations_from_dns: www.google.com
+    destinations_from_dns: google.com
     ports: ['443']
     protocol: TCP
   tools:
   - {tool: locate_address_for_env_site, address: 10.106.20.0/24}
   - {tool: locate_address_for_env_site, address: 10.107.20.0/24}
-  - {tool: dns_lookup_for_fqdn, target: www.google.com}
+  - {tool: dns_lookup_for_fqdn, target: google.com}
   - {tool: duplicate_rule_check, env_site: lab-eastus2}
   - {tool: duplicate_rule_check, env_site: lab-centralus}

@@ -12,11 +12,14 @@ import pytest
 import yaml
 
 from workflow.scope import ApprovalError, apply_reply, plan_writes
+from workflow.urls import clean_fqdn
 from tests.workflow.test_scope import PRIMARY, SPOKE_FILE, changed, flow_reply, flow_ticket, repo, snapshot  # noqa: F401
 
 FQDN = {"fqdn": "www.google.com"}
 INTERNAL = {"fqdn": "reports.internal.example"}
 ONPREM = {"fqdn": "erp.corp.example"}
+MOZILLA = ["www.mozilla.org", "https://www.mozilla.org", "www.mozilla .org", "www. mozilla.org",
+           "https://www.mozilla.org/doc/index.html"]  # each is drafted as mozilla.org (user, 2026-11-23)
 
 
 def answer(host, *addresses, resolves=True):
@@ -25,9 +28,9 @@ def answer(host, *addresses, resolves=True):
 
 
 def _name(ticket):
-    """The ticket's FQDN, a URL's host included."""
+    """The name the rule and the lookup use: the ticket's FQDN or a URL's host, cleaned (clean_fqdn)."""
     given = ticket["destination"][0]
-    return given.get("fqdn") or given["url"].split("/")[2]
+    return clean_fqdn(given.get("fqdn") or given["url"].split("/")[2])
 
 
 def resolving(ticket, *addresses):
@@ -41,9 +44,9 @@ def write(repo, ticket, reply, answers=None):
 
 
 def drafted(*destinations, protocol="TCP", ports=("443",)):
-    """The agent's primary-site draft to these destinations (by default the ticket's FQDN, www.google.com)."""
+    """The agent's primary-site draft to these destinations (by default google.com, the ticket's www.google.com without www.)."""
     r = flow_reply(protocol, ports)
-    r["rules"][0]["destinations"] = list(destinations or ["www.google.com"])
+    r["rules"][0]["destinations"] = list(destinations or ["google.com"])
     return r
 
 
@@ -60,7 +63,27 @@ def test_an_exact_fqdn_becomes_a_tcp_443_network_rule_naming_the_fqdn(repo):
     write(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), resolving(flow_ticket("HTTPS", ["443"], FQDN), "192.0.2.80", "192.0.2.81"))
     assert changed(before, repo) == {SPOKE_FILE.format(PRIMARY)}
     text = (repo / SPOKE_FILE.format(PRIMARY)).read_text()
-    assert "destination_fqdns" in text and '"www.google.com"' in text and "192.0.2.8" not in text
+    assert "destination_fqdns" in text and '"google.com"' in text and "www." not in text and "192.0.2.8" not in text
+
+
+def written_as(name):
+    """The HTTPS 443 FQDN ticket with its FQDN written this way; intake lets the schema's pattern error pass (RB-01-4)."""
+    ticket = flow_ticket("HTTPS", ["443"], {"fqdn": "www.mozilla.org"})
+    ticket["destination"][0]["fqdn"] = name
+    return ticket
+
+
+@pytest.mark.parametrize("given", MOZILLA)
+def test_each_way_of_writing_an_fqdn_is_drafted_as_the_clean_name(repo, given):
+    write(repo, written_as(given), drafted("mozilla.org"))
+    assert '"mozilla.org"' in (repo / SPOKE_FILE.format(PRIMARY)).read_text()
+
+
+@pytest.mark.parametrize("ticket_name, rule_name", [("www.mozilla.org", "www.mozilla.org"),
+                                                    ("www.mozilla .org", "www.mozilla .org")])
+def test_an_fqdn_that_is_not_clean_in_a_network_rule_is_refused(repo, ticket_name, rule_name):
+    refused(repo, written_as(ticket_name), drafted(rule_name), "is not a clean FQDN",
+            answers=[answer(rule_name, "192.0.2.80")])
 
 
 def test_a_url_destination_is_handled_like_its_fqdn(repo):
@@ -172,32 +195,32 @@ def test_a_removal_of_an_existing_exact_fqdn_application_rule_is_still_written(r
 
 def test_with_no_dns_answer_in_the_response_the_fqdn_is_refused(repo):
     refused(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(),
-            "no successful dns_lookup_for_fqdn answer for www.google.com in this draft's response", answers=[])
+            "no successful dns_lookup_for_fqdn answer for google.com in this draft's response", answers=[])
 
 
 def test_a_failed_lookup_is_refused(repo):
     """NXDOMAIN, or a name with no A record, is not a successful answer, so the FQDN rule is refused."""
     refused(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), "no successful dns_lookup_for_fqdn answer",
-            answers=[answer("www.google.com", resolves=False)])
+            answers=[answer("google.com", resolves=False)])
     refused(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), "no successful dns_lookup_for_fqdn answer",
-            answers=[{"host": "www.google.com", "resolves": True, "a": [], "aaaa": ["2001:db8::1"]}])
+            answers=[{"host": "google.com", "resolves": True, "a": [], "aaaa": ["2001:db8::1"]}])
 
 
 def test_only_the_first_successful_answer_is_checked(repo):
-    good, bad = answer("www.google.com", "192.0.2.80"), answer("www.google.com", "127.0.0.1")
+    good, bad = answer("google.com", "192.0.2.80"), answer("google.com", "127.0.0.1")
     assert plan_writes(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), dns_answers=[good, bad])
     refused(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), "127.0.0.1 is a", [bad, good])
     assert plan_writes(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(),
-                       dns_answers=[answer("www.google.com", resolves=False), good])  # a failed lookup is not designated
+                       dns_answers=[answer("google.com", resolves=False), good])  # a failed lookup is not designated
 
 
 def test_an_answer_for_another_name_approves_nothing(repo):
-    refused(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), "no successful dns_lookup_for_fqdn answer for www.google.com",
+    refused(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), "no successful dns_lookup_for_fqdn answer for google.com",
             answers=[answer("www.cnn.com", "192.0.2.80")])
 
 
 def test_the_names_case_does_not_matter(repo):
-    write(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), [answer("WWW.Google.com", "192.0.2.80")])
+    write(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted(), [answer("Google.COM", "192.0.2.80")])
 
 
 def test_the_live_draft_passes_the_responses_answers_to_the_draft_check():

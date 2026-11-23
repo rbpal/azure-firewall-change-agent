@@ -177,7 +177,7 @@ def test_a_draft_write_refuses_a_ticket_with_a_url_port_conflict(repo):
 def test_the_version_3_replies_with_the_whole_url_are_refused_and_the_labelled_hostname_writes(repo, number):
     with pytest.raises(ApprovalError, match="is not on the ticket"):
         plan_writes(repo, request(number)[0], v3_reply(number))
-    answers = [{"host": "www.google.com", "resolves": True, "a": list(STUB_ADDRESSES)}]  # as the response carries it
+    answers = [{"host": "google.com", "resolves": True, "a": list(STUB_ADDRESSES)}]  # as the response carries it
     assert len(plan_writes(repo, request(number)[0], resolved_label(number), dns_answers=answers)) == 2
 
 

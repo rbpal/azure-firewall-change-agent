@@ -37,7 +37,7 @@ expected:
     collection: allow-rprt-network-rules
     name: https-rprt-to-cnnWeb
     sources: [10.102.15.0/24]
-    destinations_from_dns: www.cnn.com
+    destinations_from_dns: cnn.com
     ports: ['443']
     protocol: TCP
   - env_site: stage-centralus
@@ -45,12 +45,12 @@ expected:
     collection: allow-rprt-network-rules
     name: https-rprt-to-cnnWeb
     sources: [10.103.15.0/24]
-    destinations_from_dns: www.cnn.com
+    destinations_from_dns: cnn.com
     ports: ['443']
     protocol: TCP
   tools:
   - {tool: locate_address_for_env_site, address: 10.102.15.0/24}
   - {tool: locate_address_for_env_site, address: 10.103.15.0/24}
-  - {tool: dns_lookup_for_fqdn, target: www.cnn.com}
+  - {tool: dns_lookup_for_fqdn, target: cnn.com}
   - {tool: duplicate_rule_check, env_site: stage-eastus2}
   - {tool: duplicate_rule_check, env_site: stage-centralus}

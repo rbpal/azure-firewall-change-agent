@@ -121,10 +121,23 @@ def url_problems(url) -> list[str]:
     return out
 
 
+def bare_host(value: str) -> str:
+    """A ticket FQDN without spaces, an http:// or https:// prefix or a path: 'https://www. mozilla.org/doc' gives www.mozilla.org."""
+    name = re.sub(r"^https?://", "", value.replace(" ", ""), flags=re.IGNORECASE)
+    return re.split(r"[/?#]", name, maxsplit=1)[0]
+
+
+def clean_fqdn(value: str) -> str:
+    """The FQDN a network rule names for a ticket FQDN: bare_host without a leading www., so www.mozilla .org gives mozilla.org."""
+    name = bare_host(value)
+    return name[4:] if name.lower().startswith("www.") else name
+
+
 def hostname_problems(name) -> list[str]:
-    """Why a ticket hostname cannot be used as written; empty when it can. Never changes the name."""
+    """Why a ticket hostname cannot be used once cleaned (bare_host); empty when it can. Never changes the name."""
     if not isinstance(name, str):
         return ["it is not text"]
+    name = bare_host(name)  # spaces, an http(s):// prefix and a path are allowed: the agent drops them (RB-01-4)
     out = _character_problems(name)
     if "://" in name or "/" in name:
         return out + ["it looks like a URL; give it as a url, or give only the hostname"]

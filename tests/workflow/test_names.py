@@ -52,18 +52,21 @@ BAD = [
     ("url", "https://user@api.litware.example/v1", "a user name or password before the hostname"),
     ("url", "https://api/v1", "it has no domain"),
     ("url", "https://api.litware.e1/v1", "the last label 'e1' must be 2 to 63 letters"),
-    ("fqdn", "api.litware .example", "a space at character 12"),
     ("fqdn", "api.litware\t.example", "a tab at character 12"),
     ("fqdn", "api.litware.example\n", "a line break at character 20"),  # passed before
-    ("fqdn", "api.litware.example ", "a space at character 20"),
     ("fqdn", "api..litware.example", "it has two dots in a row"),
     ("fqdn", "api.litware.example.", "it ends with a dot"),
     ("fqdn", "API.litware.example", "it has upper-case letters"),
-    ("fqdn", "https://api.litware.example", "it looks like a URL"),
     ("fqdn", "api_litware.example", "the character '_' is not allowed"),
     ("fqdn", "api.lit​ware.example", "an invisible character U+200B"),
     ("fqdn", "litware", "it has no domain"),
 ]
+
+
+@pytest.mark.parametrize("value", ["www.mozilla .org", "www. mozilla.org", "https://www.mozilla.org",
+                                   "https://www.mozilla.org/doc/index.html"])
+def test_an_fqdn_with_spaces_a_scheme_or_a_path_reaches_the_agent_to_be_cleaned(value):
+    assert intake_findings(REPO, ticket_with("fqdn", value)) == []
 
 
 @pytest.mark.parametrize("kind, value, says", BAD, ids=[repr(v) for _, v, _ in BAD])

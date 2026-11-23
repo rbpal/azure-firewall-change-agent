@@ -12,11 +12,14 @@ import pytest
 import yaml
 
 from workflow.scope import ApprovalError, apply_reply, plan_writes
+from workflow.urls import clean_fqdn
 from tests.workflow.test_scope import PRIMARY, SPOKE_FILE, changed, flow_reply, flow_ticket, repo, snapshot  # noqa: F401
 
 FQDN = {"fqdn": "www.google.com"}
 INTERNAL = {"fqdn": "reports.internal.example"}
 ONPREM = {"fqdn": "erp.corp.example"}
+MOZILLA = ["www.mozilla.org", "https://www.mozilla.org", "www.mozilla .org", "www. mozilla.org",
+           "https://www.mozilla.org/doc/index.html"]  # each is drafted as mozilla.org (user, 2026-11-23)
 
 
 def answer(host, *addresses, resolves=True):
@@ -25,10 +28,9 @@ def answer(host, *addresses, resolves=True):
 
 
 def _name(ticket):
-    """The name the rule and the lookup use: the ticket's FQDN, a URL's host included, without a leading www."""
+    """The name the rule and the lookup use: the ticket's FQDN or a URL's host, cleaned (clean_fqdn)."""
     given = ticket["destination"][0]
-    name = given.get("fqdn") or given["url"].split("/")[2]
-    return name[4:] if name.startswith("www.") else name
+    return clean_fqdn(given.get("fqdn") or given["url"].split("/")[2])
 
 
 def resolving(ticket, *addresses):
@@ -64,9 +66,24 @@ def test_an_exact_fqdn_becomes_a_tcp_443_network_rule_naming_the_fqdn(repo):
     assert "destination_fqdns" in text and '"google.com"' in text and "www." not in text and "192.0.2.8" not in text
 
 
-def test_a_www_fqdn_in_a_network_rule_is_refused(repo):
-    refused(repo, flow_ticket("HTTPS", ["443"], FQDN), drafted("www.google.com"), "starts with www.",
-            answers=[answer("www.google.com", "192.0.2.80")])
+def written_as(name):
+    """The HTTPS 443 FQDN ticket with its FQDN written this way; intake lets the schema's pattern error pass (RB-01-4)."""
+    ticket = flow_ticket("HTTPS", ["443"], {"fqdn": "www.mozilla.org"})
+    ticket["destination"][0]["fqdn"] = name
+    return ticket
+
+
+@pytest.mark.parametrize("given", MOZILLA)
+def test_each_way_of_writing_an_fqdn_is_drafted_as_the_clean_name(repo, given):
+    write(repo, written_as(given), drafted("mozilla.org"))
+    assert '"mozilla.org"' in (repo / SPOKE_FILE.format(PRIMARY)).read_text()
+
+
+@pytest.mark.parametrize("ticket_name, rule_name", [("www.mozilla.org", "www.mozilla.org"),
+                                                    ("www.mozilla .org", "www.mozilla .org")])
+def test_an_fqdn_that_is_not_clean_in_a_network_rule_is_refused(repo, ticket_name, rule_name):
+    refused(repo, written_as(ticket_name), drafted(rule_name), "is not a clean FQDN",
+            answers=[answer(rule_name, "192.0.2.80")])
 
 
 def test_a_url_destination_is_handled_like_its_fqdn(repo):

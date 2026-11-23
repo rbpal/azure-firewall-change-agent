@@ -68,6 +68,49 @@
       "test_split": "run once on 2026-11-19 on snapshot dbc2739eea3992177e2f87bf815094d5a624e520: 32 of 32 passed and complete; 0 of 7 missed stops; 0 of 25 over-abstains; 0 too wide; 0 wrong stop reasons; 0 skipped required tools; 0 agent errors; 0 infrastructure errors; one attempt per ticket; 454,827 input and 25,334 output tokens over 32 calls and 168 tool calls. A regression assessment, not unbiased held-out evidence: versions 14 and 16 were scored on the same 32 tickets, and two version 14 failures shaped the version 15 and 16 instructions. It was started at the owner's request without the planned gate of one complete, error-free validation run",
       "caveat": "Every result file is kept outside the repository because it holds each reply and response ID. The 2026-11-18 run saved its JSON but not its full printed score sheet, so the four replies were scored again offline with the repository's own scorers; the verdicts matched. The JSON does not record the definition hash: the runner printed it and refuses to run unless the published definition matches main's, and main at 18190c5 builds 09e684c6275ce61b. The four-ticket run's per-ticket trace was retrieved afterward, on 2026-11-18, by read-only Foundry retrieval of its saved response IDs (no model call): ~/fwagent-runs/2026-11-18-v17-RITM0011072-0075.trace.jsonl.",
       "test_split_evidence": "~/fwagent-runs/2026-11-19-v17-test32.json and .sheet.txt (written by the runner; the sheet prints agent version 17 and definition 09e684c6275ce61b), .trace.jsonl and .instructions.json (built on 2026-11-19 by read-only Foundry retrieval of the 32 saved response IDs, no model call; definition 09e684c6275ce61b, none missing), .rescore.txt (offline rescore: verdicts equal, one attempt and one call per ticket, every tool answer names the pinned snapshot, no call errors, tool code 212dcb2a unchanged); all made read-only on 2026-11-19"
+    },
+    "02a49c389cf74b6e": {
+      "agent_version": "19",
+      "evaluation": "validation split, passed",
+      "evaluated_on": "2026-11-22",
+      "main_commit": "4948ba3549b325af9e5f01b6126da3987fbca3e2",
+      "result": "60 of 60 validation tickets passed and complete, across four runs on 2026-11-22. No single run covered all 60. 0 of 24 missed stops; 0 of 36 over-abstains; 0 wrong stop reasons; 0 too wide; 0 skipped required tools; 0 agent errors. 4 calls failed on infrastructure (APIConnectionError) and were not scored; each of those tickets passed on a later run",
+      "tool_code_sha256": "212dcb2abf503fb747a84338ebb293dec52bf97f83d3a6e33591ec1840213893",
+      "runs": [
+        {
+          "evaluated_on": "2026-11-22",
+          "snapshot": "4948ba3549b325af9e5f01b6126da3987fbca3e2",
+          "tickets": "RITM0011015, RITM0011064 (the two FQDN tickets)",
+          "result": "2 of 2 passed and complete; one attempt per ticket; 30,155 input and 1,958 output tokens over 2 calls and 20 tool calls",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-22-v19-RITM0011015-0064.json, with its score sheet .sheet.txt"
+        },
+        {
+          "evaluated_on": "2026-11-22",
+          "snapshot": "4948ba3549b325af9e5f01b6126da3987fbca3e2",
+          "tickets": "the other 58 validation tickets",
+          "result": "55 of 58 answered, and all 55 passed and complete; one attempt per ticket; RITM0011035, RITM0011038 and RITM0011044 not scored (APIConnectionError); 779,446 input and 37,178 output tokens over 58 calls and 229 tool calls",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-22-v19-validation58.json, with its score sheet .sheet.txt"
+        },
+        {
+          "evaluated_on": "2026-11-22",
+          "snapshot": "4948ba3549b325af9e5f01b6126da3987fbca3e2",
+          "tickets": "RITM0011035, RITM0011038, RITM0011044",
+          "result": "2 of 3 answered, and both passed and complete; RITM0011038 not scored (APIConnectionError); 26,696 input and 828 output tokens over 3 calls and 5 tool calls",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-22-v19-RITM0011035-0038-0044.json, with its score sheet .sheet.txt"
+        },
+        {
+          "evaluated_on": "2026-11-22",
+          "snapshot": "4948ba3549b325af9e5f01b6126da3987fbca3e2",
+          "tickets": "RITM0011038",
+          "result": "1 of 1 passed and complete; 14,184 input and 883 output tokens over 1 call and 5 tool calls",
+          "tool_code": "sha256 212dcb2a at the start and the end of the run",
+          "result_file": "~/fwagent-runs/2026-11-22-v19-RITM0011038-retry2.json, with its score sheet .sheet.txt"
+        }
+      ],
+      "caveat": "Every run used agent version 19, definition 02a49c389cf74b6e and the same pinned snapshot, one attempt per call. RITM0011038 failed to connect twice before it was answered; the cause of the connection errors is not proven. The test split has not been run on this definition. Result files are kept outside the repository because they hold each reply and response ID."
     }
   }
 }

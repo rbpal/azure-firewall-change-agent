@@ -35,7 +35,7 @@ A ready record says the commit's configuration files are copied and checked, and
 4. Each request supplies the commit as the `snapshot` structured input, so every tool call reads that snapshot. A reply is refused if any tool answer names another commit.
 5. If `main` changes relevant files during the call, the draft is made again from the new `main`, up to 3 times.
 
-The agent version must also be listed in `agents/evaluated-definitions.json` on `main`. Until its evaluation has passed and a reviewed pull request has added it, drafting stops.
+The agent version must also be listed in `agents/evaluated-definitions.json` on `main`. Until its evaluation has passed and a reviewed pull request has added it, drafting stops. The evaluation is the full validation split, or, for a small change, the validation tickets it touches, labelled as targeted.
 
 ## What is kept
 

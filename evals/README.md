@@ -27,7 +27,7 @@ There are 92 requests: 60 in validation and 32 in the test split, across 46 cate
 
 | Split | Requests | Draft | Already allowed | Stop and ask | Purpose |
 |---|---|---|---|---|---|
-| [`requests/validation/`](requests/validation/) | 60 | 34 | 2 | 24 | Tune and gate the agent. A definition may draft only after it passes here and a reviewed pull request adds it to [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json). |
+| [`requests/validation/`](requests/validation/) | 60 | 34 | 2 | 24 | Tune and gate the agent. A definition may draft only after a reviewed pull request adds it to [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json): after a full pass here, or, for a small change, after the validation tickets it touches pass, labelled as targeted. |
 | [`requests/test/`](requests/test/) | 32 | 23 | 2 | 7 | Held back for one final score per definition. Nothing is tuned against it. The runner refuses it without `--allow-test-split`. |
 
 **Added 2026-11-17: RITM0011072 to RITM0011075.** These cover an on-prem source-location mismatch and the engineer-accepted `free_text_conflict`: accepted and drafted, accepted with a second unreviewed request, and accepted while the source location is still wrong. Version 17 ran them on 2026-11-18 (section 5). Other results recorded before 2026-11-17 are on the earlier 56-ticket validation set.
@@ -383,7 +383,7 @@ The run refuses to start when `data/network` or `infra/envs` differ from the sna
 **Evidence**
 
 - Scoring rules: [`run_eval.py`](run_eval.py), [`least_privilege.py`](least_privilege.py), [`abstention.py`](abstention.py), [`required_tools.py`](required_tools.py).
-- Passing definitions: [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json). A definition is added only through a reviewed pull request, after its validation pass. Only a definition listed there may draft.
+- Passing definitions: [`agents/evaluated-definitions.json`](../agents/evaluated-definitions.json). A definition is added only through a reviewed pull request, after one of two passes. A full pass of the validation split is recorded as `"evaluation": "validation split, passed"`. For a small change, such as one prompt sentence or one check, a pass on the validation tickets it touches is recorded as `"evaluation": "targeted tickets, passed"`, with those `tickets` listed and `"full_validation": "not run"`. A full validation run follows at a checkpoint of 7, 10 or 15 days, chosen and approved by the owner; it never starts automatically. Its result is added to the entry, and earlier entries and runs are never rewritten. Only a definition listed there may draft.
 - Section 5 is copied from the run's score sheet. The per-ticket run file stays outside GitHub, because it holds every reply and the service response IDs. No sanitized per-ticket file is published yet (section 8).
 
 ## 8. Improvements for the next iteration

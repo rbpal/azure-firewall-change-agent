@@ -15,7 +15,7 @@ The org handles about 50 firewall tickets a month. That figure is an estimate, n
 2. **The snapshot travels with each request.** The version's header is `X-Fwagent-Snapshot: {{snapshot}}`, a required structured input. A live probe on 2026-11-03 confirmed it works with the managed-identity connection: one version read two different snapshots, a request without the value was refused with HTTP 400, and a malformed value was refused by the tool server.
 3. **Only the sync job publishes.** It marks each `main` commit ready after checking every file's bytes and reading the agent version back.
 4. **A check right before each call** compares the ticket branch, the ready record and Azure's files with `main`, by commit and by bytes.
-5. **An evaluation gate.** Drafting uses only definitions listed in `agents/evaluated-definitions.json` on `main`. An entry is added by a reviewed pull request after the evaluation passes. The register is not part of the definition, so adding an entry does not change its hash.
+5. **An evaluation gate.** Drafting uses only definitions listed in `agents/evaluated-definitions.json` on `main`. An entry is added by a reviewed pull request after the evaluation passes. The register is not part of the definition, so adding an entry does not change its hash. Since 2026-11-23 the evaluation is either the full validation split or, for a small change, the validation tickets the change touches. A targeted entry says so and names its tickets. A full validation run follows at a checkpoint of 7, 10 or 15 days, chosen and approved by the owner.
 
 ## What we did not choose
 

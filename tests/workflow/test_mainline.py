@@ -815,9 +815,13 @@ def test_the_eval_runner_may_use_an_unevaluated_definition_since_it_is_how_one_g
 
 def test_every_real_register_entry_names_a_definition_hash_and_its_passed_evaluation():
     entries = json.loads((REPO / "agents/evaluated-definitions.json").read_text())["definitions"]
+    validation = {p.stem.removeprefix("validation_") for p in (REPO / "evals/requests/validation").glob("*.yaml")}
     for sha, entry in entries.items():
         assert re.fullmatch(r"[0-9a-f]{16}", sha), sha
-        assert entry["evaluation"] == "validation split, passed", sha
+        assert entry["evaluation"] in ("validation split, passed", "targeted tickets, passed"), sha
+        if entry["evaluation"] == "targeted tickets, passed":  # a small change: its own tickets; the full run comes later
+            assert entry["tickets"] and set(entry["tickets"]) <= validation, sha
+            assert re.fullmatch(r"not run|passed on \d{4}-\d{2}-\d{2}\b.*", entry["full_validation"]), sha
         assert re.fullmatch(r"\d+", entry["agent_version"]), sha
         assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", entry["evaluated_on"]), sha
         assert re.fullmatch(r"[0-9a-f]{40}", entry["main_commit"]), sha

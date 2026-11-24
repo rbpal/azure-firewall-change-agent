@@ -99,6 +99,13 @@ rprt = {
           destination_addresses = ["198.51.100.176/28"]
           destination_ports     = ["8443"]
         }
+        "011-https-rprt-to-wikipedia" = {
+          name              = "https-rprt-to-wikipedia"
+          protocols         = ["TCP"]
+          source_addresses  = ["10.104.15.0/24"]
+          destination_fqdns = ["wikipedia.org"]
+          destination_ports = ["443"]
+        }
       }
     }
   }

@@ -32,7 +32,7 @@ The demo's other limits are in [Trade-offs](#trade-offs): the YAML ticket in pla
 
 ## The demo
 
-![Demo flow in eleven steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, then a GitHub pull request, review and merge, and an apply from main to the dev firewall policies](docs/images/demo-flow-steps.png)
+![Demo flow in nine steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, a GitHub pull request, review and merge, an apply from main to the dev firewall policies, then archive](docs/images/demo-flow-steps.png)
 
 The demo runs the same agent, workflow code and checks as the enterprise flow, on a personal Azure subscription. You run each step from your laptop with local demo scripts, helped by a coding assistant in VS Code. Step 4 sends the ticket to the Foundry agent.
 

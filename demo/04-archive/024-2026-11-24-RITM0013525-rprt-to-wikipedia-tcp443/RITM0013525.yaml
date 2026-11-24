@@ -1,0 +1,23 @@
+# Fictitious demo ticket. All names and addresses are synthetic.
+number: RITM0013525
+item: Firewall Change Request
+state: approved
+requested_for: Morgan Lee (Contoso reporting)
+opened: '2026-11-23T18:27:43-05:00'
+environments: [dev]
+dr_site_built: {dev: true}
+change_sites:
+  dev: [primary, dr]
+sources:
+- {environment: dev, site: primary, cidr: 10.104.15.0/24}
+- {environment: dev, site: dr, cidr: 10.105.15.0/24}
+destination:
+- {fqdn: www.wikipedia.org}
+protocol: HTTPS
+ports: ['443']
+justification: The reporting batch servers in dev read public reference articles from www.wikipedia.org over HTTPS 443.
+approvals:
+- {group: security, approver: Sam Ortiz, state: approved}
+- {group: network, approver: Lee Chen, state: approved}
+- {group: project, approver: Dana Brooks, state: approved}
+assigned_to: your-github-login

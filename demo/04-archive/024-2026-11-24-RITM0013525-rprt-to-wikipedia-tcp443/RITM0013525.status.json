@@ -1,0 +1,321 @@
+{
+  "number": "RITM0013525",
+  "agent": "fwagent-drafter",
+  "engineer": "your-github-login",
+  "reason": "Reviewed source, destination, protocol, port and site coverage; approved for drafting only",
+  "review": {
+    "decision": "accept",
+    "engineer": "your-github-login",
+    "reason": "Reviewed source, destination, protocol, port and site coverage; approved for drafting only",
+    "accepted": [],
+    "planned": [],
+    "edits": []
+  },
+  "verified": {
+    "commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+    "snapshot": "snapshots/de92f36ca73b90ea4c288a55e4364698748bffc3/",
+    "files": 73,
+    "ready_at": "2026-11-23T18:56:16+00:00",
+    "agent_name": "fwagent-drafter",
+    "agent_version": "20"
+  },
+  "verified_main_commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+  "verified_agent_version": "20",
+  "ticket_file": "02-submit/RITM0013525.yaml",
+  "write_status": "written",
+  "write_reason": "step 5 wrote the draft into the demo branch checkout",
+  "sent_at": "2026-11-24T00:10:12+00:00",
+  "foundry_status": "succeeded",
+  "response_id": "resp_0769f1742dd2ee57006b04d5f6dc2c8197b4d76444f7ca1f23",
+  "input_tokens": 14423,
+  "output_tokens": 711,
+  "tools": [
+    "locate_address_for_env_site",
+    "locate_address_for_env_site",
+    "dns_lookup_for_fqdn",
+    "locate_address_for_env_site",
+    "duplicate_rule_check",
+    "duplicate_rule_check"
+  ],
+  "tool_calls": [
+    {
+      "name": "locate_address_for_env_site",
+      "arguments": {
+        "address": "10.104.15.0/24"
+      }
+    },
+    {
+      "name": "locate_address_for_env_site",
+      "arguments": {
+        "address": "10.105.15.0/24"
+      }
+    },
+    {
+      "name": "dns_lookup_for_fqdn",
+      "arguments": {
+        "target": "wikipedia.org"
+      }
+    },
+    {
+      "name": "locate_address_for_env_site",
+      "arguments": {
+        "address": "208.80.154.224"
+      }
+    },
+    {
+      "name": "duplicate_rule_check",
+      "arguments": {
+        "env_site": "dev-eastus2",
+        "type": "network",
+        "rule": {
+          "protocols": [
+            "TCP"
+          ],
+          "source_addresses": [
+            "10.104.15.0/24"
+          ],
+          "destination_fqdns": [
+            "wikipedia.org"
+          ],
+          "destination_ports": [
+            "443"
+          ]
+        }
+      }
+    },
+    {
+      "name": "duplicate_rule_check",
+      "arguments": {
+        "env_site": "dev-centralus",
+        "type": "network",
+        "rule": {
+          "protocols": [
+            "TCP"
+          ],
+          "source_addresses": [
+            "10.105.15.0/24"
+          ],
+          "destination_fqdns": [
+            "wikipedia.org"
+          ],
+          "destination_ports": [
+            "443"
+          ]
+        }
+      }
+    }
+  ],
+  "tool_snapshots": [
+    "de92f36ca73b90ea4c288a55e4364698748bffc3",
+    "de92f36ca73b90ea4c288a55e4364698748bffc3",
+    "de92f36ca73b90ea4c288a55e4364698748bffc3",
+    "de92f36ca73b90ea4c288a55e4364698748bffc3",
+    "de92f36ca73b90ea4c288a55e4364698748bffc3"
+  ],
+  "dns_answers": [
+    {
+      "input": "wikipedia.org",
+      "host": "wikipedia.org",
+      "port": null,
+      "scheme": null,
+      "resolves": true,
+      "reason": null,
+      "rcode": "NOERROR",
+      "cname_chain": [],
+      "a": [
+        "208.80.154.224"
+      ],
+      "aaaa": [
+        "2620:0:861:ed1a::1"
+      ],
+      "ttl": 180,
+      "resolver": "168.63.129.16",
+      "queried_at": "2026-11-24T00:10:53+00:00"
+    }
+  ],
+  "call_error": null,
+  "raw_reply": null,
+  "reply": {
+    "outcome": "draft",
+    "rules": [
+      {
+        "env_site": "dev-eastus2",
+        "spoke": "rprt",
+        "collection": "allow-rprt-network-rules",
+        "name": "https-rprt-to-wikipedia",
+        "sources": [
+          "10.104.15.0/24"
+        ],
+        "destinations": [
+          "wikipedia.org"
+        ],
+        "ports": [
+          "443"
+        ],
+        "protocol": "TCP"
+      },
+      {
+        "env_site": "dev-centralus",
+        "spoke": "rprt",
+        "collection": "allow-rprt-network-rules",
+        "name": "https-rprt-to-wikipedia",
+        "sources": [
+          "10.105.15.0/24"
+        ],
+        "destinations": [
+          "wikipedia.org"
+        ],
+        "ports": [
+          "443"
+        ],
+        "protocol": "TCP"
+      }
+    ],
+    "explanation": "The source ranges belong to the reporting spoke at the selected dev primary and DR sites. wikipedia.org resolved to a public IPv4 address, and neither site has an existing rule allowing this flow."
+  },
+  "main_commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+  "snapshot": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+  "agent_version": "20",
+  "used": {
+    "commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+    "snapshot": "snapshots/de92f36ca73b90ea4c288a55e4364698748bffc3/",
+    "agent_version": "20"
+  },
+  "used_matches_verified": true,
+  "branch": "agent/RITM0013525-de92f36",
+  "worktree": "<state-dir>/worktrees/RITM0013525-de92f36",
+  "attempts": [
+    {
+      "attempt": 1,
+      "main_commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+      "snapshot": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+      "agent_version": "20",
+      "preflight": {
+        "checked_at": "2026-11-24T00:10:18+00:00",
+        "passed": true,
+        "checks": {
+          "main_unchanged": true,
+          "branch_starts_at_main": true,
+          "branch_files_match_main": true,
+          "ready_record_is_for_main": true,
+          "ready_record_files_match_main": true,
+          "ready_record_unchanged": true,
+          "azure_files_match_main": true
+        },
+        "main_commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "latest_main": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "branch_commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "ready_record_commit": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "files": 73,
+        "branch_differences": [],
+        "azure_problems": []
+      },
+      "marker": {
+        "ready_at": "2026-11-23T18:56:16+00:00",
+        "deploy_run": "https://github.com/<owner>/azure-firewall-change-agent/actions/runs/45243369108",
+        "checks": {
+          "files": 73,
+          "bytes_match_git": true,
+          "agent_version_read_back": true,
+          "tool_code_matches_commit": true
+        },
+        "agent": {
+          "name": "fwagent-drafter",
+          "version": "20",
+          "model": "gpt-6-luna-agent"
+        }
+      },
+      "response_id": "resp_0769f1742dd2ee57006b04d5f6dc2c8197b4d76444f7ca1f23",
+      "tool_commits": [
+        "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "de92f36ca73b90ea4c288a55e4364698748bffc3",
+        "de92f36ca73b90ea4c288a55e4364698748bffc3"
+      ],
+      "dns_answers": [
+        {
+          "input": "wikipedia.org",
+          "host": "wikipedia.org",
+          "port": null,
+          "scheme": null,
+          "resolves": true,
+          "reason": null,
+          "rcode": "NOERROR",
+          "cname_chain": [],
+          "a": [
+            "208.80.154.224"
+          ],
+          "aaaa": [
+            "2620:0:861:ed1a::1"
+          ],
+          "ttl": 180,
+          "resolver": "168.63.129.16",
+          "queried_at": "2026-11-24T00:10:53+00:00"
+        }
+      ],
+      "main_after": "de92f36ca73b90ea4c288a55e4364698748bffc3",
+      "relevant_changes": [],
+      "finished_at": "2026-11-24T00:11:22+00:00"
+    }
+  ],
+  "finished_at": "2026-11-24T00:11:22+00:00",
+  "ticket_moved_at": "2026-11-24T00:11:22+00:00",
+  "original_kept": false,
+  "write_started_at": "2026-11-24T00:13:18+00:00",
+  "write_engineer": "your-github-login",
+  "rule_names": {
+    "drafted": [
+      "https-rprt-to-wikipedia"
+    ],
+    "written": [
+      "https-rprt-to-wikipedia"
+    ],
+    "chosen_by": "agent"
+  },
+  "write_root": "<repo>",
+  "write_branch": "demo/RITM0013525",
+  "keys": [
+    "011-https-rprt-to-wikipedia",
+    "010-https-rprt-to-wikipedia"
+  ],
+  "files": [
+    "infra/envs/dev-eastus2/firewall_policy_rule_collection_groups/rprt.tfvars",
+    "infra/envs/dev-centralus/firewall_policy_rule_collection_groups/rprt.tfvars"
+  ],
+  "written_rules": [
+    {
+      "env_site": "dev-eastus2",
+      "spoke": "rprt",
+      "collection": "allow-rprt-network-rules",
+      "name": "https-rprt-to-wikipedia",
+      "sources": [
+        "10.104.15.0/24"
+      ],
+      "destinations": [
+        "wikipedia.org"
+      ],
+      "ports": [
+        "443"
+      ],
+      "protocol": "TCP"
+    },
+    {
+      "env_site": "dev-centralus",
+      "spoke": "rprt",
+      "collection": "allow-rprt-network-rules",
+      "name": "https-rprt-to-wikipedia",
+      "sources": [
+        "10.105.15.0/24"
+      ],
+      "destinations": [
+        "wikipedia.org"
+      ],
+      "ports": [
+        "443"
+      ],
+      "protocol": "TCP"
+    }
+  ],
+  "written_at": "2026-11-24T00:13:18+00:00"
+}

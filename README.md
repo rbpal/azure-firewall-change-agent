@@ -3,7 +3,7 @@ Agentic firewall change requests on Microsoft Foundry: agent drafting, determini
 
 ## Problem
 
-Turning an approved firewall change request into a correct Azure Firewall change is slow, manual work. A financial organisation handles about 100 Azure Firewall tickets a month. For each one, an engineer finds where the source and destination addresses belong, checks whether access already exists, and writes rules into the right Terraform files for the primary and disaster recovery (DR) sites.
+Turning an approved firewall change request into a correct Azure Firewall change is slow, manual work. A large organisation can handle hundreds or thousands of these requests a month, depending on how much it runs in the cloud. For each one, an engineer finds where the source and destination addresses belong, checks whether access already exists, and writes rules into the right Terraform files for the primary and disaster recovery (DR) sites.
 
 Mistakes are costly in a regulated environment. An overly broad rule grants unapproved access. A missed site leaves primary and DR out of step.
 
@@ -239,7 +239,7 @@ Estimates for the demo, checked against Microsoft pricing pages on 2026-11-17. E
 | 4 environment-sites | 2 evaluation tickets, version 17 | about 17,200 | 11 | about $0.0023 |
 | All four environments, primary (eastus2) and DR (centralus): 8 environment-sites | 1 evaluation ticket, version 17 | 19,131 | 17 | about $0.0027 |
 
-So one request that adds a rule to every environment, including DR, costs about a third of a cent in tokens. At about 100 requests a month, that is about $0.30. The Azure side adds nothing per request: the tool calls fit in the Function app's free grant, and in this demo the firewall policies are free because no firewall is attached. In a real estate, the cost that matters is the Azure Firewall instances themselves, billed per hour whether or not a rule changes, and the engineer's review time.
+So one request that adds a rule to every environment, including DR, costs about a third of a cent in tokens. At 100 requests a month, for example, that is about $0.30. The Azure side adds nothing per request: the tool calls fit in the Function app's free grant, and in this demo the firewall policies are free because no firewall is attached. In a real estate, the cost that matters is the Azure Firewall instances themselves, billed per hour whether or not a rule changes, and the engineer's review time.
 
 **Coding assistant.** A coding assistant in VS Code helps run the demo steps. It is a flat monthly subscription billed outside Azure, so it is not included above.
 

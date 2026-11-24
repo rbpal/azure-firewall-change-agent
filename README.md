@@ -32,9 +32,189 @@ The demo's other limits are in [Trade-offs](#trade-offs): the YAML ticket in pla
 
 ## The demo
 
-![Demo flow in eleven steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, then a GitHub pull request, review and merge, and an apply from main to the dev firewall policies](docs/images/demo-flow-steps.png)
+![Demo flow in nine steps: a YAML ticket and demo branch on the laptop, sync and the Foundry agent in Azure, a GitHub pull request, review and merge, an apply from main to the dev firewall policies, then archive](docs/images/demo-flow-steps.png)
 
-The demo runs the same agent, workflow code and checks as the enterprise flow, on a personal Azure subscription. You run each step from your laptop with the scripts in `evals/raj-demo/00-script`, helped by a coding assistant in VS Code. Step 4 sends the ticket to the Foundry agent.
+The demo runs the same agent, workflow code and checks as the enterprise flow, on a personal Azure subscription. You run each step from your laptop with local demo scripts, helped by a coding assistant in VS Code. Step 4 sends the ticket to the Foundry agent.
+
+### Walkthrough: one network ticket
+
+Each step shows what happens to ticket RITM0013525 and the script that does it.
+
+#### Step 1: Ticket
+
+RITM0013525: the reporting batch servers in dev (`10.104.15.0/24` in East US 2, `10.105.15.0/24` in Central US) read public reference articles from `www.wikipedia.org`, on HTTPS 443. Approved. `step_01_01_make_demo_network_ticket.py` writes it as YAML to `01-waiting/`, where it waits for step 2. Edit the values at the top of the script, then run it. It writes only if the number is new, both sources are subnets in the address plan at their dev site, and intake finds nothing blocking.
+
+![Ticket RITM0013525 as YAML: rprt dev sources 10.104.15.0/24 and 10.105.15.0/24 to www.wikipedia.org on HTTPS 443, approved by security, network and project](docs/images/demo-step-01-ticket-ritm0013525.png)
+
+#### Step 2: Demo branch
+
+`step_02_create_branch_for_demo_ticket.py` creates the local branch `demo/RITM0013525` from GitHub `main`. It stops if the ticket is missing or the working tree has changes. It never commits or pushes. Set `TICKET_NUMBER` at the top, then run it.
+
+![Step 2 output: ticket found, working tree clean, branch demo/RITM0013525 created at origin/main de92f36ca73b, nothing pushed](docs/images/demo-step-02-branch-ritm0013525-output.png)
+
+#### Step 3: Verify and sync
+
+`step_03_verify_and_sync_main_to_azure_storage.py` runs six checks that Azure matches GitHub `main`: the snapshot of network data in Azure Storage, its ready marker, the agent version and the tool server's code. All six passed, so no sync was needed. If one fails, it asks before starting the `sync-network` workflow.
+
+*Why: the agent's tools read the network data and current rules from Azure Storage, not GitHub. If someone else merged to `main` and the sync has not run yet, Azure holds an older copy. This step confirms Azure matches GitHub `main`, so the tools return accurate results.*
+
+![Step 3 output: six checks passed for origin/main de92f36ca73b, 73 files in Git and Azure, agent fwagent-drafter v20 with definition 412d5c398cd04be8, tool code hash 212dcb2abf50, already synced and ready for drafting](docs/images/demo-step-03-verify-ritm0013525-output.png)
+
+#### Step 4: Accept and send to the agent
+
+`step_04_verify_and_submit_to_foundry.py` checks the ticket, reruns step 3's six checks, shows what it will send and asks once. After `y` it records the engineer's acceptance of this exact ticket version and sends it to the Foundry agent once. The agent drafted one rule per site, `https-rprt-to-wikipedia`: TCP 443 from that site's reporting subnet to `wikipedia.org`. It removed the ticket's `www.`, and the rule names the FQDN, not its addresses. It used 14,423 input and 711 output tokens and 6 tool calls. The reply is saved in `02-submit/`; no rule file is written yet.
+
+*Why: the engineer approves the exact ticket before any model call, and the agent's tools only read. It returns a JSON draft, never files.*
+
+![Step 4 output: ticket RITM0013525 accepted and sent once to fwagent-drafter v20; draft rule https-rprt-to-wikipedia at dev-eastus2 and dev-centralus, TCP 443 to wikipedia.org; 14423 input and 711 output tokens, 6 tool calls](docs/images/demo-step-04-submit-ritm0013525-output.png)
+
+#### Step 5: Write the dev rule files
+
+`step_05_write_draft_rules_to_dev_tfvars.py` writes the saved draft into `rprt.tfvars` at both dev sites, on the demo branch. It uses the workflow's own writer, so the same scope, address, protocol and port checks run again. It shows the diff and writes only after `y`. It commits nothing.
+
+*Why: rule files change only through code the engineer reviews, never by the agent.*
+
+![Step 5 output: rule https-rprt-to-wikipedia added to rprt.tfvars at dev-eastus2 (key 011) and dev-centralus (key 010), TCP 443 to destination_fqdns wikipedia.org, nothing committed](docs/images/demo-step-05-write-ritm0013525-output.png)
+
+#### Step 6: Pull request
+
+The two rule files are committed on `demo/RITM0013525`, pushed, and opened as [PR #73](https://github.com/rbpal/azure-firewall-change-agent/pull/73). The description comes from the saved records: rule keys, the DNS lookup, packet flow per site, three policy risks, and the agent's tokens, tool calls and estimated cost. CI then plans both dev sites and runs the policy checks and tests.
+
+*Why: a person reviews and merges every rule change; the agent never pushes or merges.*
+
+<details>
+<summary>PR #73 description (Markdown)</summary>
+
+````markdown
+## SR details
+
+**SR number:** RITM0013525
+**Requested by:** Morgan Lee (Contoso reporting)
+**Demo data:** the ticket file marks its names and addresses as synthetic.
+
+## AI disclaimer
+
+These rules were drafted with AI assistance. Check every rule against the ticket and the security policy before you approve.
+
+## Summary
+
+**Branch changes:** The reporting batch servers in dev read public reference articles from www.wikipedia.org over HTTPS 443. This branch adds 2 network rules: primary (eastus2) and DR (centralus). Each names the FQDN `wikipedia.org`; the ticket's `www.` is removed. It adds 14 lines across 2 rule files. No existing rule changes.
+
+**DNS lookup:** FQDN `wikipedia.org` → public IP `208.80.154.224`
+
+## Changed files and rules
+
+**dev-eastus2 (primary, eastus2)**
+
+- **Path:** `infra/envs/dev-eastus2/firewall_policy_rule_collection_groups/rprt.tfvars`
+- **Rule collection:** `allow-rprt-network-rules` (priority 2000, Allow)
+- **Rule key:** `011-https-rprt-to-wikipedia`
+
+**dev-centralus (dr, centralus)**
+
+- **Path:** `infra/envs/dev-centralus/firewall_policy_rule_collection_groups/rprt.tfvars`
+- **Rule collection:** `allow-rprt-network-rules` (priority 2000, Allow)
+- **Rule key:** `010-https-rprt-to-wikipedia`
+
+## Packet flow
+
+```text
+PRIMARY: Azure Region Eastus2
+
+                        ┌────────────────────────┐
+10.104.15.0/24 ────────→│ Azure Firewall         │────→ wikipedia.org
+Dev reporting           │ dev-eastus2            │      External FQDN
+                        │ Allow outbound TCP 443 │
+                        └────────────────────────┘
+```
+
+```text
+DR: Azure Region Centralus
+
+                        ┌────────────────────────┐
+10.105.15.0/24 ────────→│ Azure Firewall         │────→ wikipedia.org
+Dev reporting           │ dev-centralus          │      External FQDN
+                        │ Allow outbound TCP 443 │
+                        └────────────────────────┘
+```
+
+## Security-policy risks
+
+- Any server later placed in 10.104.15.0/24 or 10.105.15.0/24 can reach wikipedia.org on TCP 443.
+- Clients should use the firewall's DNS proxy; otherwise their answers for wikipedia.org may differ.
+- TCP 443 does not enforce HTTPS; any service on that port passes.
+
+## Tracking
+
+```text
+RITM0013525 | 2026-11-24 | dev | eastus2 | https-rprt-to-wikipedia
+RITM0013525 | 2026-11-24 | dev | centralus | https-rprt-to-wikipedia
+```
+
+## Observability
+
+**15,134 tokens · 6 tool calls · about $0.0018 (estimate) · 70 seconds**
+
+- **Agent:** `fwagent-drafter` version 20 on `gpt-6-luna-agent` (gpt-6-luna)
+- **Estimated cost:** about $0.0018 (input $0.0014 + output $0.0004)
+- **Run time:** 00:10:12 to 00:11:22 UTC
+- **Foundry response:** `resp_0769f1742dd2ee57006b04d5f6dc2c8197b4d76444f7ca1f23`
+
+The cost is an estimate at gpt-6-luna list prices ($0.10 in, $0.50 out per 1M; eastus2, recorded 2026-10-15). The Azure bill is the real figure.
+
+**This ticket**
+
+```text
+Tokens (15,134)
+
+Input   ██████████████████████████████  14,423   95%
+Output  █                                  711    5%
+
+Tool calls (6)
+
+locate_address_for_env_site  ■■■  3
+dns_lookup_for_fqdn          ■    1
+duplicate_rule_check         ■■   2
+```
+````
+
+</details>
+
+#### Step 7: Merge
+
+PR #73 is merged into `main` at `d033dc8`, the commit CI tested. All 5 CI checks on the PR passed:
+
+1. **validate:** `terraform fmt` found no formatting changes. `terraform validate` passed on all 9 Terraform roots. No Azure sign-in is needed.
+2. **plan (dev-eastus2):** signs in to Azure with its own plan identity and first proves that identity cannot read another step's state file. The plan is `0 to add, 1 to change, 0 to destroy`: the `rprt` rule collection group, updated in place. The Tier 1 policy checks then read that plan: 2 cautions, 0 blocking. Both cautions are existing `*.cnn.com` and `*.google.com` rules in another app's file, not this change.
+3. **plan (dev-centralus):** the same checks on the DR site, with the same results.
+4. **pytest (push):** the full test suite on the branch: 2,907 passed, 3 skipped. It then mutation-tests the eval scorers: 45 of 45 planted bugs caught.
+5. **pytest (pull request):** the same suite and mutation test on the PR merged with `main`, with the same results.
+
+The demo branch is deleted. Merging changes no firewall; the rules reach Azure only when the apply runs.
+
+*Why: the merge records the approved rule in `main`; the apply is a separate, deliberate step.*
+
+![Step 7 output: PR #73 checks plan dev-centralus, plan dev-eastus2, two pytest runs and validate all pass; merged 2026-11-24 03:33 UTC, tested head d033dc8, merge commit dcd2573](docs/images/demo-step-07-merge-ritm0013525-output.png)
+
+#### Step 8: Apply to both dev firewalls
+
+Terraform planned each dev site from `main` and saved the plan: `0 to add, 1 to change, 0 to destroy`. The change adds one rule to the `rprt` rule collection group and removes nothing. After review, each saved plan was applied, primary first. A new plan at each site then showed no changes, so Azure matches `main`.
+
+*Why: the engineer reviews the exact plan, and only that plan is applied.*
+
+The portal shows `https-rprt-to-wikipedia` live at both sites: TCP 443 to `wikipedia.org`. The `https-sett-to-wikipedia` row below it is an older rule to the IP address.
+
+![Step 8, dev-eastus2: afwp-hub-dev-eastus2 network rules filtered to wikipedia; https-rprt-to-wikipedia in allow-rprt-network-rules, source 10.104.15.0/24, TCP 443, destination wikipedia.org, Allow](docs/images/demo-step-08-portal-dev-eastus2-ritm0013525.png)
+
+![Step 8, dev-centralus: afwp-hub-dev-centralus network rules filtered to wikipedia; https-rprt-to-wikipedia in allow-rprt-network-rules, source 10.105.15.0/24, TCP 443, destination wikipedia.org, Allow](docs/images/demo-step-08-portal-dev-centralus-ritm0013525.png)
+
+#### Step 9: Archive
+
+`step_09_archive_ticket.py` first checks on GitHub that PR #73 is merged. It moves the ticket, the agent's reply, the status file and the PR description into one numbered folder: `04-archive/024-2026-11-24-RITM0013525-rprt-to-wikipedia-tcp443/`. It then lists the leftovers and removes them after `y`: the agent's register entry, its worktree and its local branch.
+
+*Why: a merged and applied ticket keeps its records in one place. A leftover register entry would block step 4 for the next ticket.*
+
+![Step 9 output: RITM0013525's 4 files moved to archive folder 024; register entry, worktree and local branch agent/RITM0013525-de92f36 removed after y; nothing left over](docs/images/demo-step-09-archive-ritm0013525-output.png)
 
 ### Cost
 

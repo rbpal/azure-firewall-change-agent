@@ -1,0 +1,69 @@
+{
+  "engineer_review": {
+    "accepted": [],
+    "decision": "accept",
+    "edits": [],
+    "engineer": "your-github-login",
+    "planned": [],
+    "reason": "Reviewed source, destination, protocol, port and site coverage; approved for drafting only"
+  },
+  "ticket": {
+    "approvals": [
+      {
+        "approver": "Sam Ortiz",
+        "group": "security",
+        "state": "approved"
+      },
+      {
+        "approver": "Lee Chen",
+        "group": "network",
+        "state": "approved"
+      },
+      {
+        "approver": "Dana Brooks",
+        "group": "project",
+        "state": "approved"
+      }
+    ],
+    "assigned_to": "your-github-login",
+    "change_sites": {
+      "dev": [
+        "primary",
+        "dr"
+      ]
+    },
+    "destination": [
+      {
+        "fqdn": "www.wikipedia.org"
+      }
+    ],
+    "dr_site_built": {
+      "dev": true
+    },
+    "environments": [
+      "dev"
+    ],
+    "item": "Firewall Change Request",
+    "justification": "The reporting batch servers in dev read public reference articles from www.wikipedia.org over HTTPS 443.",
+    "number": "RITM0013525",
+    "opened": "2026-11-23T18:27:43-05:00",
+    "ports": [
+      "443"
+    ],
+    "protocol": "HTTPS",
+    "requested_for": "Morgan Lee (Contoso reporting)",
+    "sources": [
+      {
+        "cidr": "10.104.15.0/24",
+        "environment": "dev",
+        "site": "primary"
+      },
+      {
+        "cidr": "10.105.15.0/24",
+        "environment": "dev",
+        "site": "dr"
+      }
+    ],
+    "state": "approved"
+  }
+}
